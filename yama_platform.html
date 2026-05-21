@@ -3843,7 +3843,16 @@ let yamaRealtimeStarted = false;
 // DATA — Supabase-first, localStorage fallback
 // ══════════════════════════════════════
 function getContacts() {
-  try { return JSON.parse(localStorage.getItem(CRM_LS.contacts) || '[]'); } catch { return []; }
+  try {
+    const raw = JSON.parse(localStorage.getItem(CRM_LS.contacts) || '[]');
+    const seen = new Set();
+    return raw.filter(c => {
+      const cid = getContactId(c);
+      if (!cid || seen.has(cid)) return false;
+      seen.add(cid);
+      return true;
+    });
+  } catch { return []; }
 }
 function setContacts(arr) {
   localStorage.setItem(CRM_LS.contacts, JSON.stringify(arr));
@@ -6051,7 +6060,9 @@ async function saveContact() {
     contact.followUpStatus = '';
     contact.waitingResponse = false;
     contact.finished = false;
-    contacts.unshift(contact);
+    const _dupeIdx = contacts.findIndex(c => getContactId(c) === getContactId(contact));
+    if (_dupeIdx >= 0) contacts[_dupeIdx] = contact;
+    else contacts.unshift(contact);
   }
 
   setContacts(contacts);
