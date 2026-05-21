@@ -14410,6 +14410,7 @@ create policy "yg_all_pdf_documents_v11"  on yama_pdf_documents   for all using 
       'articleType','articleCategory','articleFilterCategory','articleFilterType','articleActive',
       'articleProfitabilityLevel','articleDifficulty','articleQuickSelect','f-source','v12ChStatus','v12InvoicePayStatus','v12ChPayStatus'
     ];
+    function setOpt(opt, next){ if ((opt.textContent||'').trim() !== next) opt.textContent = next; } /* idempotent: évite mutations répétées → boucle MutationObserver */
     selectIds.forEach(id => {
       const sel = $(id);
       if (!sel) return;
@@ -14417,18 +14418,18 @@ create policy "yg_all_pdf_documents_v11"  on yama_pdf_documents   for all using 
         const original = (opt.textContent || '').trim();
         if (!original) return;
         if (original.includes('—') && original.includes('article/prestation')) {
-          opt.textContent = '— Choisir un article ou une prestation —';
+          setOpt(opt, '— Choisir un article ou une prestation —');
           return;
         }
-        if (original === 'Toutes catégories') { opt.textContent = 'Toutes les catégories'; return; }
-        if (original === 'Tous types') { opt.textContent = 'Tous les types'; return; }
+        if (original === 'Toutes catégories') { setOpt(opt, 'Toutes les catégories'); return; }
+        if (original === 'Tous types') { setOpt(opt, 'Tous les types'); return; }
         if (/\d+%/.test(original)) return;
         if (original.includes('—') && original.includes('HT')) {
           const parts = original.split('—');
-          opt.textContent = `${proLabel(parts[0])} — ${parts.slice(1).join('—').trim()}`;
+          setOpt(opt, `${proLabel(parts[0])} — ${parts.slice(1).join('—').trim()}`);
           return;
         }
-        opt.textContent = proLabel(original);
+        setOpt(opt, proLabel(original));
       });
     });
   }
