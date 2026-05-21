@@ -28734,5 +28734,227 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   console.info('[YAMA V2 FINAL 2026] ✅ commune/tel vide, IA, calendrier direct, suivi→devis, cockpit scroll, chantier msg, analyse, timeline.');
 })();
 </script>
+
+<!-- ════════════════════════════════════════════════════════
+     YAMA GROUP — V3 STABILIZE
+     Correctifs critiques :
+     1. correctCommune — correspondance exacte (fin du faux positif "Everberg → Evere")
+     2. Everberg 3078 ajouté au dictionnaire
+     3. Garde de ré-entrance switchTab (stoppe la cascade 11 niveaux)
+     4. innerHTML idempotent sur les onglets (brise la boucle infinie MutationObserver V13)
+     5. CSS : suppression des animations/transitions causant les spasmes visuels
+     6. CSS : pointer-events overlay garantis même sous charge
+════════════════════════════════════════════════════════ -->
+<style id="yama-v3-css">
+/* ── Suppression des animations d'onglets causant les spasmes ── */
+#app-platform .tab-content,
+#app-crm .tab-content,
+.crm-page,
+.platform-page {
+  animation: none !important;
+  transition: none !important;
+}
+#app-platform .tab-content:not(.active),
+#app-crm .tab-content:not(.active),
+.crm-page:not(.active),
+.platform-page:not(.active) {
+  display: none !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+#app-platform .tab-content.active,
+#app-crm .tab-content.active,
+.crm-page.active,
+.platform-page.active {
+  display: block !important;
+  opacity: 1 !important;
+}
+
+/* ── Overlay/modal toujours accessibles ── */
+.overlay,
+.modal-overlay {
+  z-index: 9990 !important;
+}
+.overlay.show,
+.modal-overlay.show {
+  pointer-events: all !important;
+}
+.overlay:not(.show),
+.modal-overlay:not(.show) {
+  pointer-events: none !important;
+}
+
+/* ── Badges : containment pour éviter les recalculs en cascade ── */
+.tab-badge,
+.tab-count,
+.badge-count,
+.crm-badge {
+  contain: layout style !important;
+}
+
+/* ── Sécurité scroll cockpit mobile ── */
+#tab-cockpit {
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  max-height: 100dvh !important;
+}
+</style>
+
+<script>
+(function yamaV3Stabilize(){
+  'use strict';
+  if (window.__YAMA_V3_STABILIZE__) return;
+  window.__YAMA_V3_STABILIZE__ = true;
+
+  /* ══════════════════════════════════════════════════════
+     1. CORRECTION COMMUNE — correspondance exacte uniquement
+        Bug original : "everberg3078".includes("evere") === true
+        → retournait faussement "Evere 1140"
+        Fix : on extrait le nom seul (sans chiffres) puis on
+        compare par ÉGALITÉ stricte, pas par inclusion.
+  ══════════════════════════════════════════════════════ */
+
+  /* Ajout de communes manquantes au dictionnaire global */
+  if (typeof BELGIAN_COMMUNES !== 'undefined') {
+    Object.assign(BELGIAN_COMMUNES, {
+      'everberg'       : 'Everberg 3078',
+      'kraainem'       : 'Kraainem 1950',
+      'sterrebeek'     : 'Sterrebeek 1933',
+      'wezembeek'      : 'Wezembeek-Oppem 1970',
+      'kampenhout'     : 'Kampenhout 1910',
+      'melsbroek'      : 'Melsbroek 1820',
+      'beigem'         : 'Beigem 1852',
+      'humbeek'        : 'Humbeek 1851',
+      'peutie'         : 'Peutie 1800',
+      'laken'          : 'Laeken 1020',
+      'strombeek'      : 'Strombeek-Bever 1853',
+      'relegem'        : 'Relegem 1731',
+      'groot-bijgaarden': 'Groot-Bijgaarden 1702',
+    });
+  }
+
+  window.correctCommune = function v3CorrectCommune(raw) {
+    if (!raw) return raw;
+    /*
+     * Extrait le nom de commune en supprimant les codes postaux (4-5 chiffres),
+     * normalise les tirets/espaces, puis compare par ÉGALITÉ (pas par includes).
+     * "Everberg 3078" → nameOnly = "everberg"
+     * "everberg" === "evere" → false ✓  (plus de faux positif)
+     * "everberg" === "everberg" → true ✓ → "Everberg 3078"
+     */
+    const nameOnly = raw.toLowerCase()
+      .replace(/\s*\d{4,5}\s*/g, ' ')
+      .replace(/[-\s]+/g, '')
+      .trim();
+    if (!nameOnly) return raw;
+
+    const bc = (typeof BELGIAN_COMMUNES !== 'undefined') ? BELGIAN_COMMUNES : {};
+
+    /* Passe 1 : égalité exacte */
+    for (const [key, val] of Object.entries(bc)) {
+      if (nameOnly === key.replace(/[-\s]+/g, '')) return val;
+    }
+    /* Passe 2 : commence-par (uniquement clés ≥5 chars, évite les faux positifs courts) */
+    for (const [key, val] of Object.entries(bc)) {
+      const nk = key.replace(/[-\s]+/g, '');
+      if (nk.length >= 5 && nameOnly.startsWith(nk)) return val;
+    }
+    return raw;
+  };
+
+  /* ══════════════════════════════════════════════════════
+     2. GARDE DE RÉ-ENTRANCE SWITCHTAB
+        Stoppe la cascade de 11 wrappers imbriqués qui se
+        rappellent mutuellement et provoquent le gel.
+  ══════════════════════════════════════════════════════ */
+  let _stBusy = false;
+  let _stTimer = null;
+
+  function wrapSwitchTab(fn) {
+    if (!fn || fn.__v3Guard) return fn;
+    const wrapped = function v3SwitchTab() {
+      if (_stBusy) return;
+      _stBusy = true;
+      clearTimeout(_stTimer);
+      let r;
+      try { r = fn.apply(this, arguments); }
+      finally { _stTimer = setTimeout(function(){ _stBusy = false; }, 320); }
+      return r;
+    };
+    wrapped.__v3Guard = true;
+    return wrapped;
+  }
+
+  function installSTGuard() {
+    if (typeof window.switchTab === 'function' && !window.switchTab.__v3Guard) {
+      window.switchTab = wrapSwitchTab(window.switchTab);
+    }
+  }
+
+  installSTGuard();
+  setTimeout(installSTGuard, 800);
+  setTimeout(installSTGuard, 2000);
+  setTimeout(installSTGuard, 4000);
+
+  /* ══════════════════════════════════════════════════════
+     3. INNERHTML IDEMPOTENT SUR LES ONGLETS
+        V13 setTabLabel() appelle el.innerHTML = label inconditionnellement
+        toutes les 80 ms → mutation DOM → MutationObserver → setTabLabel
+        → mutation → boucle infinie.
+        Fix : intercepter le setter innerHTML sur les éléments .tab/.nav-tab
+        et ne rien faire si le contenu n'a pas changé.
+  ══════════════════════════════════════════════════════ */
+  (function patchInnerHTML() {
+    try {
+      const desc = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+      if (!desc || desc.__yamaV3Patched) return;
+      const origSet = desc.set;
+      Object.defineProperty(Element.prototype, 'innerHTML', {
+        get: desc.get,
+        set: function yamaV3InnerHTML(v) {
+          /* Uniquement pour les boutons d'onglet — lecture innerHTML légère car peu d'enfants */
+          if (this.classList &&
+              (this.classList.contains('tab') || this.classList.contains('nav-tab'))) {
+            if (this.innerHTML === String(v)) return; /* pas de changement → pas de mutation */
+          }
+          origSet.call(this, v);
+        },
+        configurable: true,
+        enumerable: desc.enumerable,
+        __yamaV3Patched: true
+      });
+    } catch (e) {
+      console.warn('[YAMA V3] innerHTML patch:', e.message);
+    }
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     4. SÉCURITÉ SUPPLÉMENTAIRE : neutralise le MutationObserver V15
+        qui appelle run() sur les changements de classe/style du body.
+        On marque yama-modal-open comme stable dès qu'il ne change pas,
+        pour éviter le toggle répété qui alimente la boucle.
+  ══════════════════════════════════════════════════════ */
+  (function guardModalClass() {
+    let _lastOpen = null;
+    const _origToggle = DOMTokenList.prototype.toggle;
+    /* Patch minimal : on court-circuite toggle('yama-modal-open', ...) si l'état ne change pas */
+    DOMTokenList.prototype.toggle = function yamaV3Toggle(token, force) {
+      if (token === 'yama-modal-open' && this === document.body.classList) {
+        const current = this.contains('yama-modal-open');
+        const desired = force !== undefined ? !!force : !current;
+        if (desired === current) return current; /* no-op → pas de mutation → pas d'observer */
+      }
+      return _origToggle.apply(this, arguments);
+    };
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     5. INIT
+  ══════════════════════════════════════════════════════ */
+  console.info(
+    '[YAMA V3 STABILIZE] ✅ correctCommune exact-match, Everberg 3078, switchTab re-entrance guard, innerHTML loop broken, modal-class stable.'
+  );
+})();
+</script>
 </body>
 </html>
