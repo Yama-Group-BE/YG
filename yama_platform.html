@@ -5813,7 +5813,32 @@ function createDevisFromCRMContact(cid) {
 // ══════════════════════════════════════
 // INIT
 // ══════════════════════════════════════
+// Nettoyage au démarrage : supprime les doublons de contacts
+// directement dans localStorage pour que TOUTES les lectures
+// (y compris les accès directs à yama_crm_v2) voient des données propres.
+// ══════════════════════════════════════
+function compactContactsLocalStorage() {
+  try {
+    const KEY = 'yama_crm_v2';
+    const raw = JSON.parse(localStorage.getItem(KEY) || '[]');
+    if (!Array.isArray(raw) || raw.length < 2) return;
+    const seen = new Set();
+    const clean = raw.filter(c => {
+      const cid = String((c && (c.contact_id || c.id)) || '');
+      if (!cid || seen.has(cid)) return false;
+      seen.add(cid);
+      return true;
+    });
+    if (clean.length < raw.length) {
+      localStorage.setItem(KEY, JSON.stringify(clean));
+      console.info('[YG] ' + (raw.length - clean.length) + ' doublon(s) supprimé(s) — ' + clean.length + ' contacts uniques conservés.');
+    }
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
+  compactContactsLocalStorage(); // ← nettoie localStorage avant tout rendu
   // Charger ST depuis localStorage de la plateforme (même navigateur) en fallback
   loadSTFromPlatform();
 
