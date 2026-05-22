@@ -9119,18 +9119,24 @@ create policy "yg_all_articles_v12"       on yama_articles       for all using (
 create policy "yg_all_pdf_documents_v12"  on yama_pdf_documents  for all using (true) with check (true);
 
 -- ═══════════════════════════════════════════════════════════════════════
--- REALTIME
+-- REALTIME (idempotent — n'ajoute que si pas encore publié)
 -- ═══════════════════════════════════════════════════════════════════════
-alter publication supabase_realtime add table yama_crm;
-alter publication supabase_realtime add table yama_history;
-alter publication supabase_realtime add table yama_devis_status;
-alter publication supabase_realtime add table yama_counters;
-alter publication supabase_realtime add table yama_sous_traitants;
-alter publication supabase_realtime add table yama_soustraitants;
-alter publication supabase_realtime add table yama_st_paid;
-alter publication supabase_realtime add table yama_client_paid;
-alter publication supabase_realtime add table yama_articles;
-alter publication supabase_realtime add table yama_pdf_documents;
+do $$
+declare t text;
+begin
+  foreach t in array array[
+    'yama_crm','yama_history','yama_devis_status','yama_counters',
+    'yama_sous_traitants','yama_soustraitants','yama_st_paid',
+    'yama_client_paid','yama_articles','yama_pdf_documents'
+  ] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table %I', t);
+    end if;
+  end loop;
+end $$;
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- VUES UTILITAIRES
