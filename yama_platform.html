@@ -4101,7 +4101,41 @@ async function pullAll() {
 
     const merged = [...fromSupa, ...localOnly];
     merged.sort((a,b) => new Date(b.savedAt || b.saved_at || 0) - new Date(a.savedAt || a.saved_at || 0));
-    setContacts(merged);
+
+    // ── Déduplication permanente dans la sync ──
+    // Détecte les doublons par téléphone (ou nom+adresse) et écrit
+    // immédiatement une tombstone deleted:true dans Supabase.
+    // Ainsi, tous les syncs suivants ignorent définitivement ce contact.
+    const _normTel = t => String(t||'').replace(/\D/g,'').replace(/^0032/,'0').replace(/^\+32/,'0').slice(-9);
+    const _normKey = c => {
+      const tel = _normTel(c.tel||'');
+      if (tel && tel.length >= 7) return 'tel:' + tel;
+      const nom = String(c.nom||'').toLowerCase().trim().replace(/\s+/g,'');
+      const adr = String(c.adresse||'').toLowerCase().trim().replace(/\s+/g,'');
+      return nom ? 'nom:' + nom + '|' + adr : '';
+    };
+    const _seenKeys = new Map();
+    const _toDelete = [];
+    const mergedClean = merged.filter(c => {
+      const key = _normKey(c);
+      if (!key) return true;
+      if (!_seenKeys.has(key)) { _seenKeys.set(key, getContactId(c)); return true; }
+      _toDelete.push(c);
+      return false;
+    });
+    // Écriture synchrone des tombstones → garanti avant fin de pullAll
+    for (const dup of _toDelete) {
+      const cid = getContactId(dup);
+      if (!cid) continue;
+      try {
+        const ts = new Date().toISOString();
+        await client.from('yama_crm').upsert(
+          { contact_id: cid, data: { contact_id: cid, deleted: true, deleted_at: ts }, saved_at: ts },
+          { onConflict: 'contact_id' }
+        );
+      } catch(e) { console.warn('pullAll dedup tombstone:', e?.message||e); }
+    }
+    setContacts(mergedClean);
 
     for (const c of localOnly) {
       try {
@@ -25843,23 +25877,9 @@ function v44InjectChantierMsgBtns(container){
     .observe(target, {childList:true, subtree:true});
 })();
 
-/* ══════════════════════════════════════════════════════════
-   V44.4 — DÉDUPLICATION AUTOMATIQUE AU DÉMARRAGE
-   Lance v42DeduplicateContacts() après le chargement initial
-   ══════════════════════════════════════════════════════════ */
-setTimeout(function(){
-  if (typeof window.v42DeduplicateContacts === 'function') {
-    try {
-      var before = typeof getContacts === 'function' ? getContacts().length : 0;
-      window.v42DeduplicateContacts();
-      var after  = typeof getContacts === 'function' ? getContacts().length : 0;
-      if (before > after) {
-        console.info('[V44] Déduplication : ' + (before - after) + ' doublon(s) supprimé(s)');
-        if (typeof updateBadges === 'function') updateBadges();
-      }
-    } catch(e){ console.warn('[V44] dedup:', e); }
-  }
-}, 2500);
+/* V44.4 — auto-dedup retiré : la déduplication est maintenant faite
+   directement dans pullAll() avec écriture synchrone des tombstones
+   Supabase, ce qui garantit qu'aucun doublon ne revient jamais. */
 
 /* ══════════════════════════════════════════════════════════
    V44.5 — AFFICHER LES DATES CHANTIER SUR LES CARTES
