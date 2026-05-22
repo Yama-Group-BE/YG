@@ -5855,6 +5855,34 @@ function createDevisFromCRMContact(cid) {
 // INIT
 // ══════════════════════════════════════
 window.addEventListener('DOMContentLoaded', async () => {
+  // ── Déduplication par téléphone/nom au démarrage ──────────────────
+  // Tourne de façon synchrone AVANT tout rendu, même hors-ligne.
+  // Supprime définitivement les doublons de localStorage.
+  (function deduplicateOnBoot() {
+    try {
+      const KEY = 'yama_crm_v2';
+      const raw = JSON.parse(localStorage.getItem(KEY) || '[]');
+      if (!Array.isArray(raw) || raw.length < 2) return;
+      const seen = new Map();
+      const clean = raw.filter(c => {
+        // Clé primaire : téléphone normalisé (9 derniers chiffres)
+        const tel = String(c.tel || '').replace(/\D/g, '').replace(/^0032/, '0').replace(/^\+32/, '0');
+        const telKey = tel.length >= 7 ? 'tel:' + tel.slice(-9) : '';
+        // Clé secondaire : nom canonique
+        const nomKey = String(c.nom || '').toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '');
+        const key = telKey || (nomKey ? 'nom:' + nomKey : '');
+        if (!key) return true;              // pas de clé = garder
+        if (!seen.has(key)) { seen.set(key, true); return true; }
+        return false;                        // doublon → éjecter
+      });
+      if (clean.length < raw.length) {
+        localStorage.setItem(KEY, JSON.stringify(clean));
+        console.info('[YG boot] ' + (raw.length - clean.length) + ' doublon(s) supprimé(s) du localStorage.');
+      }
+    } catch(e) { console.warn('[YG boot] dedup:', e); }
+  })();
+  // ─────────────────────────────────────────────────────────────────
+
   // Charger ST depuis localStorage de la plateforme (même navigateur) en fallback
   loadSTFromPlatform();
 
@@ -24500,11 +24528,12 @@ function v42DeduplicateContacts(){
       }
     });
     if (typeof updateBadges === 'function') updateBadges();
+    if (typeof updateStats  === 'function') updateStats();
     if (typeof renderContacts === 'function') { try { renderContacts('all'); } catch(e){} }
     if (typeof showToast === 'function') showToast('✓ ' + removed + ' doublon(s) supprimé(s) définitivement', 'success');
     return removed;
   }
-  return 0;  // silencieux si aucun doublon — ne pas spammer au démarrage
+  return 0;  // silencieux si aucun doublon
 }
 window.v42DeduplicateContacts = v42DeduplicateContacts;
 
