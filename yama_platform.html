@@ -24442,6 +24442,7 @@ function v42DeduplicateContacts(){
   var all = getContacts();
   var seen = new Map();
   var cleaned = [];
+  var removedContacts = [];
   all.forEach(function(c){
     var tel = v42NormalizePhone(c.tel||'');
     var key = tel || (v42Canon(c.nom||'') + '_' + v42Canon(c.adresse||''));
@@ -24449,20 +24450,36 @@ function v42DeduplicateContacts(){
     if (!seen.has(key)) {
       seen.set(key, true);
       cleaned.push(c);
+    } else {
+      removedContacts.push(c);
     }
   });
   if (cleaned.length < all.length) {
     var removed = all.length - cleaned.length;
     setContacts(cleaned);
+    // Supprimer définitivement de Supabase — tombstone deleted:true
+    // pullAll() ignorera ces contacts à chaque sync ultérieur
+    removedContacts.forEach(function(c){
+      var cid = String(c.contact_id || c.id || '');
+      if (cid && typeof deleteContactCloud === 'function') {
+        deleteContactCloud(cid);
+      }
+    });
     if (typeof updateBadges === 'function') updateBadges();
     if (typeof renderContacts === 'function') { try { renderContacts('all'); } catch(e){} }
-    if (typeof showToast === 'function') showToast('✓ ' + removed + ' doublon(s) supprimé(s)', 'success');
+    if (typeof showToast === 'function') showToast('✓ ' + removed + ' doublon(s) supprimé(s) définitivement', 'success');
     return removed;
   }
-  if (typeof showToast === 'function') showToast('Aucun doublon détecté.', '');
-  return 0;
+  return 0;  // silencieux si aucun doublon — ne pas spammer au démarrage
 }
 window.v42DeduplicateContacts = v42DeduplicateContacts;
+
+// Appelé par le bouton "🧹 Nettoyer les doublons" dans l'onglet Historique
+function purgeDoublons(){
+  var n = v42DeduplicateContacts();
+  if (n === 0 && typeof showToast === 'function') showToast('Aucun doublon détecté.', '');
+}
+window.purgeDoublons = purgeDoublons;
 
 // Bouton de déduplication dans la toolbar CRM (affiché une fois au démarrage)
 setTimeout(function(){
