@@ -2097,6 +2097,104 @@ header {
 
 
 /* ════════════════════════════════════════
+   DEVIS / FACTURES — RESPONSIVE CORRECT
+════════════════════════════════════════ */
+
+/* Base: les cartes ne dépassent jamais la largeur dispo */
+.devis-item,
+.devis-pipeline-item {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Header flex: wrap proprement à partir de 600px */
+.devis-item-header {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.devis-item-num {
+  flex-shrink: 0;
+}
+
+.devis-item-info {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.devis-item-info .di-client,
+.devis-item-info .di-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.devis-item-amount {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.status-badge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Actions: toujours wrappées si nécessaire */
+.devis-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  /* Carte devis: retour à la ligne du montant + badge sous les infos */
+  .devis-item-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .devis-item-num {
+    font-size: 13px !important;
+    min-width: 80px !important;
+  }
+  .devis-item-info {
+    flex: 1 1 120px;
+  }
+  .devis-item-amount {
+    font-size: 16px !important;
+    margin-left: auto;
+  }
+  .status-badge {
+    font-size: 9px !important;
+    padding: 3px 8px !important;
+  }
+  .btn-action {
+    font-size: 10px !important;
+    padding: 6px 9px !important;
+  }
+  /* Pipeline items (onglet Suivi chantier) */
+  .dp-top {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .dp-num { font-size: 14px !important; min-width: 80px !important; }
+  .dp-amount { font-size: 16px !important; }
+  .dp-actions { flex-wrap: wrap; gap: 8px; }
+}
+
+@media (max-width: 400px) {
+  .devis-item { padding: 12px 14px !important; }
+  .devis-item-header { gap: 6px; }
+  .devis-item-amount { font-size: 14px !important; }
+}
+
+/* ════════════════════════════════════════
    YAMA GROUP — CORRECTION RESPONSIVE FINALE
    Ajout uniquement CSS : adaptation téléphone / tablette / PC
 ════════════════════════════════════════ */
@@ -2108,7 +2206,7 @@ body {
   overflow-x: hidden;
 }
 
-* {
+img, video, iframe, embed, object, table {
   max-width: 100%;
 }
 
@@ -3122,7 +3220,6 @@ if (token && window.opener) {
   <div class="tab" data-tab="history">📁 Historique <span class="tab-count" id="historyCount">0</span></div>
   <div class="tab" data-tab="articles">📦 Catalogue articles <span class="tab-count" id="articlesCount">0</span></div>
   <div class="tab" data-tab="soustraitants">🔧 Sous-traitants <span class="tab-count" id="stCount">0</span></div>
-  <div class="tab" data-tab="tarifs">💰 Liste de prix</div>
   <div class="tab" data-tab="analyse">📈 Analyse</div>
 </div>
 
@@ -3526,73 +3623,6 @@ if (token && window.opener) {
       <div class="section-body" id="stPaiements">
         <div style="text-align:center;padding:40px;color:var(--gray);">Aucun paiement en attente</div>
       </div>
-    </div>
-
-  </div>
-</div>
-
-<!-- TAB : LISTE DE PRIX -->
-<div class="tab-content" id="tab-tarifs">
-  <div class="container" style="max-width:1100px;">
-
-    <div style="margin-bottom:24px;">
-      <div style="font-size:20px;font-weight:700;color:var(--white);margin-bottom:4px;">💰 Liste de prix standards</div>
-      <div style="font-size:13px;color:var(--gray);">Tarifs de référence basés sur une étude de marché belge 2026. Ces prix sont des bases — adaptez selon la complexité et la localisation.</div>
-    </div>
-
-    <!-- DÉPLACEMENTS & FRAIS FIXES -->
-    <div class="section" style="margin-bottom:20px;">
-      <div class="section-header">
-        <div class="num">🚗</div>
-        <h2>Déplacements & Frais de dossier</h2>
-      </div>
-      <div class="section-body" id="tarifs-deplacement"></div>
-    </div>
-
-    <!-- MAIN D'ŒUVRE -->
-    <div class="section" style="margin-bottom:20px;">
-      <div class="section-header">
-        <div class="num">👷</div>
-        <h2>Main d'œuvre</h2>
-      </div>
-      <div class="section-body" id="tarifs-mo"></div>
-    </div>
-
-    <!-- DÉCHETTERIE & ÉVACUATION -->
-    <div class="section" style="margin-bottom:20px;">
-      <div class="section-header">
-        <div class="num">🗑</div>
-        <h2>Déchetterie & Évacuation des déchets</h2>
-      </div>
-      <div class="section-body" id="tarifs-dechets"></div>
-    </div>
-
-    <!-- SÉCURISATION & PROTECTION -->
-    <div class="section" style="margin-bottom:20px;">
-      <div class="section-header">
-        <div class="num">🔒</div>
-        <h2>Sécurisation & Protection de chantier</h2>
-      </div>
-      <div class="section-body" id="tarifs-secu"></div>
-    </div>
-
-    <!-- MARGES SOUS-TRAITANT PAR TRANCHE -->
-    <div class="section" style="margin-bottom:20px;">
-      <div class="section-header section-private">
-        <div class="num" style="background:#E07B39">%</div>
-        <h2 style="color:#E07B39">Grille de marges recommandées — Sous-traitants</h2>
-        <span class="badge-private">🔒 Privé</span>
-      </div>
-      <div class="section-body" id="tarifs-marges"></div>
-    </div>
-
-    <!-- POLITIQUE DEVIS -->
-    <div class="section" style="margin-bottom:20px;">
-      <div class="section-header" style="background:rgba(201,168,76,.08);">
-        <div class="num">📋</div>
-        <h2>Politique de facturation des devis</h2>
-      </div>
-      <div class="section-body" id="tarifs-devis-policy"></div>
     </div>
 
   </div>
@@ -8007,119 +8037,9 @@ function switchTab(name) {
   if (name === 'history') renderHistory();
   if (name === 'soustraitants') renderSTTab();
   if (name === 'analyse') renderAnalyse();
-  if (name === 'tarifs') renderTarifsTab();
 }
 
-// ═══ LISTE DE PRIX & MARGES ═══
-function renderTarifsTab() {
-  const fmtP = n => new Intl.NumberFormat('fr-BE', { minimumFractionDigits:2 }).format(n) + ' €';
-  const row = (label, prix, unite, note) =>
-    `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);">
-      <div><div style="font-size:13px;font-weight:600;color:var(--white);">${label}</div>${note ? `<div style="font-size:11px;color:var(--gray);margin-top:2px;">${note}</div>` : ''}</div>
-      <div style="text-align:right;flex-shrink:0;margin-left:20px;"><span style="font-size:15px;font-weight:700;color:#C9A84C;">${prix}</span><span style="font-size:11px;color:var(--gray);margin-left:4px;">/ ${unite}</span></div>
-    </div>`;
-
-  // Déplacements
-  const dep = document.getElementById('tarifs-deplacement');
-  if (dep) dep.innerHTML = [
-    row('Forfait déplacement — zone Bruxelles & périphérie (R0/R1)', fmtP(55), 'intervention', 'Aller-retour inclus, <30km'),
-    row('Forfait déplacement — zone élargie (R2, Flandre, Wallonie)', fmtP(85), 'intervention', '30–80km'),
-    row('Supplément urgence hors horaires (appel < 2h)', fmtP(75), 'intervention', 'En sus du déplacement standard'),
-    row('Frais de stationnement / péages réels', 'Réels', 'trajet', 'Facturés sur justificatif'),
-    row('Frais de dossier / étude technique (devis refusé)', fmtP(150), 'devis', 'Facturé uniquement si devis refusé — gratuit si accepté'),
-  ].join('');
-
-  // Main d'œuvre
-  const mo = document.getElementById('tarifs-mo');
-  if (mo) mo.innerHTML = [
-    row('Main d\'œuvre standard (lun.–ven. 8h–18h)', fmtP(58), 'h', 'Taux horaire technicien qualifié, Belgique 2026'),
-    row('Main d\'œuvre soirée (18h–22h, lun.–ven.)', fmtP(80), 'h', '+38% / tarif social belge'),
-    row('Main d\'œuvre nuit (22h–6h)', fmtP(105), 'h', '+81% / convention collective secteur construction'),
-    row('Main d\'œuvre samedi', fmtP(90), 'h', '+55% / tarif habituel'),
-    row('Main d\'œuvre dimanche & jours fériés', fmtP(116), 'h', '+100% / convention collective CP124'),
-    row('Chef de chantier / coordinateur', fmtP(75), 'h', 'Supervision, rapport, coordination multi-corps'),
-    row('Forfait demi-journée (4h) standard', fmtP(210), 'demi-j.', ''),
-    row('Forfait journée complète (8h) standard', fmtP(400), 'jour', 'Légèrement réduit vs horaire'),
-    row('Heure supplémentaire (>8h/jour)', fmtP(87), 'h', '+50% sur tarif standard'),
-  ].join('');
-
-  // Déchets
-  const dec = document.getElementById('tarifs-dechets');
-  if (dec) dec.innerHTML = [
-    row('Évacuation déchets courants — petite remorque (<500kg)', fmtP(120), 'voyage', 'Gravats, matériaux mixtes'),
-    row('Évacuation déchets — grande benne / camion (>500kg)', fmtP(220), 'voyage', 'Béton, briques, carrelage, grande démolition'),
-    row('Déchetterie professionnelle — tri sélectif', fmtP(95), 'passage', 'Frais accès déchetterie pro + manutention'),
-    row('Location benne sur chantier (7 jours)', fmtP(280), 'semaine', 'Benne 8m³ livrée et reprise'),
-    row('Nettoyage de chantier post-travaux', fmtP(45), 'h', 'Main d\'œuvre nettoyage, évacuation résidus'),
-    row('Amiante / déchets dangereux (certificat requis)', 'Sur devis', 'cas', 'Entreprise spécialisée agréée obligatoire'),
-  ].join('');
-
-  // Sécurisation
-  const sec = document.getElementById('tarifs-secu');
-  if (sec) sec.innerHTML = [
-    row('Sécurisation provisoire d\'ouverture (porte/fenêtre)', fmtP(85), 'pièce', 'Panneau OSB, fixations, joints étanchéité'),
-    row('Mise en place signalisation chantier (cônes, rubalise, panneaux)', fmtP(55), 'chantier', 'Selon réglementation RRU/RGIE'),
-    row('Bâche de protection / film de protection plancher', fmtP(35), 'pièce', 'Pose incluse'),
-    row('Étaiement provisoire léger', fmtP(75), 'point', 'Étai réglable + mise en place'),
-    row('Mise hors service provisoire installation (eau/élec)', fmtP(65), 'installation', 'Isolation du circuit, bouchonnage'),
-    row('Permis de travail / coordination sécurité', fmtP(120), 'chantier', 'Dossier de coordination, PGC simplifié'),
-  ].join('');
-
-  // Marges
-  const mar = document.getElementById('tarifs-marges');
-  if (mar) {
-    const TIERS = [
-      { range:'0 – 500 €',       rec:40, min:35, expl:'Petites interventions. Marge haute car coût fixe (déplacement) proportionnellement élevé.' },
-      { range:'500 – 1 000 €',   rec:38, min:33, expl:'Interventions courantes. La marge reste solide car volume encore limité.' },
-      { range:'1 000 – 2 000 €', rec:35, min:30, expl:'Chantiers moyens. Niveau standard du marché belge pour artisans.' },
-      { range:'2 000 – 5 000 €', rec:30, min:25, expl:'Chantiers importants. La masse brute compense la baisse de %. Objectif minimum 30%.' },
-      { range:'5 000 – 10 000 €',rec:25, min:20, expl:'Grands chantiers. Compétitivité requise. 25% = ~1 500–2 500€ de marge nette brute.' },
-      { range:'> 10 000 €',      rec:20, min:15, expl:'Très grands projets. Négociation courante. 20% sur 10k+ = +2 000€ net minimum.' },
-    ];
-    mar.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;">
-        <thead><tr style="background:rgba(224,123,57,.12);">
-          <th style="text-align:left;padding:10px 12px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#E07B39;">Tranche montant devis</th>
-          <th style="text-align:center;padding:10px 12px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#E07B39;">Marge recommandée</th>
-          <th style="text-align:center;padding:10px 12px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#E07B39;">Marge minimale</th>
-          <th style="text-align:left;padding:10px 12px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#E07B39;">Explication</th>
-        </tr></thead>
-        <tbody>${TIERS.map((t,i) => `
-          <tr style="border-bottom:1px solid rgba(255,255,255,.06);background:${i%2===0?'rgba(255,255,255,.02)':'transparent'};">
-            <td style="padding:12px;font-size:14px;font-weight:700;color:#C9A84C;">${t.range}</td>
-            <td style="padding:12px;text-align:center;"><span style="font-size:18px;font-weight:900;font-family:'Barlow Condensed',sans-serif;color:#52c77f;">${t.rec}%</span></td>
-            <td style="padding:12px;text-align:center;"><span style="font-size:14px;font-weight:700;color:#E07B39;">${t.min}%</span></td>
-            <td style="padding:12px;font-size:12px;color:var(--gray);line-height:1.5;">${t.expl}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-      <div style="margin-top:14px;padding:12px 14px;background:rgba(224,123,57,.07);border:1px solid rgba(224,123,57,.25);border-radius:6px;font-size:12px;color:var(--text2);line-height:1.6;">
-        <strong style="color:#E07B39;">⚠️ Rappel :</strong> Ces marges s'appliquent sur le montant HT du devis client par rapport au coût HT sous-traitant.
-        Elles intègrent : déplacement, gestion admin, garantie, risque, et votre valeur ajoutée de coordination.
-        Le calculateur applique automatiquement la marge recommandée pour la tranche correspondante.
-      </div>`;
-  }
-
-  // Politique devis
-  const pol = document.getElementById('tarifs-devis-policy');
-  if (pol) pol.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div style="padding:18px;background:rgba(62,207,142,.07);border:1px solid rgba(62,207,142,.25);border-radius:8px;text-align:center;">
-        <div style="font-size:28px;font-weight:900;font-family:'Barlow Condensed',sans-serif;color:#52c77f;">✅ ACCEPTÉ</div>
-        <div style="font-size:22px;font-weight:900;color:#52c77f;margin:8px 0;">GRATUIT</div>
-        <div style="font-size:12px;color:var(--gray);line-height:1.6;">Le devis est entièrement offert. Les frais de visite, déplacement et rédaction sont inclus dans le prix du chantier.</div>
-      </div>
-      <div style="padding:18px;background:rgba(224,82,82,.07);border:1px solid rgba(224,82,82,.25);border-radius:8px;text-align:center;">
-        <div style="font-size:28px;font-weight:900;font-family:'Barlow Condensed',sans-serif;color:#e05252;">❌ REFUSÉ</div>
-        <div style="font-size:22px;font-weight:900;color:#e05252;margin:8px 0;">150,00 € TTC</div>
-        <div style="font-size:12px;color:var(--gray);line-height:1.6;">Frais de visite, déplacement et d'établissement du devis. Évite les visites inutiles et protège votre temps professionnel.</div>
-      </div>
-    </div>
-    <div style="margin-top:14px;padding:14px;background:rgba(201,168,76,.07);border-left:4px solid #C9A84C;border-radius:4px;font-size:12px;line-height:1.7;color:var(--text2);">
-      <strong style="color:#C9A84C;">📱 Message d'accueil WhatsApp suggéré :</strong><br>
-      <em>"Bonjour et merci de contacter YAMA Group. Nos devis sont établis gratuitement — ils ne sont facturés que s'ils sont refusés (150€ TTC couvrant le déplacement et l'expertise). Si le devis est accepté, ce montant est intégralement inclus dans vos travaux. YAMA Group 📞 0489 33 77 00 | info@yama-group.be"</em>
-      <button onclick="navigator.clipboard?.writeText(document.querySelector('#tarifs-devis-policy em')?.textContent || '');showToast('Message copié !','success');" style="display:inline-flex;margin-top:8px;padding:5px 12px;border-radius:6px;border:1px solid rgba(201,168,76,.35);background:rgba(201,168,76,.1);color:#C9A84C;font-size:11px;font-weight:700;cursor:pointer;">📋 Copier le message</button>
-    </div>`;
+function renderTarifsTab() { /* tab removed */ }
 }
 document.querySelectorAll('.tab').forEach(t => {
   t.addEventListener('click', () => switchTab(t.dataset.tab));
@@ -8181,7 +8101,9 @@ function linkDevisAccepteToContactCRM(docNum){
     const contacts = (typeof getContacts === 'function') ? getContacts() : [];
     const match = contacts.find(c => {
       const n = (typeof normalizeContact === 'function') ? normalizeContact(c) : c;
-      if (!(typeof isWaitingContact === 'function' ? isWaitingContact(n) : (n.followUpStatus === 'waiting' || n.waitingResponse))) return false;
+      if (isRefusedContact(n) || (n.followUpStatus === 'chantier')) return false;
+      if (String(n.devisDocNum||'') === String(docNum)) return true;
+      if (!(isWaitingContact(n))) return false;
       const nomContact = (n.nom || '').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim();
       if (nomContact.length < 3) return false;
       return nomDevis.includes(nomContact) || nomContact.includes(nomDevis);
@@ -8194,11 +8116,13 @@ function linkDevisAccepteToContactCRM(docNum){
       type:'chantier', type_visite:'chantier',
       followUpStatus:'chantier', status:'chantier',
       waitingResponse:false, devisToMake:false, finished:false,
+      devisRefused:false,
       chantierConfirmedAt: new Date().toISOString()
     };
-    if (typeof saveUpdatedContact === 'function') saveUpdatedContact(updated);
-    else if (typeof persistContact === 'function') persistContact(updated);
-    try { if (typeof updateBadges === 'function') updateBadges(); } catch(e){}
+    upsertLocalContact(updated);
+    try { pushContact(updated); } catch(e){}
+    try { updateBadges(); } catch(e){}
+    try { renderAll(); } catch(e){}
     console.info('[YAMA] Contact CRM passé en Chantier :', match.nom || cid);
   } catch(e) { console.warn('[YAMA] linkDevisAccepteToContactCRM:', e); }
 }
@@ -8212,13 +8136,15 @@ function linkDevisGeneratedToCRM(docNum, histEntry){
     const contacts = (typeof getContacts === 'function') ? getContacts() : [];
     const match = contacts.find(c => {
       const n = (typeof normalizeContact === 'function') ? normalizeContact(c) : c;
-      if (n.followUpStatus === 'waiting' || n.followUpStatus === 'chantier' || n.finished) return false;
+      if (n.followUpStatus === 'chantier' || (n.finished && !n.waitingResponse)) return false;
+      if (String(n.devisDocNum||'') === String(docNum)) return true;
       const nomC = (n.nom || '').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim();
       if (nomC.length < 3) return false;
       return nomDevis.includes(nomC) || nomC.includes(nomDevis);
     });
     if (!match) return;
-    const raw = (typeof findRawContact === 'function') ? findRawContact(match.id || match.contact_id) : match;
+    const cid = match.id || match.contact_id;
+    const raw = (typeof findRawContact === 'function') ? findRawContact(cid) : match;
     if (!raw) return;
     const updated = { ...raw,
       followUpStatus: 'waiting', waitingResponse: true,
@@ -8226,10 +8152,11 @@ function linkDevisGeneratedToCRM(docNum, histEntry){
       waitingResponseAt: new Date().toISOString(),
       devisDocNum: docNum
     };
-    if (typeof saveUpdatedContact === 'function') saveUpdatedContact(updated);
-    try { if (typeof updateBadges === 'function') updateBadges(); } catch(e){}
-    try { if (typeof renderContacts === 'function') renderContacts(); } catch(e){}
-    showToast('📋 Devis ' + docNum + ' envoyé — ' + (match.nom || 'client') + ' passé en Réponse attendue', 'success');
+    upsertLocalContact(updated);
+    try { pushContact(updated); } catch(e){}
+    try { updateBadges(); } catch(e){}
+    try { renderAll(); } catch(e){}
+    showToast('📋 Devis ' + docNum + ' — ' + (match.nom || 'client') + ' passé en Réponse attendue', 'success');
   } catch(e) { console.warn('[YAMA] linkDevisGeneratedToCRM:', e); }
 }
 
@@ -8249,16 +8176,20 @@ function linkDevisRefuseToContactCRM(docNum) {
     const hist = (typeof getHistory === 'function') ? getHistory() : [];
     const h = hist.find(e => String(e.docNum) === String(docNum));
     const nomDevis = (h?.clientNom || '').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim();
-    if (!nomDevis || nomDevis.length < 3) return;
     const contacts = (typeof getContacts === 'function') ? getContacts() : [];
+
+    // Match: priorité au devisDocNum, sinon correspondance par nom sur tout contact non refusé
     const match = contacts.find(c => {
       const n = (typeof normalizeContact === 'function') ? normalizeContact(c) : c;
-      if (isRefusedContact(n) || (n.finished && !isWaitingContact(n))) return false;
+      if (isRefusedContact(n)) return false;
+      if (String(n.devisDocNum||'') === String(docNum)) return true;
+      if (!nomDevis || nomDevis.length < 2) return false;
       const nomContact = (n.nom || '').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim();
-      if (nomContact.length < 3) return false;
+      if (nomContact.length < 2) return false;
       return nomDevis.includes(nomContact) || nomContact.includes(nomDevis);
     });
-    if (!match) return;
+    if (!match) { console.warn('[YAMA] linkDevisRefuseToContactCRM: aucun contact trouvé pour', docNum); return; }
+
     const cid = match.id || match.contact_id;
     const raw = (typeof findRawContact === 'function') ? findRawContact(cid) : match;
     if (!raw) return;
@@ -8268,13 +8199,14 @@ function linkDevisRefuseToContactCRM(docNum) {
       devisRefused: true,
       waitingResponse: false,
       devisToMake: false,
+      finished: true,
       devisRefusedAt: new Date().toISOString(),
-      devisDocNum: docNum
+      devisDocNum: String(docNum)
     };
-    if (typeof saveUpdatedContact === 'function') saveUpdatedContact(updated);
-    else if (typeof persistContact === 'function') persistContact(updated);
-    try { if (typeof updateBadges === 'function') updateBadges(); } catch(e){}
-    try { if (typeof renderAll === 'function') renderAll(); } catch(e){}
+    upsertLocalContact(updated);
+    try { pushContact(updated); } catch(e){}
+    try { updateBadges(); } catch(e){}
+    try { renderAll(); } catch(e){}
     console.info('[YAMA] Contact CRM archivé comme Refusé :', match.nom || cid);
   } catch(e) { console.warn('[YAMA] linkDevisRefuseToContactCRM:', e); }
 }
