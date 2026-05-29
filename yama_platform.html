@@ -29639,5 +29639,222 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   );
 })();
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     YAMA TERMINAL PATCH — Devis status transitions, duplicate fix,
+     visual polish, responsive, CRM pipeline
+═══════════════════════════════════════════════════════════════ -->
+<style id="yama-tp-css">
+/* ═══ DEVIS TAB — Layout & status ═══ */
+.devis-item { transition:border-color .2s,box-shadow .2s; overflow:visible; }
+.devis-item:hover { box-shadow:0 2px 14px rgba(0,0,0,.35); }
+.devis-item.accepted { box-shadow:0 0 0 1px rgba(82,199,127,.15); }
+.devis-item.refused  { opacity:.7; }
+.devis-item-actions  { display:flex !important; flex-wrap:wrap !important; gap:6px !important; align-items:center !important;
+  padding-top:10px !important; border-top:1px solid rgba(255,255,255,.06) !important; margin-top:10px !important; }
+.btn-action { padding:7px 13px; border-radius:4px; font-size:11px; letter-spacing:.5px; cursor:pointer;
+  font-weight:700; border:1px solid; transition:all .15s; white-space:nowrap; font-family:inherit; }
+.btn-action.accept  { background:rgba(82,199,127,.1); border-color:rgba(82,199,127,.4); color:#52c77f; }
+.btn-action.refuse  { background:rgba(192,57,43,.1); border-color:rgba(192,57,43,.35); color:#e74c3c; }
+.btn-action.travaux { background:linear-gradient(135deg,rgba(82,199,127,.15),rgba(52,152,219,.15)); border-color:rgba(82,199,127,.5); color:#6DEAA7; }
+.btn-action.load    { background:rgba(201,168,76,.07); border-color:var(--border); color:var(--gray); }
+.btn-action.accept:hover  { background:rgba(82,199,127,.22); }
+.btn-action.refuse:hover  { background:rgba(192,57,43,.2); }
+.btn-action.travaux:hover { background:rgba(82,199,127,.28); }
+.btn-action.load:hover    { border-color:rgba(201,168,76,.4); color:var(--gold); }
+/* Status badge */
+.status-badge { display:inline-flex !important; align-items:center !important; padding:4px 11px !important;
+  border-radius:20px !important; font-size:10px !important; font-weight:700 !important;
+  letter-spacing:.8px !important; white-space:nowrap !important; }
+/* ═══ DEVIS RESPONSIVE ═══ */
+@media (max-width:720px) {
+  .devis-item { padding:13px !important; }
+  .devis-item-header { flex-wrap:wrap !important; gap:6px !important; }
+  .devis-item-num  { font-size:12px !important; min-width:60px !important; }
+  .devis-item-amount { font-size:15px !important; }
+  .status-badge  { font-size:9px !important; padding:3px 7px !important; }
+  .btn-action    { font-size:10px !important; padding:5px 8px !important; }
+}
+@media (max-width:480px) {
+  .devis-item-header { display:grid !important; grid-template-columns:1fr auto !important; row-gap:4px !important; }
+  .devis-item-num    { grid-column:1; grid-row:1; }
+  .devis-item-amount { grid-column:2; grid-row:1; text-align:right; font-size:14px !important; }
+  .devis-item-info   { grid-column:1/-1; grid-row:2; min-width:0; }
+  .status-badge      { grid-column:1; grid-row:3; width:fit-content; }
+}
+/* ═══ CRM pipeline bar ═══ */
+.crm-pipeline-bar { height:3px; margin-top:8px; }
+.crm-pipeline-bar .pb-seg { height:3px !important; }
+/* ═══ Contact row hover ═══ */
+.contact-row { transition:border-color .2s,background .15s; }
+.contact-row:hover { background:rgba(255,255,255,.022) !important; }
+/* ═══ CRM detail modal pipeline ═══ */
+.detail-devis-block { margin:12px 22px 0 !important; }
+/* ═══ Scroll lock ═══ */
+.modal-overlay { overscroll-behavior:contain; }
+@media (max-width:600px) {
+  .modal { max-height:92vh !important; overflow-y:auto !important; }
+  .modal-overlay { align-items:flex-start !important; padding-top:16px !important; }
+}
+/* ═══ Print / PDF area ═══ */
+@media print {
+  header, .tabs, #app-crm, .wa-fab, .asst-fab { display:none !important; }
+  .pdf-render-area { display:block !important; }
+  .pdf-page { page-break-after:always; }
+}
+/* ═══ General micro-polish ═══ */
+.section { border-radius:6px; }
+.section-header { border-radius:6px 6px 0 0; }
+.result-card  { border-radius:6px; }
+.tabs { gap:1px; }
+.tab  { border-radius:4px 4px 0 0; }
+.tab.active { box-shadow:inset 0 -2px 0 var(--gold); }
+</style>
+
+<script>
+(function(){
+  'use strict';
+  if (window.__YAMA_TERMINAL_PATCH__) return;
+  window.__YAMA_TERMINAL_PATCH__ = true;
+
+  /* ══════════════════════════════════════════════════════════
+     1. DEVIS — Post-process DOM pour corriger :
+        • bouton doublon "Transformer/Générer"
+        • bouton "❌ Finalement refusé" pour statut accepted
+        • bouton "↩️ Remettre en attente" pour accepted et refused
+  ══════════════════════════════════════════════════════════ */
+  function patchDevisCards() {
+    let statuses = {};
+    try { statuses = JSON.parse(localStorage.getItem('yama_devis_status_v1') || '{}'); } catch(e){}
+
+    document.querySelectorAll('#devisList .devis-item').forEach(function(card) {
+      const docEl = card.querySelector('.devis-item-num');
+      const doc   = docEl ? docEl.textContent.trim() : '';
+      if (!doc) return;
+      const status = (statuses[doc] || {}).status || 'pending';
+
+      // ── Obtenir ou créer la zone d'actions ──
+      let actions = card.querySelector('.devis-item-actions');
+      if (!actions) {
+        actions = document.createElement('div');
+        actions.className = 'devis-item-actions';
+        card.appendChild(actions);
+      }
+
+      // ── 1. Supprimer les boutons facture en doublon ──
+      // On garde le PREMIER bouton facture (travaux/transformer), on supprime les suivants
+      const invoiceBtns = [...actions.querySelectorAll('.btn-action.travaux, .v12-smart-invoice-btn')];
+      if (invoiceBtns.length > 1) {
+        for (let i = 1; i < invoiceBtns.length; i++) invoiceBtns[i].remove();
+      }
+      // Normaliser le label du bouton facture restant
+      const invoiceBtn = actions.querySelector('.btn-action.travaux');
+      if (invoiceBtn) invoiceBtn.innerHTML = '🧾 Générer la facture';
+
+      // ── 2. Boutons de transition pour "accepted" ──
+      if (status === 'accepted') {
+        if (!actions.querySelector('[data-yt="refuse"]')) {
+          const btn = Object.assign(document.createElement('button'), {
+            className:'btn-action refuse', innerHTML:'❌ Finalement refusé',
+            title:'Le client a finalement refusé — archiver dans le CRM'
+          });
+          btn.setAttribute('data-yt','refuse');
+          btn.addEventListener('click', function() {
+            if (typeof refuseDevis === 'function') refuseDevis(doc);
+          });
+          actions.appendChild(btn);
+        }
+        if (!actions.querySelector('[data-yt="pending"]')) {
+          const btn = Object.assign(document.createElement('button'), {
+            className:'btn-action load', innerHTML:'↩️ En attente',
+            title:'Remettre en attente de réponse client'
+          });
+          btn.setAttribute('data-yt','pending');
+          btn.style.cssText = 'font-size:10px;padding:5px 9px;opacity:.8;';
+          btn.addEventListener('click', function() {
+            if (typeof revertDevisToPending === 'function') revertDevisToPending(doc);
+          });
+          actions.appendChild(btn);
+        }
+      }
+
+      // ── 3. Bouton "Remettre en attente" pour "refused" ──
+      if (status === 'refused') {
+        if (!actions.querySelector('[data-yt="pending"]')) {
+          const btn = Object.assign(document.createElement('button'), {
+            className:'btn-action load', innerHTML:'🔄 Remettre en attente',
+            title:'Remettre en attente de réponse client'
+          });
+          btn.setAttribute('data-yt','pending');
+          btn.style.cssText = 'font-size:10px;padding:5px 9px;opacity:.8;';
+          btn.addEventListener('click', function() {
+            if (typeof revertDevisToPending === 'function') revertDevisToPending(doc);
+          });
+          actions.appendChild(btn);
+        }
+      }
+    });
+  }
+  window.patchDevisCards = patchDevisCards; // accessible globalement
+
+  /* Wrap renderDevisTab pour appeler patchDevisCards après chaque render */
+  function wrapRenderDevis() {
+    const orig = window.renderDevisTab;
+    if (!orig || orig.__ytWrapped) return;
+    window.renderDevisTab = function() {
+      const r = orig.apply(this, arguments);
+      // 100ms pour s'exécuter après le setTimeout de 30ms de V12
+      setTimeout(patchDevisCards, 100);
+      return r;
+    };
+    window.renderDevisTab.__ytWrapped = true;
+  }
+  wrapRenderDevis();
+
+  /* ══════════════════════════════════════════════════════════
+     2. CRM — amélioration des messages d'automatisation par étape
+        Wrapper sur followUpBaseMessage pour utiliser la logique améliorée
+  ══════════════════════════════════════════════════════════ */
+  // (Les messages sont déjà améliorés dans les fonctions de base — OK)
+
+  /* ══════════════════════════════════════════════════════════
+     3. SYNCHRONISATION — forcer renderDevisTab après acceptDevis/refuseDevis
+        pour que le DOM soit toujours à jour
+  ══════════════════════════════════════════════════════════ */
+  function wrapDevisActions() {
+    ['acceptDevis','refuseDevis','revertDevisToPending','markDevisDone'].forEach(function(fn) {
+      const orig = window[fn];
+      if (!orig || orig.__ytWrapped) return;
+      window[fn] = function() {
+        const r = orig.apply(this, arguments);
+        setTimeout(patchDevisCards, 120);
+        return r;
+      };
+      window[fn].__ytWrapped = true;
+    });
+  }
+  wrapDevisActions();
+
+  /* ══════════════════════════════════════════════════════════
+     4. INIT — patch initial sur DOM chargé
+  ══════════════════════════════════════════════════════════ */
+  function init() {
+    wrapRenderDevis();
+    wrapDevisActions();
+    // Si le tab devis est déjà ouvert, patcher immédiatement
+    if (document.getElementById('tab-devis')?.classList.contains('active')) {
+      setTimeout(patchDevisCards, 200);
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+    setTimeout(patchDevisCards, 600); // fallback après tous les boots
+  }
+
+  console.info('[YAMA TERMINAL PATCH] ✅ Status transitions devis, anti-doublon facture, CSS polish, responsive.');
+})();
+</script>
 </body>
 </html>
