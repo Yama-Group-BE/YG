@@ -2094,6 +2094,19 @@ header {
   .kpi-label { font-size: 9px !important; }
 }
 
+/* ── Pipeline CRM barre de progression ── */
+.crm-pipeline-bar { display:flex; gap:2px; margin-top:7px; height:3px; border-radius:2px; overflow:hidden; width:100%; }
+.crm-pipeline-bar .pb-seg { flex:1; border-radius:1px; background:rgba(255,255,255,0.09); transition:background .2s; }
+.crm-pipeline-bar .pb-done { background:rgba(62,207,142,0.6); }
+.crm-pipeline-bar .pb-active { background:var(--accent); }
+.crm-pipeline-bar .pb-refused { background:rgba(224,82,82,0.7); }
+/* Stage chip sur la carte contact */
+.crm-stage-chip { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:12px; font-size:10px; font-weight:700; letter-spacing:.5px; }
+
+/* Bloc devis lié dans le détail contact */
+.detail-devis-block { background:rgba(91,156,246,.07); border:1px solid rgba(91,156,246,.25); border-radius:8px; padding:12px 14px; margin:0 22px 0; }
+.detail-devis-row { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+
 
 
 /* ════════════════════════════════════════
@@ -5453,8 +5466,61 @@ function openContactDetail(cid) {
       </div>
     </div>
 
+    ${(() => {
+      // Pipeline overview dans le détail
+      const stg = (typeof crmStageLabel === 'function') ? crmStageLabel(c) : { name:'contact' };
+      const stages = [
+        { key:'contact', label:'Contact',  icon:'👥' },
+        { key:'rdv',     label:'RDV',      icon:'📅' },
+        { key:'devis',   label:'Devis',    icon:'📋' },
+        { key:'waiting', label:'Attente',  icon:'⏳' },
+        { key:'chantier',label:'Chantier', icon:'🔨' },
+        { key:'fini',    label:'Fini',     icon:'✅' },
+      ];
+      const posMap = {contact:0,rdv:1,recontact:1,devis:2,waiting:3,chantier:4,fini:5,refused:5};
+      const curPos = posMap[stg.name] ?? 0;
+      const isRefused = stg.name === 'refused';
+      const stepsHtml = stages.map((s, i) => {
+        const isDone = !isRefused && i < curPos;
+        const isActive = !isRefused && i === curPos;
+        const isEnd = isRefused && i === 5;
+        const col = isEnd ? '#e05252' : isDone ? '#52c77f' : isActive ? 'var(--accent)' : 'var(--text3)';
+        const bg  = isEnd ? 'rgba(224,82,82,.12)' : isDone ? 'rgba(82,199,127,.1)' : isActive ? 'rgba(232,160,32,.12)' : 'rgba(255,255,255,.04)';
+        return `<div style="flex:1;text-align:center;padding:6px 4px;border-radius:6px;background:${bg};border:1px solid ${col.replace('var(','').replace(')','') === col ? col : 'transparent'};">
+          <div style="font-size:14px;">${isEnd ? '❌' : s.icon}</div>
+          <div style="font-size:9px;font-weight:700;color:${col};margin-top:2px;letter-spacing:.3px;">${isEnd && i===5 ? 'Refusé' : s.label}</div>
+        </div>`;
+      }).join('<div style="width:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:10px;">›</div>');
+      // Bloc devis lié
+      let devisBlock = '';
+      if (c.devisDocNum) {
+        const statuses = typeof getDevisStatuses === 'function' ? getDevisStatuses() : {};
+        const ds = (statuses[c.devisDocNum]?.status) || 'pending';
+        const dsLabel = {pending:'⏳ En attente',accepted:'✅ Accepté',refused:'❌ Refusé',done:'🔨 Travaux',invoiced:'🧾 Facturé'}[ds] || ds;
+        const dsCol = ds==='accepted'||ds==='done'?'#52c77f':ds==='refused'?'#e05252':ds==='invoiced'?'#C9A84C':'var(--accent)';
+        devisBlock = `<div class="detail-devis-block">
+          <div class="detail-devis-row">
+            <div>
+              <div style="font-size:10px;color:#5b9cf6;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;">📋 Devis lié</div>
+              <div style="font-size:15px;font-weight:700;color:var(--white);">${escHtml(c.devisDocNum)}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:11px;font-weight:700;color:${dsCol};">${dsLabel}</div>
+              <button onclick="switchApp('platform');setTimeout(()=>{switchTab('devis');closeContactDetail();},200);" style="margin-top:4px;padding:5px 12px;border-radius:6px;border:1px solid rgba(91,156,246,.4);background:rgba(91,156,246,.1);color:#5b9cf6;font-size:11px;font-weight:700;cursor:pointer;">Voir le devis →</button>
+            </div>
+          </div>
+        </div>`;
+      }
+      return `
+    <div style="padding:12px 22px 0;border-bottom:1px solid var(--border);">
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">📊 Pipeline — Étape actuelle</div>
+      <div style="display:flex;align-items:stretch;gap:4px;margin-bottom:12px;">${stepsHtml}</div>
+    </div>
+    ${devisBlock ? `<div style="padding:10px 0;">${devisBlock}</div>` : ''}`;
+    })()}
     <div style="padding:14px 22px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
       ${(isDueForFollowUp(c) || isWaitingContact(c)) ? `<button class="btn btn-green btn-sm" onclick="openFollowUpModal('${c.id || c.contact_id}')">📞 Voir suivi</button>` : ''}
+      ${isWaitingContact(c) && c.devisDocNum ? `<button class="btn btn-outline btn-sm" style="background:rgba(224,82,82,.08);border-color:rgba(224,82,82,.35);color:#e05252;" onclick="crmRefuseDevisFromCRM('${c.id||c.contact_id}','${c.devisDocNum||''}');closeContactDetail();">❌ Devis refusé</button>` : ''}
       ${c.type === 'devis' && !isFinishedContact(c) ? `<button class="btn btn-outline btn-sm" style="background:rgba(201,168,76,0.08);border-color:rgba(201,168,76,0.35);color:#C9A84C;" onclick="createDevisFromCRMContact('${c.id || c.contact_id}')">📄 Créer devis</button>` : ''}
       ${c.type === 'devis' && !isFinishedContact(c) ? `<button class="btn btn-outline btn-sm" style="background:rgba(82,199,127,0.08);border-color:rgba(82,199,127,0.35);color:#52c77f;" onclick="markAsChantier('${c.id || c.contact_id}');closeContactDetail();">🔨 Chantier confirmé</button>` : ''}
       ${!isFinishedContact(c) ? `<button class="btn btn-outline btn-sm" style="background:rgba(82,199,127,0.08);border-color:rgba(82,199,127,0.35);color:#52c77f;" onclick="markFollowUpDone('${c.id || c.contact_id}');closeContactDetail();">✅ Fini</button>` : ''}
@@ -5857,11 +5923,20 @@ function renderContactList(containerId, filterType) {
     const safeJson = JSON.stringify(c).replace(/"/g,'&quot;');
     const followBtn = isDueForFollowUp(c) ? `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openFollowUpModal('${cid}')" style="color:#3ecf8e;border-color:rgba(62,207,142,0.35);">📞 Relancer</button>` : '';
     const devisBtn = isDevisToMakeContact(c) ? `<button class="btn btn-outline btn-sm" title="Ouvrir le calculateur avec les infos client" onclick="event.stopPropagation();createDevisFromCRMContact('${cid}')" style="color:#C9A84C;border-color:rgba(201,168,76,0.35);font-weight:700;">📄 Préparer le devis →</button>` : '';
-    const voirDevisBtn = isWaitingContact(c) && c.devisDocNum ? `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();switchApp('platform');setTimeout(()=>{if(typeof switchTab==='function')switchTab('devis');},200);" style="color:#5b9cf6;border-color:rgba(91,156,246,0.35);">📋 Voir devis ${escHtml(c.devisDocNum||'')}</button>` : '';
+    const voirDevisBtn = c.devisDocNum ? `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();switchApp('platform');setTimeout(()=>{if(typeof switchTab==='function')switchTab('devis');},200);" style="color:#5b9cf6;border-color:rgba(91,156,246,0.35);">📋 ${escHtml(c.devisDocNum||'')}</button>` : '';
     const chantierBtn = isWaitingContact(c) ? `<button class="btn btn-outline btn-sm" title="Devis accepté — passer en chantier" onclick="event.stopPropagation();markAsChantier('${cid}')" style="color:#52c77f;border-color:rgba(82,199,127,0.35);">✅ Devis accepté</button>` : '';
+    const refuserBtn = isWaitingContact(c) && c.devisDocNum ? `<button class="btn btn-outline btn-sm" title="Refuser le devis — archiver" onclick="event.stopPropagation();crmRefuseDevisFromCRM('${cid}','${escHtml(c.devisDocNum||'')}')" style="color:#e05252;border-color:rgba(224,82,82,0.35);">❌ Refusé</button>` : '';
     const factureBtn = c.type === 'chantier' && !isFinishedContact(c) ? `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();switchApp('platform');setTimeout(()=>{if(typeof switchTab==='function')switchTab('chantiers');},200);" style="color:#C9A84C;border-color:rgba(201,168,76,0.35);">🧾 Facturer →</button>` : '';
     const finishBtn = !isFinishedContact(c) ? `<button class="btn btn-outline btn-sm" title="Classer dans Archives" onclick="event.stopPropagation();markFollowUpDone('${cid}')" style="color:var(--text3);border-color:var(--border2);">✅ Archiver</button>` : '';
-    const rowBorder = stage.name === 'recontact' ? 'border-color:rgba(62,207,142,.35);' : stage.name === 'waiting' ? 'border-color:rgba(91,156,246,.35);' : stage.name === 'devis' ? 'border-color:rgba(201,168,76,.35);' : stage.name === 'rdv' ? 'border-color:rgba(91,156,246,.24);' : '';
+    const rowBorder = stage.name === 'recontact' ? 'border-color:rgba(62,207,142,.35);' : stage.name === 'waiting' ? 'border-color:rgba(91,156,246,.35);' : stage.name === 'devis' ? 'border-color:rgba(201,168,76,.35);' : stage.name === 'rdv' ? 'border-color:rgba(91,156,246,.24);' : stage.name === 'refused' ? 'border-color:rgba(224,82,82,.2);' : '';
+    // Barre de progression pipeline (6 segments : Contact → RDV → Devis → Attente → Chantier → Fin)
+    const stagePos = {contact:1,rdv:2,recontact:2,devis:3,waiting:4,chantier:5,fini:6,refused:6}[stage.name] || 1;
+    const pipelineBar = `<div class="crm-pipeline-bar">${[1,2,3,4,5,6].map(i => {
+      if (stage.name === 'refused') return `<div class="pb-seg ${i<=6?'pb-refused':''}"></div>`;
+      if (i < stagePos) return '<div class="pb-seg pb-done"></div>';
+      if (i === stagePos) return '<div class="pb-seg pb-active"></div>';
+      return '<div class="pb-seg"></div>';
+    }).join('')}</div>`;
     return `
     <div class="contact-row" onclick="openContactDetail('${cid}')" style="cursor:pointer;${rowBorder}">
       <div class="avatar ${c.type === 'chantier' || isFinishedContact(c) ? 'av-chantier' : 'av-devis'}">${escHtml(init)}</div>
@@ -5872,6 +5947,7 @@ function renderContactList(containerId, filterType) {
           <span>📞 ${escHtml(c.tel)}</span>
           ${c.st ? `<span>🔧 ${escHtml(c.st)}</span>` : ''}
         </div>
+        ${pipelineBar}
       </div>
       <div>
         <div class="cr-date">${fmtDateFR(c.date)} · à partir de ${fmtTime(c.heure)}</div>
@@ -5882,6 +5958,7 @@ function renderContactList(containerId, filterType) {
         ${devisBtn}
         ${voirDevisBtn}
         ${chantierBtn}
+        ${refuserBtn}
         ${factureBtn}
         ${finishBtn}
         <button class="btn btn-outline btn-sm" title="Modifier" onclick="event.stopPropagation();editContact('${cid}')" style="color:#e8a020;border-color:rgba(232,160,32,0.3);">✏️</button>
@@ -8218,6 +8295,55 @@ function refuseDevis(docNum) {
   linkDevisRefuseToContactCRM(docNum);
   showToast('❌ Devis refusé — contact archivé dans le CRM', 'error');
 }
+
+function revertDevisToPending(docNum) {
+  if (!confirm('Remettre ce devis en attente de réponse du client ?\n\nLe contact CRM correspondant sera remis en statut "Attente réponse".')) return;
+  setDevisStatus(docNum, 'pending', '');
+  linkDevisRevertToCRMWaiting(docNum);
+  renderDevisTab();
+  showToast('↩️ Devis remis en attente — contact CRM mis à jour', 'success');
+}
+
+function linkDevisRevertToCRMWaiting(docNum) {
+  try {
+    const hist = (typeof getHistory === 'function') ? getHistory() : [];
+    const h = hist.find(e => String(e.docNum) === String(docNum));
+    const nomDevis = (h?.clientNom || '').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim();
+    const contacts = (typeof getContacts === 'function') ? getContacts() : [];
+    const match = contacts.find(c => {
+      const n = (typeof normalizeContact === 'function') ? normalizeContact(c) : c;
+      if (String(n.devisDocNum||'') === String(docNum)) return true;
+      if (!nomDevis || nomDevis.length < 2) return false;
+      const nomC = (n.nom || '').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim();
+      return nomC.length >= 2 && (nomDevis.includes(nomC) || nomC.includes(nomDevis));
+    });
+    if (!match) return;
+    const cid = match.id || match.contact_id;
+    const raw = (typeof findRawContact === 'function') ? findRawContact(cid) : match;
+    if (!raw) return;
+    const updated = { ...raw,
+      followUpStatus: 'waiting', waitingResponse: true,
+      status: 'en_attente_reponse',
+      devisRefused: false, finished: false,
+      devisDocNum: String(docNum),
+      waitingResponseAt: new Date().toISOString()
+    };
+    upsertLocalContact(updated);
+    try { pushContact(updated); } catch(e){}
+    try { updateBadges(); } catch(e){}
+    try { renderAll(); } catch(e){}
+    console.info('[YAMA] Contact CRM remis en attente :', match.nom || cid);
+  } catch(e) { console.warn('[YAMA] linkDevisRevertToCRMWaiting:', e); }
+}
+
+// Depuis la carte CRM : refuser directement le devis lié sans aller dans l'onglet Devis
+function crmRefuseDevisFromCRM(cid, docNum) {
+  if (!docNum) { showToast('Aucun devis lié à ce contact', 'error'); return; }
+  if (!confirm(`Marquer le devis ${docNum} comme refusé ?\n\nCe contact sera archivé avec le statut "Refusé".`)) return;
+  if (typeof setDevisStatus === 'function') setDevisStatus(docNum, 'refused', '');
+  linkDevisRefuseToContactCRM(docNum);
+  showToast('❌ Devis refusé — contact archivé', 'error');
+}
 function markDevisDone(docNum) {
   setDevisStatus(docNum, 'done', '');
   renderDevisTab();
@@ -8442,15 +8568,19 @@ function renderDevisTab() {
       actions = `
         <button class="btn-action travaux" onclick="openSmartInvoiceModal('${h.docNum}')">🧾 Générer la facture</button>
         <button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')">📂 Recharger</button>
+        <button class="btn-action refuse" onclick="refuseDevis('${h.docNum}')" title="Correction — le client a finalement refusé" style="font-size:10px;padding:5px 10px;">❌ Finalement refusé</button>
+        <button class="btn-action load" onclick="revertDevisToPending('${h.docNum}')" style="font-size:10px;padding:5px 10px;color:var(--gray);" title="Remettre en attente de réponse">↩️ Remettre en attente</button>
         ${crmBtn}`;
     } else if (st.status === 'done') {
       actions = `
         <button class="btn-action travaux" onclick="openSmartInvoiceModal('${h.docNum}')">🧾 Générer la facture</button>
+        <button class="btn-action refuse" onclick="refuseDevis('${h.docNum}')" title="Correction statut" style="font-size:10px;padding:5px 10px;">❌ Finalement refusé</button>
         ${crmBtn}`;
     } else if (st.status === 'refused') {
       actions = `
         <button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')">📂 Modifier et renvoyer</button>
         <button class="btn-action accept" onclick="acceptDevis('${h.docNum}')">↩️ Finalement accepté</button>
+        <button class="btn-action load" onclick="revertDevisToPending('${h.docNum}')" style="font-size:10px;padding:5px 10px;" title="Remettre en attente">🔄 En attente</button>
         ${crmBtn}`;
     } else if (st.status === 'invoiced') {
       actions = `<button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')">📂 Voir</button>${crmBtn}`;
