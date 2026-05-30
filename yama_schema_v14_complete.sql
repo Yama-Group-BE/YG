@@ -413,6 +413,117 @@ do $$ begin
 end $$;
 
 -- ───────────────────────────────────────────────────────────────────────────
+-- 11b. COLONNES GÉNÉRÉES (migration additive — pour tables créées avant v14)
+-- Si la table existait déjà (v12/v13), CREATE TABLE est ignoré et ces colonnes
+-- générées n'existent pas. On les ajoute ici idempotent via ALTER TABLE.
+-- ───────────────────────────────────────────────────────────────────────────
+
+-- yama_crm : colonnes générées depuis le JSONB (absentes si table pré-v14)
+do $$ begin
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_crm' and column_name='deleted') then
+    alter table yama_crm add column deleted boolean generated always as (
+      coalesce((data->>'deleted')::boolean, false)
+    ) stored;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_crm' and column_name='follow_up_status') then
+    alter table yama_crm add column follow_up_status text generated always as (
+      data->>'followUpStatus'
+    ) stored;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_crm' and column_name='rdv_date') then
+    alter table yama_crm add column rdv_date date generated always as (
+      case when (data->>'date') ~ '^\d{4}-\d{2}-\d{2}$'
+           then (data->>'date')::date else null end
+    ) stored;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_crm' and column_name='tel') then
+    alter table yama_crm add column tel text generated always as (data->>'tel') stored;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_crm' and column_name='nom') then
+    alter table yama_crm add column nom text generated always as (data->>'nom') stored;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_crm' and column_name='commune') then
+    alter table yama_crm add column commune text generated always as (data->>'commune') stored;
+  end if;
+end $$;
+
+-- yama_history : colonnes générées depuis le JSONB (absentes si table pré-v14)
+do $$ begin
+  -- deleted : basé sur deleted_at (mécanisme tombstone v12+)
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='deleted') then
+    alter table yama_history add column deleted boolean generated always as (
+      deleted_at is not null
+    ) stored;
+  end if;
+  -- client_nom (v12 a client_name, v14 expose client_nom depuis JSONB)
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='client_nom') then
+    alter table yama_history add column client_nom text generated always as (
+      coalesce(data->>'clientNom', '')
+    ) stored;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='client_tel') then
+    alter table yama_history add column client_tel text generated always as (
+      coalesce(data->>'clientTel', '')
+    ) stored;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='client_email') then
+    alter table yama_history add column client_email text generated always as (
+      coalesce(data->>'clientEmail', '')
+    ) stored;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='client_adresse') then
+    alter table yama_history add column client_adresse text generated always as (
+      coalesce(data->>'clientAdresse', '')
+    ) stored;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='client_ville') then
+    alter table yama_history add column client_ville text generated always as (
+      coalesce(data->>'clientVille', '')
+    ) stored;
+  end if;
+  -- total_ht (calcul financier — absente en v12)
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='total_ht') then
+    alter table yama_history add column total_ht numeric(12,2) generated always as (
+      case when (data->>'totalHt') ~ '^-?\d+(\.\d+)?$'
+           then (data->>'totalHt')::numeric else 0 end
+    ) stored;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='cout_materiaux') then
+    alter table yama_history add column cout_materiaux numeric(12,2) generated always as (
+      case when (data->>'coutMateriaux') ~ '^-?\d+(\.\d+)?$'
+           then (data->>'coutMateriaux')::numeric else null end
+    ) stored;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='autres_couts') then
+    alter table yama_history add column autres_couts numeric(12,2) generated always as (
+      case when (data->>'autresCouts') ~ '^-?\d+(\.\d+)?$'
+           then (data->>'autresCouts')::numeric else null end
+    ) stored;
+  end if;
+  if not exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='age_batiment') then
+    alter table yama_history add column age_batiment text generated always as (
+      data->>'ageBatiment'
+    ) stored;
+  end if;
+end $$;
+
+-- ───────────────────────────────────────────────────────────────────────────
 -- 12. INDEX
 -- ───────────────────────────────────────────────────────────────────────────
 
