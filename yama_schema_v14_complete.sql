@@ -265,10 +265,11 @@ create table if not exists yama_client_paid (
 );
 
 -- ───────────────────────────────────────────────────────────────────────────
--- 8. TABLE : yama_soustraitants   (alias: yama_sous_traitants dans le code)
+-- 8. TABLE : yama_sous_traitants   (alias: yama_soustraitants dans certains contextes)
 -- Carnet des sous-traitants — source : localStorage yama_soustraitants_v1
+-- Nom canonique depuis v12 : yama_sous_traitants (avec underscore)
 -- ───────────────────────────────────────────────────────────────────────────
-create table if not exists yama_soustraitants (
+create table if not exists yama_sous_traitants (
   id              bigint        generated always as identity primary key,
   nom             text          not null unique,
   tel             text          not null default '',
@@ -278,9 +279,17 @@ create table if not exists yama_soustraitants (
   updated_at      timestamptz   not null default now()
 );
 
--- Alias pour compatibilité avec ancienne écriture dans le code (yama_sous_traitants)
--- Le code utilise les deux noms — on crée une vue alias pour l'ancien nom
-create or replace view yama_sous_traitants as select * from yama_soustraitants;
+-- Alias pour compatibilité avec l'écriture compacte (yama_soustraitants)
+-- Créé seulement si yama_soustraitants n'existe pas encore
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'yama_soustraitants'
+  ) then
+    execute 'create view yama_soustraitants as select * from yama_sous_traitants';
+  end if;
+end $$;
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- 9. TABLE : yama_counters
@@ -387,19 +396,19 @@ do $$ begin
   end if;
 end $$;
 
--- yama_soustraitants : colonnes spec, tarif, source si absentes
+-- yama_sous_traitants : colonnes spec, tarif, source si absentes
 do $$ begin
   if not exists (select 1 from information_schema.columns
-    where table_name='yama_soustraitants' and column_name='spec') then
-    alter table yama_soustraitants add column spec text not null default '';
+    where table_name='yama_sous_traitants' and column_name='spec') then
+    alter table yama_sous_traitants add column spec text not null default '';
   end if;
   if not exists (select 1 from information_schema.columns
-    where table_name='yama_soustraitants' and column_name='tarif') then
-    alter table yama_soustraitants add column tarif numeric(10,2);
+    where table_name='yama_sous_traitants' and column_name='tarif') then
+    alter table yama_sous_traitants add column tarif numeric(10,2);
   end if;
   if not exists (select 1 from information_schema.columns
-    where table_name='yama_soustraitants' and column_name='source') then
-    alter table yama_soustraitants add column source text not null default 'crm';
+    where table_name='yama_sous_traitants' and column_name='source') then
+    alter table yama_sous_traitants add column source text not null default 'crm';
   end if;
 end $$;
 
@@ -465,9 +474,9 @@ create index if not exists idx_yama_devis_status_status
 create index if not exists idx_yama_pdf_documents_doc_num
   on yama_pdf_documents (doc_num);
 
--- yama_soustraitants
-create index if not exists idx_yama_soustraitants_nom_trgm
-  on yama_soustraitants using gin (nom gin_trgm_ops);
+-- yama_sous_traitants
+create index if not exists idx_yama_sous_traitants_nom_trgm
+  on yama_sous_traitants using gin (nom gin_trgm_ops);
 
 -- ───────────────────────────────────────────────────────────────────────────
 -- 13. TRIGGER : mise à jour automatique de updated_at
@@ -488,7 +497,7 @@ begin
   foreach t in array array[
     'yama_crm','yama_history','yama_devis_status',
     'yama_pdf_documents','yama_st_paid','yama_client_paid',
-    'yama_soustraitants','yama_settings','yama_counters'
+    'yama_sous_traitants','yama_settings','yama_counters'
   ] loop
     execute format(
       'create or replace trigger trg_%s_updated_at
@@ -774,7 +783,7 @@ select
 from yama_history h
 left join yama_devis_status   ds on ds.doc_num = h.doc_num
 left join yama_st_paid        sp on sp.doc_num = h.doc_num
-left join yama_soustraitants  st on lower(st.nom) = lower(h.st_nom)
+left join yama_sous_traitants st on lower(st.nom) = lower(h.st_nom)
 where h.st_nom is not null and h.st_nom <> ''
 group by 1, 2, 3, 4
 order by chantiers_actifs desc nulls last, ca_en_cours_ttc desc nulls last;
@@ -847,7 +856,7 @@ alter table yama_devis_status    enable row level security;
 alter table yama_pdf_documents   enable row level security;
 alter table yama_st_paid         enable row level security;
 alter table yama_client_paid     enable row level security;
-alter table yama_soustraitants   enable row level security;
+alter table yama_sous_traitants  enable row level security;
 alter table yama_counters        enable row level security;
 alter table yama_settings        enable row level security;
 
@@ -857,7 +866,7 @@ declare t text; op text;
 begin
   foreach t in array array[
     'yama_crm','yama_history','yama_devis_status','yama_pdf_documents',
-    'yama_st_paid','yama_client_paid','yama_soustraitants',
+    'yama_st_paid','yama_client_paid','yama_sous_traitants',
     'yama_counters','yama_settings'
   ] loop
     foreach op in array array['select','insert','update','delete'] loop
@@ -877,13 +886,13 @@ $$;
 grant usage  on schema public to anon;
 grant select, insert, update, delete
   on yama_crm, yama_history, yama_devis_status, yama_pdf_documents,
-     yama_st_paid, yama_client_paid, yama_soustraitants,
+     yama_st_paid, yama_client_paid, yama_sous_traitants,
      yama_counters, yama_settings
   to anon;
 grant select
   on yama_crm_pipeline_complete, yama_pipeline_kpi, yama_monthly_report,
      yama_sous_traitants_workload, yama_rdv_upcoming, yama_factures_impayees,
-     yama_sous_traitants
+     yama_soustraitants
   to anon;
 grant usage, select
   on all sequences in schema public
@@ -910,7 +919,7 @@ values
   ('yama_history_v3',       'Historique devis & factures (array JSON)',
     'yama_history',       'data',   'push+pull (merge max-ts)',     'LS.history'),
   ('yama_soustraitants_v1', 'Liste sous-traitants (array JSON)',
-    'yama_soustraitants', 'nom',    'push+pull (last-write-wins)',  'LS_ST'),
+    'yama_sous_traitants', 'nom',   'push+pull (last-write-wins)',  'LS_ST'),
   ('yama_devis_status_v1',  'Statuts des devis {docNum: {status, note, updatedAt}}',
     'yama_devis_status',  'status', 'push+pull (merge)',            'LS_DEVIS_STATUS'),
   ('yama_st_paid_v1',       'Paiements sous-traitants {docNum: {paid, amount, paid_at}}',
@@ -976,7 +985,7 @@ order by t.table_name;
   yama_pdf_documents          id / doc_num             push+pull      Archives PDF base64
   yama_st_paid                doc_num                  push+pull      Paiements sous-traitants
   yama_client_paid            doc_num                  push+pull      Paiements clients
-  yama_soustraitants          id / nom                 push+pull      Carnet sous-traitants
+  yama_sous_traitants         id / nom                 push+pull      Carnet sous-traitants
   yama_counters               id ('devis'/'facture')   push (max)     Numérotation
   yama_settings               key                      local          Paramètres app
   yama_localstorage_keys      key                      doc only       Référence LS ↔ SQL
@@ -989,7 +998,7 @@ order by t.table_name;
   yama_sous_traitants_workload Charge ST + impayés                 Gestion sous-traitants
   yama_rdv_upcoming           RDV dans les 7 prochains jours       Agenda
   yama_factures_impayees      Factures non soldées + dépassement   Relance clients
-  yama_sous_traitants         Alias de yama_soustraitants          Compat. code v1
+  yama_soustraitants          Alias de yama_sous_traitants         Compat. code compact
 
   FONCTIONS
   ────────────────────────────────────────────────────────────────────────────
