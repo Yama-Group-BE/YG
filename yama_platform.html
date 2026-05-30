@@ -6439,8 +6439,9 @@ const YAMA_LOGO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD/4QBARXhpZg
     img.alt = 'YAMA GROUP';
     img.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block;';
     icon.textContent = '';
-    icon.style.background = 'transparent';
+    icon.style.background = '#ffffff';
     icon.style.padding = '2px';
+    icon.style.borderRadius = '7px';
     icon.appendChild(img);
     icon.dataset.yamaLogoLoaded = '1';
   }
@@ -8117,7 +8118,6 @@ function switchTab(name) {
 }
 
 function renderTarifsTab() { /* tab removed */ }
-}
 document.querySelectorAll('.tab').forEach(t => {
   t.addEventListener('click', () => switchTab(t.dataset.tab));
 });
