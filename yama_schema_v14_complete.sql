@@ -104,11 +104,8 @@ create table if not exists yama_crm (
   -- Sous-traitant attribué
   sous_traitant   text          generated always as (data->>'st') stored,
 
-  -- RDV
-  rdv_date        date          generated always as (
-                                  case when (data->>'date') ~ '^\d{4}-\d{2}-\d{2}$'
-                                       then (data->>'date')::date else null end
-                                ) stored,
+  -- RDV (stocké en text — ::date non IMMUTABLE, conversion dans les vues)
+  rdv_date        text          generated always as (data->>'date') stored,
   rdv_heure       text          generated always as (data->>'heure') stored,
 
   -- ── Colonnes horodatage (non dans "data" — écrites directement) ──
@@ -434,10 +431,7 @@ do $$ begin
   end if;
   if not exists (select 1 from information_schema.columns
     where table_name='yama_crm' and column_name='rdv_date') then
-    alter table yama_crm add column rdv_date date generated always as (
-      case when (data->>'date') ~ '^\d{4}-\d{2}-\d{2}$'
-           then (data->>'date')::date else null end
-    ) stored;
+    alter table yama_crm add column rdv_date text generated always as (data->>'date') stored;
   end if;
   if not exists (select 1 from information_schema.columns
     where table_name='yama_crm' and column_name='tel') then
@@ -545,7 +539,7 @@ create index if not exists idx_yama_crm_devis_doc_num
 
 create index if not exists idx_yama_crm_rdv_date
   on yama_crm (rdv_date)
-  where rdv_date is not null and deleted = false;
+  where rdv_date is not null and deleted = false;   -- rdv_date = text 'YYYY-MM-DD', ordre lexicographique = chronologique
 
 create index if not exists idx_yama_crm_commune
   on yama_crm (commune)
@@ -912,7 +906,7 @@ select
   coalesce(c.data->>'adresse', '')                          as adresse,
   coalesce(c.data->>'commune', '')                          as commune,
   coalesce(c.data->>'note', '')                             as note,
-  c.rdv_date,
+  c.rdv_date::date                                          as rdv_date,
   c.data->>'heure'                                          as rdv_heure,
   coalesce(c.data->>'type', 'devis')                        as type_rdv,
   coalesce(c.data->>'st', '')                               as sous_traitant,
@@ -921,8 +915,8 @@ select
 
 from yama_crm c
 where c.rdv_date is not null
-  and c.rdv_date >= current_date
-  and c.rdv_date <= current_date + interval '7 days'
+  and c.rdv_date::date >= current_date
+  and c.rdv_date::date <= current_date + interval '7 days'
   and coalesce((c.data->>'deleted')::boolean, false) = false
 order by c.rdv_date, c.data->>'heure';
 
