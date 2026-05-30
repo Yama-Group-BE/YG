@@ -6430,27 +6430,19 @@ const YAMA_LOGO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAASABIAAD/4QBARXhpZg
 // LOGO — injection immédiate dans le header + favicon
 // ═══════════════════════════════════════════════════════════════════
 ;(function(){
-  if (!YAMA_LOGO) return;
-  // 1. Remplace "YG" par l'image réelle dans .u-logo-icon
+  // Logo plateforme : fond blanc + "YG" doré (le JPEG a un fond sombre, on garde le CSS pur)
   var icon = document.querySelector('.u-logo-icon');
-  if (icon) {
-    var img = document.createElement('img');
-    img.src = YAMA_LOGO;
-    img.alt = 'YAMA GROUP';
-    img.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block;';
-    icon.textContent = '';
-    icon.style.background = '#ffffff';
-    icon.style.padding = '2px';
-    icon.style.borderRadius = '7px';
-    icon.appendChild(img);
+  if (icon && !icon.dataset.yamaLogoLoaded) {
+    icon.textContent = 'YG';
+    icon.style.cssText = 'width:30px;height:30px;background:#ffffff;border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;color:#C9A84C;letter-spacing:-.5px;flex-shrink:0;border:1.5px solid #C9A84C;';
     icon.dataset.yamaLogoLoaded = '1';
   }
-  // 2. Favicon
-  var fav = document.querySelector('link[rel="icon"]');
-  if (!fav) { fav = document.createElement('link'); document.head.appendChild(fav); }
-  fav.rel = 'icon';
-  fav.type = 'image/jpeg';
-  fav.href = YAMA_LOGO;
+  // Favicon
+  if (typeof YAMA_LOGO !== 'undefined' && YAMA_LOGO) {
+    var fav = document.querySelector('link[rel="icon"]');
+    if (!fav) { fav = document.createElement('link'); document.head.appendChild(fav); }
+    fav.rel = 'icon'; fav.type = 'image/jpeg'; fav.href = YAMA_LOGO;
+  }
 })();
 
 // ═══════════════════════════════════════════════════════════════════
@@ -29751,48 +29743,8 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
       const invoiceBtn = actions.querySelector('.btn-action.travaux');
       if (invoiceBtn) invoiceBtn.innerHTML = '🧾 Générer la facture';
 
-      // ── 2. Boutons de transition pour "accepted" ──
-      if (status === 'accepted') {
-        if (!actions.querySelector('[data-yt="refuse"]')) {
-          const btn = Object.assign(document.createElement('button'), {
-            className:'btn-action refuse', innerHTML:'❌ Finalement refusé',
-            title:'Le client a finalement refusé — archiver dans le CRM'
-          });
-          btn.setAttribute('data-yt','refuse');
-          btn.addEventListener('click', function() {
-            if (typeof refuseDevis === 'function') refuseDevis(doc);
-          });
-          actions.appendChild(btn);
-        }
-        if (!actions.querySelector('[data-yt="pending"]')) {
-          const btn = Object.assign(document.createElement('button'), {
-            className:'btn-action load', innerHTML:'↩️ En attente',
-            title:'Remettre en attente de réponse client'
-          });
-          btn.setAttribute('data-yt','pending');
-          btn.style.cssText = 'font-size:10px;padding:5px 9px;opacity:.8;';
-          btn.addEventListener('click', function() {
-            if (typeof revertDevisToPending === 'function') revertDevisToPending(doc);
-          });
-          actions.appendChild(btn);
-        }
-      }
-
-      // ── 3. Bouton "Remettre en attente" pour "refused" ──
-      if (status === 'refused') {
-        if (!actions.querySelector('[data-yt="pending"]')) {
-          const btn = Object.assign(document.createElement('button'), {
-            className:'btn-action load', innerHTML:'🔄 Remettre en attente',
-            title:'Remettre en attente de réponse client'
-          });
-          btn.setAttribute('data-yt','pending');
-          btn.style.cssText = 'font-size:10px;padding:5px 9px;opacity:.8;';
-          btn.addEventListener('click', function() {
-            if (typeof revertDevisToPending === 'function') revertDevisToPending(doc);
-          });
-          actions.appendChild(btn);
-        }
-      }
+      // La fonction renderDevisTab de base gère déjà les boutons de transition.
+      // Le terminal patch ne fait que nettoyer les doublons de bouton facture.
     });
   }
   window.patchDevisCards = patchDevisCards; // accessible globalement
