@@ -12492,7 +12492,7 @@ order by table_name;</textarea>
     if (labelM) {
       const raw = labelM[1].trim().replace(/[,.]?\s*(?:nous\s+restons|n[‘’’]h[eé]sitez|disponible|pour\s+toute|bonne\s+journ[eé]e).*$/i, '').trim();
       const parts = raw.split(/,\s*/);
-      const addrPart = parts[0].replace(/[,.]+$/, ‘’).trim();
+      const addrPart = parts[0].replace(/[,.]+$/, '').trim();
       if (addrPart.length >= 3 && /\d/.test(addrPart) && !OWN_WORDS_RX.test(addrPart)) {
         return titleWords(addrPart);
       }
@@ -25661,8 +25661,14 @@ console.info('[YAMA V42] IA extraction · Doublons · Settings · Sélecteurs ·
 
     <!-- ÉTAPE 2 : Messages générés -->
     <div class="v43-step" id="v43-step-messages">
-      <div class="v43-modal-title">✅ Chantier confirmé !</div>
+      <div class="v43-modal-title" id="v43-step2-title">✅ Chantier confirmé !</div>
       <div class="v43-modal-sub">Messages prêts. Modifiez-les si besoin, puis copiez ou envoyez via WhatsApp.</div>
+
+      <!-- Sélecteur type de message : Confirmation / Rappel -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button type="button" id="v43-mode-confirm" onclick="v43SetMode('confirm')" class="v43-btn-secondary" style="flex:1;background:rgba(82,199,127,.14);border-color:rgba(82,199,127,.5);color:#52c77f;">✅ Confirmation</button>
+        <button type="button" id="v43-mode-rappel" onclick="v43SetMode('rappel')" class="v43-btn-secondary" style="flex:1;">🔔 Rappel chantier</button>
+      </div>
 
       <div class="v43-msg-label">📲 Message client</div>
       <div class="v43-msg-box" id="v43-msg-client" contenteditable="true">—</div>
@@ -25732,6 +25738,98 @@ console.info('[YAMA V42] IA extraction · Doublons · Settings · Sélecteurs ·
    ══════════════════════════════════════════════════════════ */
 
 var _v43Contact = null;
+var _v43MsgParams = null;   // paramètres mémorisés pour régénérer (confirm/rappel)
+var _v43Mode = 'confirm';   // 'confirm' | 'rappel'
+
+/** Construire et afficher les messages selon le mode choisi */
+function v43RenderMessages(mode){
+  _v43Mode = (mode === 'rappel') ? 'rappel' : 'confirm';
+  var p = _v43MsgParams; if (!p) return;
+  var isRappel = (_v43Mode === 'rappel');
+
+  var msgClient, msgST;
+  if (isRappel) {
+    msgClient =
+      'Bonjour ' + p.civ + (p.nom ? ' ' + p.nom : '') + ',\n\n'
+      + '🔔 Petit rappel concernant le démarrage de vos travaux :\n\n'
+      + '📅 Début : ' + p.dfDebut + ' à ' + p.heure + '\n'
+      + (p.dateFin ? '🏁 Fin estimée : ' + p.dfFin + p.duree + '\n' : '')
+      + '📍 Adresse : ' + p.adresse + '\n\n'
+      + 'Notre équipe sera bien présente à l\'heure indiquée.\n'
+      + 'Merci de nous prévenir en cas d\'empêchement.\n\n'
+      + 'YAMA Group · 📞 ' + p.phone;
+    msgST =
+      '🔔 Bonjour,\n\n'
+      + 'Rappel chantier — merci de confirmer ta présence :\n\n'
+      + '👤 Client : ' + p.civ + ' ' + p.nom + '\n'
+      + '📍 Adresse : ' + p.adresse + '\n'
+      + '📞 Tél client : ' + p.tel + '\n'
+      + '📅 Début : ' + p.dfDebut + ' à ' + p.heure + '\n'
+      + (p.dateFin ? '🏁 Fin estimée : ' + p.dfFin + p.duree + '\n' : '')
+      + '\nMerci de me confirmer que tu seras bien là.\n'
+      + '— YAMA Group · 📞 ' + p.phone;
+  } else {
+    msgClient =
+      'Bonjour ' + p.civ + (p.nom ? ' ' + p.nom : '') + ',\n\n'
+      + 'Nous avons le plaisir de vous confirmer le démarrage de vos travaux :\n\n'
+      + '📅 Début : ' + p.dfDebut + ' à ' + p.heure + '\n'
+      + (p.dateFin ? '🏁 Fin estimée : ' + p.dfFin + p.duree + '\n' : '')
+      + '📍 Adresse : ' + p.adresse + '\n\n'
+      + 'Notre équipe sera présente à l\'heure indiquée.\n'
+      + 'N\'hésitez pas à nous contacter pour toute question.\n\n'
+      + 'YAMA Group · 📞 ' + p.phone;
+    msgST =
+      '👷 Bonjour,\n\n'
+      + 'Chantier confirmé — voici les infos :\n\n'
+      + '👤 Client : ' + p.civ + ' ' + p.nom + '\n'
+      + '📍 Adresse : ' + p.adresse + '\n'
+      + '📞 Tél client : ' + p.tel + '\n'
+      + '📅 Début : ' + p.dfDebut + ' à ' + p.heure + '\n'
+      + (p.dateFin ? '🏁 Fin estimée : ' + p.dfFin + p.duree + '\n' : '')
+      + '\nMerci de confirmer ta disponibilité.\n'
+      + '— YAMA Group · 📞 ' + p.phone;
+  }
+
+  var mc = document.getElementById('v43-msg-client');
+  var ms = document.getElementById('v43-msg-st');
+  if (mc) mc.textContent = msgClient;
+  if (ms) ms.textContent = msgST;
+
+  // Titre adapté
+  var t = document.getElementById('v43-step2-title');
+  if (t) t.textContent = isRappel ? '🔔 Rappel chantier' : '✅ Chantier confirmé !';
+
+  // Liens WhatsApp
+  var telClean = String(p.tel).replace(/[^0-9+]/g, '');
+  var waClient = document.getElementById('v43-wa-client');
+  if (waClient) {
+    var waNum = (telClean.length >= 8) ? telClean.replace(/^0/, '32') : '';
+    waClient.href = waNum
+      ? 'https://wa.me/' + waNum + '?text=' + encodeURIComponent(msgClient)
+      : 'https://wa.me/?text=' + encodeURIComponent(msgClient);
+  }
+  var waST = document.getElementById('v43-wa-st');
+  if (waST) waST.href = 'https://wa.me/?text=' + encodeURIComponent(msgST);
+
+  // État visuel des boutons de mode
+  var bc = document.getElementById('v43-mode-confirm');
+  var br = document.getElementById('v43-mode-rappel');
+  if (bc) {
+    bc.style.background  = isRappel ? '' : 'rgba(82,199,127,.14)';
+    bc.style.borderColor = isRappel ? '' : 'rgba(82,199,127,.5)';
+    bc.style.color       = isRappel ? '' : '#52c77f';
+  }
+  if (br) {
+    br.style.background  = isRappel ? 'rgba(91,156,246,.14)' : '';
+    br.style.borderColor = isRappel ? 'rgba(91,156,246,.5)'  : '';
+    br.style.color       = isRappel ? '#5b9cf6' : '';
+  }
+}
+window.v43RenderMessages = v43RenderMessages;
+
+/** Basculer entre message de confirmation et message de rappel */
+function v43SetMode(mode){ v43RenderMessages(mode); }
+window.v43SetMode = v43SetMode;
 
 /** Ouvrir le modal V43 avec le contact en cours */
 function v43ShowModal(contact){
@@ -25811,46 +25909,12 @@ function v43GenerateMessages(){
     duree = j === 1 ? ' (1 jour)' : ' (' + j + ' jours)';
   }
 
-  var msgClient =
-    'Bonjour ' + civ + (nom ? ' ' + nom : '') + ',\n\n'
-    + 'Nous avons le plaisir de vous confirmer le démarrage de vos travaux :\n\n'
-    + '📅 Début : ' + dfDebut + ' à ' + heure + '\n'
-    + (dateFin ? '🏁 Fin estimée : ' + dfFin + duree + '\n' : '')
-    + '📍 Adresse : ' + adresse + '\n\n'
-    + 'Notre équipe sera présente à l\'heure indiquée.\n'
-    + 'N\'hésitez pas à nous contacter pour toute question.\n\n'
-    + 'YAMA Group · 📞 ' + phone;
+  // Mémoriser les paramètres pour pouvoir régénérer en mode Rappel
+  _v43MsgParams = { civ:civ, nom:nom, tel:tel, adresse:adresse, phone:phone,
+                    dfDebut:dfDebut, dfFin:dfFin, duree:duree, heure:heure, dateFin:dateFin };
 
-  var msgST =
-    '👷 Bonjour,\n\n'
-    + 'Chantier confirmé — voici les infos :\n\n'
-    + '👤 Client : ' + civ + ' ' + nom + '\n'
-    + '📍 Adresse : ' + adresse + '\n'
-    + '📞 Tél client : ' + tel + '\n'
-    + '📅 Début : ' + dfDebut + ' à ' + heure + '\n'
-    + (dateFin ? '🏁 Fin estimée : ' + dfFin + duree + '\n' : '')
-    + '\nMerci de confirmer ta disponibilité.\n'
-    + '— YAMA Group · 📞 ' + phone;
-
-  // Remplir les blocs messages
-  var mc = document.getElementById('v43-msg-client');
-  var ms = document.getElementById('v43-msg-st');
-  if (mc) mc.textContent = msgClient;
-  if (ms) ms.textContent = msgST;
-
-  // Liens WhatsApp
-  var telClean = String(tel).replace(/[^0-9+]/g, '');
-  var waClient = document.getElementById('v43-wa-client');
-  if (waClient) {
-    var waNum = (telClean.length >= 8) ? telClean.replace(/^0/, '32') : '';
-    waClient.href = waNum
-      ? 'https://wa.me/' + waNum + '?text=' + encodeURIComponent(msgClient)
-      : 'https://wa.me/?text=' + encodeURIComponent(msgClient);
-  }
-  var waST = document.getElementById('v43-wa-st');
-  if (waST) {
-    waST.href = 'https://wa.me/?text=' + encodeURIComponent(msgST);
-  }
+  // Mode par défaut : confirmation
+  v43RenderMessages('confirm');
 
   // Sauvegarder les dates sur le contact
   try {
@@ -29859,7 +29923,6 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   console.info('[YAMA TERMINAL PATCH] ✅ Status transitions devis, anti-doublon facture, CSS polish, responsive.');
 })();
 </script>
-</body>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
      YAMA PLATFORM — VFINAL_2026
@@ -30354,37 +30417,54 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   if(window.__YAMA_VFIX_2026A__) return;
   window.__YAMA_VFIX_2026A__ = true;
 
-  /* ── 1. Search icon — fix définitif ─────────────────────────────── */
+  /* ── 1. Search icon — fix définitif (haute spécificité) ──────────
+     Les règles concurrentes utilisent .u-search-icon { ... !important }.
+     Parmi les règles !important, c'est la SPÉCIFICITÉ qui tranche, pas
+     l'ordre. On préfixe donc par `body .u-header` (spéc. 0,3,0) pour
+     battre toutes les règles plates, peu importe quel patch les injecte. */
   (function fixSearchIcon(){
-    const style = document.createElement('style');
-    style.id = 'yama-vfix-search-icon';
-    style.textContent = `
-      .u-search-wrap {
+    const css = `
+      body .u-header .u-search-wrap {
         position: relative !important;
-        display: flex !important;
-        align-items: center !important;
       }
-      .u-search-icon {
+      body .u-header .u-search-wrap .u-search-icon {
         position: absolute !important;
-        left: 10px !important;
+        left: 11px !important;
         top: 50% !important;
+        bottom: auto !important;
         transform: translateY(-50%) !important;
+        margin: 0 !important;
+        width: auto !important;
+        height: auto !important;
+        min-width: 0 !important;
         font-size: 13px !important;
         line-height: 1 !important;
+        display: block !important;
+        z-index: 3 !important;
         pointer-events: none !important;
-        z-index: 2 !important;
-        display: flex !important;
-        align-items: center !important;
-        color: #666 !important;
-        width: auto !important;
+        color: #888 !important;
       }
-      .u-search {
-        padding-left: 32px !important;
-        width: 100% !important;
+      body .u-header .u-search-wrap .u-search {
+        padding-left: 34px !important;
+        padding-right: 12px !important;
         box-sizing: border-box !important;
       }
     `;
-    document.head.appendChild(style);
+    function ensure(){
+      let style = document.getElementById('yama-vfix-search-icon');
+      if(!style){
+        style = document.createElement('style');
+        style.id = 'yama-vfix-search-icon';
+        document.head.appendChild(style);
+      }
+      if(style.textContent !== css) style.textContent = css;
+      // Garder ce style en DERNIÈRE position du <head> pour gagner
+      // aussi à spécificité égale face aux feuilles injectées plus tard.
+      if(style !== document.head.lastElementChild) document.head.appendChild(style);
+    }
+    ensure();
+    // Réappliquer après les patchs différés qui ré-injectent du CSS
+    [300, 900, 1600, 2500].forEach(t => setTimeout(ensure, t));
   })();
 
   /* ── 2. Anti-doublon devis — enhanceDevisCards prend aussi .travaux ─ */
@@ -30492,10 +30572,8 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
       if(inp && !inp._rdevBound){
         inp._rdevBound = true;
         inp.addEventListener('input', () => {
-          const active = document.querySelector('#relance-panel-devis .rtab-active-btn');
           const d2 = getRelanceDevisData();
           const msgEl = document.getElementById('rdev-msg');
-          const activeNum = Number(document.querySelector('[id^="rdev-btn-"]')?.getAttribute('data-active') || 1);
           if(msgEl && RELANCE_DEVIS_MSGS[num-1]) msgEl.textContent = RELANCE_DEVIS_MSGS[num-1](d2);
           updateRelanceDevisWABtn();
         });
