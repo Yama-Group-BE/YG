@@ -3556,29 +3556,80 @@ if (token && window.opener) {
     </div>
     <div id="devisList"></div>
 
-    <!-- ── RELANCE SOUS-TRAITANT ── -->
-    <div style="margin-top:28px;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
-      <div style="background:rgba(201,168,76,.07);border-bottom:1px solid var(--border);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;">
-        <div>
-          <div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:800;">🔧 Relance sous-traitant</div>
-          <div style="font-size:12px;color:var(--text2);margin-top:3px;">Génère un message de relance devis à envoyer au sous-traitant</div>
+    <!-- ── RELANCE MESSAGES ── -->
+    <div style="margin-top:28px;border:1px solid var(--border);border-radius:10px;overflow:hidden;" id="relance-section-wrap">
+      <!-- Tab header -->
+      <div style="background:rgba(201,168,76,.07);border-bottom:1px solid var(--border);padding:14px 18px;">
+        <div style="font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:800;margin-bottom:10px;">📩 Modèles de relance</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button onclick="switchRelanceTab('st')" id="rtab-st" class="rtab-btn rtab-active" style="font-size:12px;padding:6px 16px;border-radius:20px;border:1px solid rgba(201,168,76,.5);background:rgba(201,168,76,.15);color:var(--gold);cursor:pointer;font-weight:600;transition:all .15s;">🔧 Sous-traitant</button>
+          <button onclick="switchRelanceTab('devis')" id="rtab-devis" class="rtab-btn" style="font-size:12px;padding:6px 16px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-weight:600;transition:all .15s;">📄 Devis client</button>
+          <button onclick="switchRelanceTab('facture')" id="rtab-facture" class="rtab-btn" style="font-size:12px;padding:6px 16px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;font-weight:600;transition:all .15s;">💶 Facture</button>
         </div>
-        <div style="display:flex;gap:6px;">
+      </div>
+
+      <!-- Panel ST (existing) -->
+      <div id="relance-panel-st" style="padding:14px 18px;background:var(--bg2);">
+        <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
           <button onclick="setPlatformStRelance(1)" id="pst-btn-1" style="font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;transition:all .15s;">📤 1er contact</button>
           <button onclick="setPlatformStRelance(2)" id="pst-btn-2" style="font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;transition:all .15s;">🔁 2ème rappel</button>
           <button onclick="setPlatformStRelance(3)" id="pst-btn-3" style="font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid rgba(224,82,82,.4);background:rgba(224,82,82,.06);color:#e05252;cursor:pointer;transition:all .15s;">🚨 3ème rappel</button>
         </div>
-      </div>
-      <div style="padding:14px 18px;background:var(--bg2);">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
-          <div><label style="font-size:11px;color:var(--text2);">Prénom ST</label><input id="pst-prenom" type="text" placeholder="ex: Karim" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;"></div>
-          <div><label style="font-size:11px;color:var(--text2);">Nom client</label><input id="pst-client" type="text" placeholder="ex: M. Dupont" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;"></div>
-          <div><label style="font-size:11px;color:var(--text2);">Adresse chantier</label><input id="pst-adresse" type="text" placeholder="ex: Rue du Progrès 44, Schaerbeek" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;"></div>
-          <div><label style="font-size:11px;color:var(--text2);">Réf. devis</label><input id="pst-ref" type="text" placeholder="ex: YG-26-101" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;"></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px;">
+          <div><label style="font-size:11px;color:var(--text2);">Prénom ST</label><input id="pst-prenom" type="text" placeholder="ex: Karim" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+          <div><label style="font-size:11px;color:var(--text2);">Nom client</label><input id="pst-client" type="text" placeholder="ex: M. Dupont" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+          <div><label style="font-size:11px;color:var(--text2);">Adresse chantier</label><input id="pst-adresse" type="text" placeholder="ex: Rue du Progrès 44" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+          <div><label style="font-size:11px;color:var(--text2);">Réf. devis</label><input id="pst-ref" type="text" placeholder="ex: YG-26-101" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
         </div>
         <div style="position:relative;">
           <div id="pst-msg" contenteditable="true" spellcheck="false" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:14px;font-size:13px;line-height:1.65;color:var(--text);white-space:pre-wrap;min-height:70px;outline:none;font-family:'DM Sans',sans-serif;"></div>
           <button onclick="copyPlatformStMsg()" id="pst-copy-btn" style="position:absolute;top:8px;right:8px;font-size:11px;padding:3px 10px;border-radius:5px;border:1px solid var(--border2);background:var(--bg2);color:var(--text2);cursor:pointer;">Copier</button>
+        </div>
+      </div>
+
+      <!-- Panel Devis client (new) -->
+      <div id="relance-panel-devis" style="display:none;padding:14px 18px;background:var(--bg2);">
+        <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+          <button onclick="setRelanceDevis(1)" id="rdev-btn-1" style="font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;transition:all .15s;">📤 1er contact</button>
+          <button onclick="setRelanceDevis(2)" id="rdev-btn-2" style="font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;transition:all .15s;">🔁 1ère relance</button>
+          <button onclick="setRelanceDevis(3)" id="rdev-btn-3" style="font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid rgba(224,82,82,.4);background:rgba(224,82,82,.06);color:#e05252;cursor:pointer;transition:all .15s;">🚨 2ème relance</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px;">
+          <div><label style="font-size:11px;color:var(--text2);">Civilité + Nom client</label><input id="rdev-nom" type="text" placeholder="ex: M. Dupont" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+          <div><label style="font-size:11px;color:var(--text2);">Réf. devis</label><input id="rdev-ref" type="text" placeholder="ex: YG-26-101" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+          <div><label style="font-size:11px;color:var(--text2);">Montant (€)</label><input id="rdev-montant" type="text" placeholder="ex: 4 850,00" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+          <div><label style="font-size:11px;color:var(--text2);">Validité jusqu'au</label><input id="rdev-validite" type="text" placeholder="ex: 15/06/2026" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+          <div><label style="font-size:11px;color:var(--text2);">Tél. client (opt.)</label><input id="rdev-tel" type="tel" placeholder="ex: 0472 12 34 56" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+        </div>
+        <div style="position:relative;">
+          <div id="rdev-msg" contenteditable="true" spellcheck="false" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:14px;font-size:13px;line-height:1.65;color:var(--text);white-space:pre-wrap;min-height:80px;outline:none;font-family:'DM Sans',sans-serif;"></div>
+          <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end;">
+            <button id="rdev-wa-btn" onclick="sendRelanceDevisWA()" style="display:none;font-size:11px;padding:4px 12px;border-radius:5px;border:1px solid rgba(37,211,102,.4);background:rgba(37,211,102,.08);color:#25d366;cursor:pointer;">📲 WhatsApp</button>
+            <button onclick="copyRelanceDevisMsg()" style="font-size:11px;padding:4px 12px;border-radius:5px;border:1px solid var(--border2);background:var(--bg2);color:var(--text2);cursor:pointer;">📋 Copier</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel Facture (new) -->
+      <div id="relance-panel-facture" style="display:none;padding:14px 18px;background:var(--bg2);">
+        <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+          <button onclick="setRelanceFacture(1)" id="rfac-btn-1" style="font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;transition:all .15s;">📤 1er rappel</button>
+          <button onclick="setRelanceFacture(2)" id="rfac-btn-2" style="font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid rgba(224,160,32,.4);background:rgba(224,160,32,.06);color:#e0a020;cursor:pointer;transition:all .15s;">🔁 2ème rappel</button>
+          <button onclick="setRelanceFacture(3)" id="rfac-btn-3" style="font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid rgba(224,82,82,.4);background:rgba(224,82,82,.06);color:#e05252;cursor:pointer;transition:all .15s;">⚖️ Mise en demeure</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px;">
+          <div><label style="font-size:11px;color:var(--text2);">Civilité + Nom client</label><input id="rfac-nom" type="text" placeholder="ex: M. Dupont" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+          <div><label style="font-size:11px;color:var(--text2);">N° facture</label><input id="rfac-ref" type="text" placeholder="ex: FAC-26-005" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+          <div><label style="font-size:11px;color:var(--text2);">Montant dû (€)</label><input id="rfac-montant" type="text" placeholder="ex: 3 200,00" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+          <div><label style="font-size:11px;color:var(--text2);">Date échéance</label><input id="rfac-echeance" type="text" placeholder="ex: 01/05/2026" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+          <div><label style="font-size:11px;color:var(--text2);">Tél. client (opt.)</label><input id="rfac-tel" type="tel" placeholder="ex: 0472 12 34 56" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+        </div>
+        <div style="position:relative;">
+          <div id="rfac-msg" contenteditable="true" spellcheck="false" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:14px;font-size:13px;line-height:1.65;color:var(--text);white-space:pre-wrap;min-height:80px;outline:none;font-family:'DM Sans',sans-serif;"></div>
+          <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end;">
+            <button id="rfac-wa-btn" onclick="sendRelanceFactureWA()" style="display:none;font-size:11px;padding:4px 12px;border-radius:5px;border:1px solid rgba(37,211,102,.4);background:rgba(37,211,102,.08);color:#25d366;cursor:pointer;">📲 WhatsApp</button>
+            <button onclick="copyRelanceFactureMsg()" style="font-size:11px;padding:4px 12px;border-radius:5px;border:1px solid var(--border2);background:var(--bg2);color:var(--text2);cursor:pointer;">📋 Copier</button>
+          </div>
         </div>
       </div>
     </div>
@@ -8558,14 +8609,14 @@ function renderDevisTab() {
         ${crmBtn}`;
     } else if (st.status === 'accepted') {
       actions = `
-        <button class="btn-action travaux" onclick="openSmartInvoiceModal('${h.docNum}')">🧾 Générer la facture</button>
+        <button class="btn-action travaux v12-smart-invoice-btn" onclick="openSmartInvoiceModal('${h.docNum}')">🧾 Transformer en facture</button>
         <button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')">📂 Recharger</button>
         <button class="btn-action refuse" onclick="refuseDevis('${h.docNum}')" title="Correction — le client a finalement refusé" style="font-size:10px;padding:5px 10px;">❌ Finalement refusé</button>
         <button class="btn-action load" onclick="revertDevisToPending('${h.docNum}')" style="font-size:10px;padding:5px 10px;color:var(--gray);" title="Remettre en attente de réponse">↩️ Remettre en attente</button>
         ${crmBtn}`;
     } else if (st.status === 'done') {
       actions = `
-        <button class="btn-action travaux" onclick="openSmartInvoiceModal('${h.docNum}')">🧾 Générer la facture</button>
+        <button class="btn-action travaux v12-smart-invoice-btn" onclick="openSmartInvoiceModal('${h.docNum}')">🧾 Transformer en facture</button>
         <button class="btn-action refuse" onclick="refuseDevis('${h.docNum}')" title="Correction statut" style="font-size:10px;padding:5px 10px;">❌ Finalement refusé</button>
         ${crmBtn}`;
     } else if (st.status === 'refused') {
@@ -29740,8 +29791,8 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
         for (let i = 1; i < invoiceBtns.length; i++) invoiceBtns[i].remove();
       }
       // Normaliser le label du bouton facture restant
-      const invoiceBtn = actions.querySelector('.btn-action.travaux');
-      if (invoiceBtn) invoiceBtn.innerHTML = '🧾 Générer la facture';
+      const invoiceBtn = actions.querySelector('.btn-action.travaux, .v12-smart-invoice-btn');
+      if (invoiceBtn) invoiceBtn.innerHTML = '🧾 Transformer en facture';
 
       // La fonction renderDevisTab de base gère déjà les boutons de transition.
       // Le terminal patch ne fait que nettoyer les doublons de bouton facture.
@@ -30292,6 +30343,381 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,500));
   else setTimeout(init,500);
 
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     VFIX_2026A — Relance étendue · Rappel chantier · Loupe · Anti-doublon
+     ═══════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  if(window.__YAMA_VFIX_2026A__) return;
+  window.__YAMA_VFIX_2026A__ = true;
+
+  /* ── 1. Search icon — fix définitif ─────────────────────────────── */
+  (function fixSearchIcon(){
+    const style = document.createElement('style');
+    style.id = 'yama-vfix-search-icon';
+    style.textContent = `
+      .u-search-wrap {
+        position: relative !important;
+        display: flex !important;
+        align-items: center !important;
+      }
+      .u-search-icon {
+        position: absolute !important;
+        left: 10px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        font-size: 13px !important;
+        line-height: 1 !important;
+        pointer-events: none !important;
+        z-index: 2 !important;
+        display: flex !important;
+        align-items: center !important;
+        color: #666 !important;
+        width: auto !important;
+      }
+      .u-search {
+        padding-left: 32px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+      }
+    `;
+    document.head.appendChild(style);
+  })();
+
+  /* ── 2. Anti-doublon devis — enhanceDevisCards prend aussi .travaux ─ */
+  (function fixDuplicateDevisBtn(){
+    const _origEnhance = window.enhanceDevisCards;
+    window.enhanceDevisCards = function(){
+      const cards = document.querySelectorAll('#devisList .devis-item');
+      cards.forEach(card => {
+        const existing = card.querySelector('.v12-smart-invoice-btn') || card.querySelector('.btn-action.travaux');
+        if(existing && !existing.classList.contains('v12-smart-invoice-btn')){
+          existing.classList.add('v12-smart-invoice-btn');
+          if(!existing.textContent.includes('Transformer')) existing.textContent = '🧾 Transformer en facture';
+        }
+      });
+      if(typeof _origEnhance === 'function') _origEnhance.apply(this, arguments);
+    };
+  })();
+
+  /* ── 3. Stale data — clear containers avant re-render ─────────────── */
+  (function fixStaleData(){
+    const _origSwitch = window.switchTab;
+    if(typeof _origSwitch !== 'function') return;
+    window.switchTab = function(name){
+      if(name === 'devis'){
+        const el = document.getElementById('devisList');
+        if(el && el.innerHTML.trim()) el.innerHTML = '';
+      }
+      if(name === 'history'){
+        const el = document.getElementById('historyList');
+        if(el && el.innerHTML.trim()) el.innerHTML = '';
+      }
+      if(name === 'soustraitants'){
+        const el = document.getElementById('stList') || document.getElementById('soustraitantsList');
+        if(el && el.innerHTML.trim()) el.innerHTML = '';
+      }
+      return _origSwitch.apply(this, arguments);
+    };
+  })();
+
+  /* ── 4. Relance tabs (ST / Devis / Facture) ──────────────────────── */
+  window.switchRelanceTab = function(tab){
+    ['st','devis','facture'].forEach(t => {
+      const panel = document.getElementById('relance-panel-' + t);
+      const btn   = document.getElementById('rtab-' + t);
+      const active = (t === tab);
+      if(panel) panel.style.display = active ? '' : 'none';
+      if(btn){
+        if(active){
+          btn.style.background = 'rgba(201,168,76,.15)';
+          btn.style.borderColor = 'rgba(201,168,76,.5)';
+          btn.style.color = 'var(--gold)';
+        } else {
+          btn.style.background = 'transparent';
+          btn.style.borderColor = 'var(--border2,rgba(255,255,255,.1))';
+          btn.style.color = 'var(--text2)';
+        }
+      }
+    });
+  };
+
+  /* ── Relance DEVIS — messages ────────────────────────────────────── */
+  const RELANCE_DEVIS_MSGS = [
+    (d) => `Bonjour ${d.nom},\n\nNous vous avons adressé notre devis ${d.ref} d'un montant de ${d.montant} €${d.validite ? ', valable jusqu\'au ' + d.validite : ''}.\n\nN'hésitez pas à nous contacter pour toute question. Nous restons à votre disposition.\n\nBien à vous,\nYAMA Group\n📞 0489 33 77 00`,
+    (d) => `Bonjour ${d.nom},\n\nSuite à notre précédent envoi, je me permets de vous relancer concernant notre devis ${d.ref} (${d.montant} €)${d.validite ? ', valable jusqu\'au ' + d.validite : ''}.\n\nSouhaitez-vous des informations complémentaires ou un ajustement ?\n\nBien à vous,\nYAMA Group\n📞 0489 33 77 00`,
+    (d) => `Bonjour ${d.nom},\n\nJe me permets de vous contacter une dernière fois au sujet de notre devis ${d.ref} (${d.montant} €).\n\n${d.validite ? 'Sans réponse avant le ' + d.validite + ', nous considérerons le dossier clôturé.\n\n' : ''}Restant à votre écoute,\nYAMA Group\n📞 0489 33 77 00`,
+  ];
+
+  function getRelanceDevisData(){
+    const g = id => { const el=document.getElementById(id); return el ? el.value.trim() : ''; };
+    return {
+      nom: g('rdev-nom') || 'Madame/Monsieur',
+      ref: g('rdev-ref') || '—',
+      montant: g('rdev-montant') || '—',
+      validite: g('rdev-validite'),
+      tel: g('rdev-tel'),
+    };
+  }
+
+  function updateRelanceDevisWABtn(){
+    const tel = (document.getElementById('rdev-tel')||{}).value||'';
+    const btn = document.getElementById('rdev-wa-btn');
+    if(!btn) return;
+    const cleaned = tel.replace(/[^\d+]/g,'');
+    btn.style.display = cleaned.length >= 8 ? '' : 'none';
+  }
+
+  window.setRelanceDevis = function(num){
+    ['rdev-btn-1','rdev-btn-2','rdev-btn-3'].forEach((id,i) => {
+      const b = document.getElementById(id);
+      if(!b) return;
+      const active = (i+1 === num);
+      b.style.background = active ? 'rgba(201,168,76,.15)' : 'transparent';
+      b.style.borderColor = active ? 'rgba(201,168,76,.5)' : (i===2 ? 'rgba(224,82,82,.4)' : 'var(--border2,rgba(255,255,255,.1))');
+      b.style.color = active ? 'var(--gold)' : (i===2 ? '#e05252' : 'var(--text2)');
+    });
+    const data = getRelanceDevisData();
+    const fn = RELANCE_DEVIS_MSGS[num-1];
+    const el = document.getElementById('rdev-msg');
+    if(el && fn) el.textContent = fn(data);
+    updateRelanceDevisWABtn();
+
+    /* live update on input changes */
+    ['rdev-nom','rdev-ref','rdev-montant','rdev-validite','rdev-tel'].forEach(id => {
+      const inp = document.getElementById(id);
+      if(inp && !inp._rdevBound){
+        inp._rdevBound = true;
+        inp.addEventListener('input', () => {
+          const active = document.querySelector('#relance-panel-devis .rtab-active-btn');
+          const d2 = getRelanceDevisData();
+          const msgEl = document.getElementById('rdev-msg');
+          const activeNum = Number(document.querySelector('[id^="rdev-btn-"]')?.getAttribute('data-active') || 1);
+          if(msgEl && RELANCE_DEVIS_MSGS[num-1]) msgEl.textContent = RELANCE_DEVIS_MSGS[num-1](d2);
+          updateRelanceDevisWABtn();
+        });
+      }
+    });
+  };
+
+  window.copyRelanceDevisMsg = function(){
+    const el = document.getElementById('rdev-msg');
+    const txt = el ? (el.innerText||el.textContent) : '';
+    navigator.clipboard.writeText(txt).catch(()=>{
+      const t=document.createElement('textarea');t.value=txt;t.style.cssText='position:fixed;left:-9999px;';
+      document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();
+    });
+    try{showToast('Message devis copié.','success');}catch(e){}
+  };
+
+  window.sendRelanceDevisWA = function(){
+    const el = document.getElementById('rdev-msg');
+    const txt = el ? (el.innerText||el.textContent) : '';
+    const tel = (document.getElementById('rdev-tel')||{}).value||'';
+    const cleaned = tel.replace(/[^\d+]/g,'');
+    const norm = cleaned.startsWith('0') ? '32'+cleaned.slice(1) : cleaned.replace(/^\+/,'');
+    window.open('https://wa.me/'+encodeURIComponent(norm)+'?text='+encodeURIComponent(txt),'_blank');
+  };
+
+  /* ── Relance FACTURE — messages ──────────────────────────────────── */
+  const RELANCE_FACTURE_MSGS = [
+    (d) => `Bonjour ${d.nom},\n\nNous vous rappelons que notre facture ${d.ref} d'un montant de ${d.montant} €, dont l'échéance était fixée au ${d.echeance||'—'}, n'a pas encore été réglée.\n\nNous vous remercions d'effectuer le paiement dans les meilleurs délais.\n\nBien à vous,\nYAMA Group\n📞 0489 33 77 00`,
+    (d) => `Bonjour ${d.nom},\n\nMalgré notre premier rappel, la facture ${d.ref} d'un montant de ${d.montant} € reste impayée à ce jour.\n\nNous vous demandons de régulariser cette situation rapidement afin d'éviter des frais supplémentaires.\n\nCordialement,\nYAMA Group\n📞 0489 33 77 00`,
+    (d) => `Bonjour ${d.nom},\n\nNous vous mettons en demeure de procéder au règlement de la somme de ${d.montant} € correspondant à la facture ${d.ref}, dont l'échéance est dépassée depuis le ${d.echeance||'—'}.\n\nÀ défaut de paiement sous 8 jours calendrier, nous nous verrons contraints d'engager les procédures de recouvrement prévues par la loi.\n\nYAMA Group\n📞 0489 33 77 00`,
+  ];
+
+  function getRelanceFactureData(){
+    const g = id => { const el=document.getElementById(id); return el ? el.value.trim() : ''; };
+    return {
+      nom: g('rfac-nom') || 'Madame/Monsieur',
+      ref: g('rfac-ref') || '—',
+      montant: g('rfac-montant') || '—',
+      echeance: g('rfac-echeance'),
+      tel: g('rfac-tel'),
+    };
+  }
+
+  function updateRelanceFactureWABtn(){
+    const tel = (document.getElementById('rfac-tel')||{}).value||'';
+    const btn = document.getElementById('rfac-wa-btn');
+    if(!btn) return;
+    const cleaned = tel.replace(/[^\d+]/g,'');
+    btn.style.display = cleaned.length >= 8 ? '' : 'none';
+  }
+
+  window.setRelanceFacture = function(num){
+    ['rfac-btn-1','rfac-btn-2','rfac-btn-3'].forEach((id,i) => {
+      const b = document.getElementById(id);
+      if(!b) return;
+      const active = (i+1 === num);
+      b.style.background = active ? 'rgba(201,168,76,.15)' : (i===1 ? 'rgba(224,160,32,.06)' : i===2 ? 'rgba(224,82,82,.06)' : 'transparent');
+      b.style.borderColor = active ? 'rgba(201,168,76,.5)' : (i===1 ? 'rgba(224,160,32,.4)' : i===2 ? 'rgba(224,82,82,.4)' : 'var(--border2,rgba(255,255,255,.1))');
+      b.style.color = active ? 'var(--gold)' : (i===1 ? '#e0a020' : i===2 ? '#e05252' : 'var(--text2)');
+    });
+    const data = getRelanceFactureData();
+    const fn = RELANCE_FACTURE_MSGS[num-1];
+    const el = document.getElementById('rfac-msg');
+    if(el && fn) el.textContent = fn(data);
+    updateRelanceFactureWABtn();
+
+    ['rfac-nom','rfac-ref','rfac-montant','rfac-echeance','rfac-tel'].forEach(id => {
+      const inp = document.getElementById(id);
+      if(inp && !inp._rfacBound){
+        inp._rfacBound = true;
+        inp.addEventListener('input', () => {
+          const d2 = getRelanceFactureData();
+          const msgEl = document.getElementById('rfac-msg');
+          if(msgEl && RELANCE_FACTURE_MSGS[num-1]) msgEl.textContent = RELANCE_FACTURE_MSGS[num-1](d2);
+          updateRelanceFactureWABtn();
+        });
+      }
+    });
+  };
+
+  window.copyRelanceFactureMsg = function(){
+    const el = document.getElementById('rfac-msg');
+    const txt = el ? (el.innerText||el.textContent) : '';
+    navigator.clipboard.writeText(txt).catch(()=>{
+      const t=document.createElement('textarea');t.value=txt;t.style.cssText='position:fixed;left:-9999px;';
+      document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();
+    });
+    try{showToast('Message facture copié.','success');}catch(e){}
+  };
+
+  window.sendRelanceFactureWA = function(){
+    const el = document.getElementById('rfac-msg');
+    const txt = el ? (el.innerText||el.textContent) : '';
+    const tel = (document.getElementById('rfac-tel')||{}).value||'';
+    const cleaned = tel.replace(/[^\d+]/g,'');
+    const norm = cleaned.startsWith('0') ? '32'+cleaned.slice(1) : cleaned.replace(/^\+/,'');
+    window.open('https://wa.me/'+encodeURIComponent(norm)+'?text='+encodeURIComponent(txt),'_blank');
+  };
+
+  /* ── 5. Rappel chantier — amélioration du modal ──────────────────── */
+  (function patchChantierModal(){
+    const _prevShow = window.yamaV2ShowChantierMsg;
+    if(!_prevShow) return;
+
+    window.generateChantierRappelMsg = function(contact){
+      const c = contact||{};
+      const dateStr = (typeof fmtDateLong === 'function') ? fmtDateLong(c.date||c.date_rdv||'') : (c.date||c.date_rdv||'');
+      const heureStr = (typeof fmtHeure === 'function') ? fmtHeure(c.heure||c.heure_rdv||'') : (c.heure||c.heure_rdv||'');
+      const adresse = [c.adresse, c.commune||c.ville].filter(Boolean).join(', ');
+      return `Rappel — Bonjour ${c.civilite||'Madame/Monsieur'} ${c.nom||''},\n\nNous vous rappelons le démarrage de votre chantier${dateStr?' le '+dateStr:''}${heureStr?' à partir de '+heureStr:''}, à l'adresse : ${adresse||'—'}.\n\nUn technicien YAMA Group sera présent à l'heure convenue. N'hésitez pas à nous contacter pour toute question.\n\nBien à vous,\nYAMA Group\n📞 0489 33 77 00`;
+    };
+
+    window.yamaV2ShowChantierMsg = function(contact){
+      _prevShow.call(this, contact);
+      setTimeout(() => {
+        const modal = document.getElementById('yama-v2-chantier-msg-modal');
+        if(!modal || modal.querySelector('#yama-rappel-toggle-wrap')) return;
+
+        const titleEl = modal.querySelector('.modal-title');
+        if(titleEl) titleEl.textContent = '🔨 Message chantier';
+
+        const ta = document.getElementById('yama-v2-chantier-msg-ta');
+        const confirmMsg = window.generateChantierConfirmationMsg(contact);
+        const rappelMsg  = window.generateChantierRappelMsg(contact);
+
+        const toggleWrap = document.createElement('div');
+        toggleWrap.id = 'yama-rappel-toggle-wrap';
+        toggleWrap.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;';
+        toggleWrap.innerHTML = `
+          <button id="yama-chantier-type-confirm" onclick="setChantierMsgType('confirm')" style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid rgba(201,168,76,.5);background:rgba(201,168,76,.15);color:var(--gold,#c9a84c);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;">✅ Confirmation chantier</button>
+          <button id="yama-chantier-type-rappel" onclick="setChantierMsgType('rappel')" style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border2,rgba(255,255,255,.1));background:transparent;color:var(--text2,#888);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;">🔔 Rappel chantier</button>
+        `;
+
+        const bodyEl = modal.querySelector('.modal-body');
+        if(bodyEl && ta) bodyEl.insertBefore(toggleWrap, ta.previousElementSibling || ta);
+
+        window._yamaChantierMsgConfirm = confirmMsg;
+        window._yamaChantierMsgRappel  = rappelMsg;
+
+        window.setChantierMsgType = function(type){
+          const btnC = document.getElementById('yama-chantier-type-confirm');
+          const btnR = document.getElementById('yama-chantier-type-rappel');
+          const ta2  = document.getElementById('yama-v2-chantier-msg-ta');
+          const waBtn = document.getElementById('yama-v2-chantier-wa-btn');
+          const isRappel = (type === 'rappel');
+          const msg = isRappel ? window._yamaChantierMsgRappel : window._yamaChantierMsgConfirm;
+          if(ta2) ta2.value = msg;
+          if(btnC){
+            btnC.style.background    = isRappel ? 'transparent' : 'rgba(201,168,76,.15)';
+            btnC.style.borderColor   = isRappel ? 'var(--border2,rgba(255,255,255,.1))' : 'rgba(201,168,76,.5)';
+            btnC.style.color         = isRappel ? 'var(--text2,#888)' : 'var(--gold,#c9a84c)';
+          }
+          if(btnR){
+            btnR.style.background    = isRappel ? 'rgba(91,156,246,.1)' : 'transparent';
+            btnR.style.borderColor   = isRappel ? 'rgba(91,156,246,.4)' : 'var(--border2,rgba(255,255,255,.1))';
+            btnR.style.color         = isRappel ? '#5b9cf6' : 'var(--text2,#888)';
+          }
+          if(waBtn){
+            const tel = (contact||{}).tel || '';
+            const cleaned = tel.replace(/[^\d+]/g,'');
+            const norm = cleaned.startsWith('0') ? '32'+cleaned.slice(1) : cleaned.replace(/^\+/,'');
+            if(cleaned.length >= 8){
+              waBtn.style.display = '';
+              waBtn.onclick = () => window.open('https://wa.me/'+encodeURIComponent(norm)+'?text='+encodeURIComponent(msg),'_blank');
+            }
+          }
+          try{
+            const title = modal.querySelector('.modal-title');
+            if(title) title.textContent = isRappel ? '🔔 Rappel chantier' : '🔨 Confirmation chantier';
+          }catch(e){}
+        };
+      }, 80);
+    };
+  })();
+
+  /* ── 6. CSS responsive — transitions douces ──────────────────────── */
+  (function injectResponsiveCSS(){
+    const style = document.createElement('style');
+    style.id = 'yama-vfix-responsive';
+    style.textContent = `
+      /* Smooth tab transitions */
+      .tab-content { transition: opacity .15s ease; }
+      .tab-content:not(.active) { opacity: 0; pointer-events: none; }
+      .tab-content.active { opacity: 1; }
+
+      /* Devis items — prevent overflow */
+      .devis-item { box-sizing: border-box; width: 100%; }
+      .devis-item-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+      .devis-item-actions .btn-action { flex-shrink: 0; }
+
+      /* Relance section — mobile responsive grid */
+      @media (max-width: 640px) {
+        #relance-panel-st > div:first-child,
+        #relance-panel-devis > div:first-child,
+        #relance-panel-facture > div:first-child {
+          flex-wrap: wrap !important;
+        }
+        #relance-panel-st [style*="grid-template-columns"],
+        #relance-panel-devis [style*="grid-template-columns"],
+        #relance-panel-facture [style*="grid-template-columns"] {
+          grid-template-columns: 1fr 1fr !important;
+        }
+      }
+      @media (max-width: 400px) {
+        #relance-panel-st [style*="grid-template-columns"],
+        #relance-panel-devis [style*="grid-template-columns"],
+        #relance-panel-facture [style*="grid-template-columns"] {
+          grid-template-columns: 1fr !important;
+        }
+      }
+
+      /* Relance tab buttons consistent sizing */
+      .rtab-btn {
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+    `;
+    document.head.appendChild(style);
+  })();
+
+  console.info('[YAMA VFIX_2026A] ✅ Loupe, anti-doublon, relance ST/Devis/Facture, rappel chantier, CSS responsive.');
 })();
 </script>
 </body>
