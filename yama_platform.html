@@ -29809,4 +29809,490 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 })();
 </script>
 </body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     YAMA PLATFORM — VFINAL_2026
+     ① CSS mobile critical fixes        ④ WhatsApp rappels chantier (wa.me)
+     ② Photo de profil personnalisée    ⑤ Auto-scale PDF/devis sur mobile
+     ③ Import relevé bancaire CSV + réconciliation automatique paiements
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<script>
+;(function(){
+  if(window.__YAMA_VFINAL_2026__) return;
+  window.__YAMA_VFINAL_2026__ = true;
+
+  /* ── ① CSS MOBILE CRITICAL FIXES ─────────────────────────────────────── */
+  const style = document.createElement('style');
+  style.textContent = `
+    /* Prevent horizontal scroll from fixed 900px pdf-render-area */
+    body { overflow-x: hidden; }
+
+    /* Universal text overflow protection */
+    .contact-card, .devis-item, .history-item, .crm-card,
+    .section-body, .result-card, .modal { overflow-wrap: break-word; word-break: break-word; }
+
+    /* iOS: prevent zoom on input focus — all inputs must be >= 16px */
+    input, textarea, select { font-size: 16px !important; }
+
+    /* Responsive modals */
+    @media (max-width: 640px) {
+      .modal-overlay { padding: 6px !important; align-items: flex-start !important; }
+      .modal { width: calc(100vw - 12px) !important; max-height: 90vh; overflow-y: auto; margin-top: 6px; }
+    }
+
+    /* Logo profilephoto */
+    .u-logo-icon.has-photo { border-radius: 50% !important; overflow: hidden; padding: 0 !important; cursor: pointer; }
+    .u-logo-icon.has-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .u-logo-icon:not(.has-photo) { cursor: pointer; }
+
+    /* Bank import */
+    #yama-bank-btn { position:fixed; bottom:72px; right:14px; z-index:800;
+      padding:9px 13px; background:#141414; border:1.5px solid #C9A84C; color:#C9A84C;
+      border-radius:12px; cursor:pointer; font-size:12px; font-weight:700;
+      box-shadow:0 4px 20px rgba(0,0,0,.5); display:flex; align-items:center; gap:6px; }
+    #yama-bank-btn:hover { background:#1e1e1e; }
+    .bank-tx-list { max-height:280px; overflow-y:auto; margin:8px 0; }
+    .bank-tx-row { display:flex; align-items:center; gap:8px; padding:8px 10px;
+      border-radius:8px; margin-bottom:5px; background:rgba(255,255,255,.04); }
+    .bank-tx-row.matched { border-left:3px solid #3ecf8e; }
+    .bank-badge { font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; white-space:nowrap; }
+    .bank-badge.high  { background:rgba(62,207,142,.2); color:#3ecf8e; }
+    .bank-badge.medium{ background:rgba(201,168,76,.15); color:#C9A84C; }
+
+    /* WhatsApp rappel buttons */
+    .yama-rappel-wrap { padding:14px 0 4px; border-top:1px solid rgba(255,255,255,.07); margin-top:14px; }
+    .yama-rappel-wrap p { font-size:11px; color:#666; margin:0 0 8px; text-transform:uppercase; letter-spacing:1px; }
+    .yama-rappel-btns { display:flex; flex-wrap:wrap; gap:7px; }
+    .yama-wa-btn { display:inline-flex; align-items:center; gap:5px; padding:6px 11px;
+      border-radius:8px; cursor:pointer; font-size:12px; font-weight:600; border:none; transition:opacity .15s; }
+    .yama-wa-btn:hover { opacity:.8; }
+    .yama-wa-btn.green { background:#25D366; color:#fff; }
+    .yama-wa-btn.teal  { background:#128C7E; color:#fff; }
+    .yama-wa-btn.outline-g { background:transparent; color:#25D366; border:1.5px solid #25D366; }
+    .yama-wa-btn.outline-t { background:transparent; color:#128C7E; border:1.5px solid #128C7E; }
+
+    /* Photo modal */
+    #yama-photo-modal, #yama-bank-modal {
+      position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.75);
+      display:flex; align-items:center; justify-content:center; padding:12px; }
+    .yf-modal-box {
+      background:#141414; border-radius:16px; padding:22px; width:100%; border:1px solid #252525;
+      max-height:90vh; overflow-y:auto; }
+    .yf-modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+    .yf-modal-header h3 { margin:0; font-size:15px; color:#fff; }
+    .yf-close-btn { background:none; border:none; color:#888; cursor:pointer; font-size:18px; line-height:1; }
+    .yf-primary-btn { display:block; width:100%; padding:11px; background:#C9A84C; color:#000;
+      border:none; border-radius:8px; cursor:pointer; font-weight:700; font-size:13px; text-align:center; }
+    .yf-danger-btn  { display:block; width:100%; padding:9px; background:transparent;
+      border:1px solid #e74c3c; color:#e74c3c; border-radius:8px; cursor:pointer; font-size:12px; margin-top:8px; }
+    .yf-green-btn   { display:block; width:100%; padding:11px; background:#3ecf8e; color:#000;
+      border:none; border-radius:8px; cursor:pointer; font-weight:700; font-size:13px; margin-top:10px; }
+  `;
+  document.head.appendChild(style);
+
+  /* ── UTILS ──────────────────────────────────────────────────────────── */
+  const $id = id => document.getElementById(id);
+  function readLS(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){return d;} }
+  function writeLS(k,v){ localStorage.setItem(k,JSON.stringify(v)); }
+  function vtoast(msg){ try{ if(typeof showToast==='function'){showToast(msg);return;} } catch(e){} try{ if(typeof toast==='function'){toast(msg,'success');return;} }catch(e){} console.info(msg); }
+  function refreshUI(){ ['renderDevisTab','renderHistory','renderAnalyse','updateBadges'].forEach(fn=>{ try{if(typeof window[fn]==='function')window[fn]();}catch(e){} }); }
+  function getHist(){ try{return typeof getHistory==='function'?getHistory():readLS('yama_history_v3',[]); }catch(e){return readLS('yama_history_v3',[]);} }
+
+  /* ── ② PHOTO DE PROFIL ───────────────────────────────────────────────── */
+  const PHOTO_KEY = 'yama_profile_photo_v1';
+
+  function applyProfilePhoto(){
+    const photo = localStorage.getItem(PHOTO_KEY);
+    const icon  = document.querySelector('.u-logo-icon');
+    if (!icon) return;
+    if (photo){
+      icon.classList.add('has-photo');
+      icon.innerHTML = `<img src="${photo}" alt="logo">`;
+      icon.style.cssText = '';
+    } else {
+      // Reapply white/gold style if no photo and no existing terminal patch
+      if (!icon.dataset.yamaLogoLoaded){
+        icon.textContent = 'YG';
+        icon.style.cssText = 'width:30px;height:30px;background:#fff;border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;color:#C9A84C;letter-spacing:-.5px;flex-shrink:0;border:1.5px solid #C9A84C;cursor:pointer;';
+        icon.dataset.yamaLogoLoaded='1';
+      }
+    }
+  }
+
+  window.__yamaDeletePhoto = function(){
+    localStorage.removeItem(PHOTO_KEY);
+    const icon = document.querySelector('.u-logo-icon');
+    if(icon){ icon.classList.remove('has-photo'); icon.innerHTML='YG'; icon.removeAttribute('style'); icon.dataset.yamaLogoLoaded=''; applyProfilePhoto(); }
+    const m=$id('yama-photo-modal'); if(m) m.remove();
+    vtoast('Photo supprimée');
+  };
+
+  window.__yamaUploadPhoto = function(input){
+    const file = input.files[0]; if(!file) return;
+    if(file.size > 3*1024*1024){ vtoast('⚠️ Photo trop grande (max 3 MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const max = 256, r = Math.min(max/img.width, max/img.height);
+        canvas.width = img.width*r; canvas.height = img.height*r;
+        canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg',0.88);
+        localStorage.setItem(PHOTO_KEY, dataUrl);
+        const m=$id('yama-photo-modal'); if(m) m.remove();
+        applyProfilePhoto();
+        vtoast('✅ Photo de profil mise à jour');
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  function openPhotoModal(){
+    const ex=$id('yama-photo-modal'); if(ex){ex.style.display='flex';return;}
+    const photo = localStorage.getItem(PHOTO_KEY);
+    const d = document.createElement('div'); d.id='yama-photo-modal';
+    d.innerHTML = `<div class="yf-modal-box" style="max-width:340px;">
+      <div class="yf-modal-header">
+        <h3>🖼️ Photo / Logo</h3>
+        <button class="yf-close-btn" onclick="document.getElementById('yama-photo-modal').remove()">✕</button>
+      </div>
+      <div style="text-align:center;margin-bottom:16px;">
+        ${photo
+          ? `<img src="${photo}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #C9A84C;">`
+          : `<div style="width:80px;height:80px;border-radius:50%;background:#1e1e1e;display:inline-flex;align-items:center;justify-content:center;font-size:32px;border:3px solid #333;">📷</div>`}
+        <p style="font-size:11px;color:#888;margin:8px 0 0;">Affiché dans l'en-tête et vos PDF</p>
+      </div>
+      <label class="yf-primary-btn">
+        📷 Choisir une photo
+        <input type="file" accept="image/*" style="display:none;" onchange="window.__yamaUploadPhoto(this)">
+      </label>
+      ${photo ? `<button class="yf-danger-btn" onclick="window.__yamaDeletePhoto()">Supprimer la photo</button>` : ''}
+    </div>`;
+    document.body.appendChild(d);
+    d.addEventListener('click', e=>{ if(e.target===d) d.remove(); });
+  }
+
+  function initProfilePhoto(){
+    applyProfilePhoto();
+    const icon = document.querySelector('.u-logo-icon');
+    if(icon && !icon.dataset.photoBound){
+      icon.dataset.photoBound='1';
+      icon.title='Cliquer pour changer la photo de profil';
+      icon.addEventListener('click', openPhotoModal);
+    }
+  }
+
+  /* ── ③ IMPORT RELEVÉ BANCAIRE CSV ────────────────────────────────────── */
+
+  // Flexible CSV parser — handles BNP, ING, KBC, Belfius formats
+  function parseBankCSV(raw){
+    const lines = raw.replace(/\r\n/g,'\n').replace(/\r/g,'\n').trim().split('\n');
+    if(lines.length<2) return [];
+    const sep = (lines[0].match(/;/g)||[]).length >= (lines[0].match(/,/g)||[]).length ? ';' : ',';
+    function splitLine(l){
+      const out=[]; let cur='', q=false;
+      for(const c of l){ if(c==='"')q=!q; else if(c===sep&&!q){out.push(cur.trim());cur='';}else cur+=c; }
+      out.push(cur.trim()); return out.map(v=>v.replace(/^"|"$/g,'').trim());
+    }
+    const headers = splitLine(lines[0]).map(h=>h.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''));
+    const txs=[];
+    for(let i=1;i<lines.length;i++){
+      if(!lines[i].trim()) continue;
+      const vals=splitLine(lines[i]);
+      const row={}; headers.forEach((h,j)=>row[h]=vals[j]||'');
+
+      // Amount — try multiple header names; accept positive = credit
+      const amtKeys=['montant','amount','bedrag','credit','debit'];
+      let amount=null;
+      for(const k of amtKeys){
+        const hk=headers.find(h=>h.startsWith(k)||h===k);
+        if(hk&&row[hk]){
+          const n=parseFloat(row[hk].replace(/\s/g,'').replace(',','.'));
+          if(!isNaN(n)&&n>0){amount=n;break;}
+        }
+      }
+      if(amount===null) continue;
+
+      // Date
+      const dateKey=headers.find(h=>h.startsWith('date')||h==='datum');
+      const date = dateKey?row[dateKey]:'';
+
+      // Communication / description
+      const descKeys=['communication','mededeling','omschrijving','description','libelle','detail'];
+      let desc='';
+      for(const k of descKeys){ const hk=headers.find(h=>h.includes(k)); if(hk&&row[hk]) desc+=' '+row[hk]; }
+      // Also include counterparty name
+      const ctpKey=headers.find(h=>h.includes('contrepartie')||h.includes('naam')||h.includes('beneficiaire'));
+      if(ctpKey&&row[ctpKey]) desc+=' '+row[ctpKey];
+
+      txs.push({amount,date,desc:desc.trim()});
+    }
+    return txs;
+  }
+
+  function reconcile(txs){
+    const hist  = getHist();
+    const paid  = readLS('yama_client_paid_v1',{});
+    const unpaid= hist.filter(h=>{
+      const dt=h.docType||h.data?.docType||'';
+      const p=paid[h.docNum];
+      return dt==='facture' && !(p===true||(p&&p.paid));
+    });
+    return txs.map(tx=>{
+      // Match by doc_num in communication
+      const m = tx.desc.match(/(?:F?YG[-_]?\d{2}[-_]\d{3,})/i);
+      if(m){
+        const dn=m[0].replace(/_/g,'-').toUpperCase();
+        const inv=unpaid.find(f=>f.docNum===dn||(f.data?.docNum||'').toUpperCase()===dn);
+        if(inv) return {tx,invoice:inv,confidence:'high',reason:'Réf. doc.'};
+      }
+      // Match by amount (±0.02€)
+      const inv=unpaid.find(f=>{
+        const total=parseFloat(f.totalTTC||f.data?.totalTTC||0);
+        return Math.abs(total-tx.amount)<0.02;
+      });
+      if(inv) return {tx,invoice:inv,confidence:'medium',reason:`${tx.amount.toFixed(2)} €`};
+      return {tx,invoice:null,confidence:null,reason:null};
+    });
+  }
+
+  window.__ymBankMatches=[];
+
+  function bankApply(idx){
+    const m=window.__ymBankMatches[idx]; if(!m||!m.invoice||m._done) return;
+    const paid=readLS('yama_client_paid_v1',{});
+    paid[m.invoice.docNum]={paid:true,amount:m.tx.amount,paid_at:m.tx.date||new Date().toISOString(),note:'Import relevé bancaire'};
+    writeLS('yama_client_paid_v1',paid);
+    try{if(typeof syncPushClientPaid==='function')syncPushClientPaid({[m.invoice.docNum]:true});}catch(e){}
+    m._done=true;
+    $id('brow-'+idx)?.remove();
+    refreshUI();
+    vtoast(`✅ ${m.invoice.docNum} — paiement enregistré`);
+  }
+  window.__ymBankApply=bankApply;
+
+  window.__ymBankApplyAll=function(){
+    const pending=window.__ymBankMatches.filter(m=>m.invoice&&!m._done);
+    if(!pending.length){vtoast('Aucun paiement à valider');return;}
+    const paid=readLS('yama_client_paid_v1',{});
+    const pushed={};
+    pending.forEach(m=>{
+      paid[m.invoice.docNum]={paid:true,amount:m.tx.amount,paid_at:m.tx.date||new Date().toISOString(),note:'Import relevé bancaire'};
+      pushed[m.invoice.docNum]=true; m._done=true;
+    });
+    writeLS('yama_client_paid_v1',paid);
+    try{if(typeof syncPushClientPaid==='function')syncPushClientPaid(pushed);}catch(e){}
+    refreshUI();
+    const modal=$id('yama-bank-modal'); if(modal)modal.remove();
+    vtoast(`✅ ${pending.length} paiement(s) enregistré(s)`);
+  };
+
+  window.__ymBankFile=function(input){
+    const file=input.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const txs=parseBankCSV(ev.target.result);
+      if(!txs.length){vtoast('⚠️ Aucune transaction créditrice détectée. Vérifiez le format CSV.');return;}
+      const matches=reconcile(txs);
+      window.__ymBankMatches=matches;
+      const matched=matches.filter(m=>m.invoice);
+      const list=$id('bank-tx-list');
+      if(!list) return;
+      if(!matched.length){
+        list.innerHTML='<p style="color:#666;text-align:center;padding:20px 10px;font-size:13px;">Aucune correspondance avec vos factures impayées.<br><small style="color:#444;">Assurez-vous que la référence de la facture figure dans la communication.</small></p>';
+        return;
+      }
+      list.innerHTML=matched.map((m,i)=>`
+        <div id="brow-${i}" class="bank-tx-row matched">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;color:#fff;font-size:13px;">${m.invoice.docNum}</div>
+            <div style="font-size:11px;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px;">${m.tx.desc.slice(0,55)}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;margin-right:6px;">
+            <div style="font-weight:700;color:#3ecf8e;font-size:13px;">${m.tx.amount.toFixed(2)} €</div>
+            <span class="bank-badge ${m.confidence}">${m.reason}</span>
+          </div>
+          <button onclick="window.__ymBankApply(${i})" style="padding:5px 9px;background:#3ecf8e;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px;flex-shrink:0;">✓</button>
+        </div>`).join('');
+      const btn=$id('bank-apply-all');
+      if(btn){btn.style.display='block';btn.textContent=`✅ Valider ${matched.length} paiement(s)`;}
+    };
+    reader.readAsText(file,'UTF-8');
+  };
+
+  function openBankModal(){
+    const ex=$id('yama-bank-modal'); if(ex){ex.style.display='flex';window.__ymBankMatches=[];return;}
+    const d=document.createElement('div'); d.id='yama-bank-modal';
+    d.innerHTML=`<div class="yf-modal-box" style="max-width:600px;">
+      <div class="yf-modal-header">
+        <h3>🏦 Import relevé bancaire</h3>
+        <button class="yf-close-btn" onclick="document.getElementById('yama-bank-modal').remove()">✕</button>
+      </div>
+      <p style="font-size:13px;color:#777;margin:0 0 14px;">Importez votre export CSV (BNP, ING, KBC, Belfius…). Les virements entrants sont automatiquement associés à vos factures impayées.</p>
+      <label class="yf-primary-btn" style="margin-bottom:14px;">
+        📂 Sélectionner le fichier CSV
+        <input type="file" accept=".csv,.txt" style="display:none;" onchange="window.__ymBankFile(this)">
+      </label>
+      <div id="bank-tx-list" class="bank-tx-list">
+        <p style="color:#444;text-align:center;padding:20px;font-size:12px;">Sélectionnez un fichier pour analyser les transactions.</p>
+      </div>
+      <button id="bank-apply-all" onclick="window.__ymBankApplyAll()" class="yf-green-btn" style="display:none;">✅ Valider tous les paiements</button>
+      <p style="font-size:11px;color:#444;margin-top:10px;text-align:center;">Vous pouvez aussi valider chaque paiement individuellement avec ✓</p>
+    </div>`;
+    document.body.appendChild(d);
+    d.addEventListener('click',e=>{if(e.target===d)d.remove();});
+  }
+
+  function injectBankButton(){
+    if($id('yama-bank-btn')) return;
+    const btn=document.createElement('button');
+    btn.id='yama-bank-btn';
+    btn.title='Importer relevé bancaire et réconcilier paiements';
+    btn.innerHTML='🏦 Relevé bancaire';
+    btn.addEventListener('click',openBankModal);
+    document.body.appendChild(btn);
+  }
+
+  /* ── ④ WHATSAPP RAPPELS CHANTIER ─────────────────────────────────────── */
+  window.__ymRappelContacts={};
+
+  function fmtTel(t){
+    if(!t) return '';
+    const d=String(t).replace(/\D/g,'');
+    if(d.startsWith('32')) return '+'+d;
+    if(d.startsWith('0')) return '+32'+d.slice(1);
+    if(d.length===9) return '+32'+d;
+    return '+'+d;
+  }
+
+  function waOpen(tel,msg){
+    const t=fmtTel(tel);
+    if(!t||t.length<6){vtoast('⚠️ Numéro invalide');return;}
+    const url='https://wa.me/'+t.replace('+','')+`?text=${encodeURIComponent(msg)}`;
+    window.open(url,'_blank');
+    try{navigator.clipboard?.writeText(msg);}catch(e){}
+  }
+
+  function buildRappelMsg(c,type,num){
+    const nom   = c.data?.nom||c.nom||'Client';
+    const prenom= nom.split(' ')[0];
+    const addr  = (c.data?.adresse||c.adresse||'').trim();
+    const comm  = (c.data?.commune||c.commune||'').trim();
+    const addrFull = [addr,comm].filter(Boolean).join(', ');
+    const rawDate= c.data?.date||c.date||'';
+    const heure  = c.data?.heure||c.heure||'';
+    let dateStr='';
+    if(rawDate){try{dateStr=new Date(rawDate).toLocaleDateString('fr-BE',{weekday:'long',day:'numeric',month:'long'});}catch(e){dateStr=rawDate;}}
+
+    if(type==='client'){
+      if(num===1) return `Bonjour ${prenom},\n\nNous vous confirmons le démarrage de vos travaux${dateStr?' le '+dateStr:''}${heure?' à '+heure:''}, à l'adresse : ${addrFull}.\n\nNous serons présents à l'heure convenue. N'hésitez pas à nous contacter pour toute question.\n\nYAMA Group\n📞 0489 33 77 00 | info@yama-group.be`;
+      if(num===2) return `Bonjour ${prenom},\n\nNous vous contactons pour un suivi de vos travaux en cours à ${addrFull}.\n\nTout se déroule comme prévu. N'hésitez pas à nous faire part de vos questions.\n\nYAMA Group\n📞 0489 33 77 00`;
+      return `Bonjour ${prenom},\n\nNous avons le plaisir de vous informer que les travaux à ${addrFull} sont maintenant terminés.\n\nVotre facture vous sera transmise dans les plus brefs délais.\n\nMerci pour votre confiance,\nYAMA Group\n📞 0489 33 77 00`;
+    }
+    if(num===1) return `Bonjour 👷\n\nRappel chantier :\n\n👤 Client : ${nom}\n📍 Adresse : ${addrFull}${dateStr?'\n📅 Date : '+dateStr:''}${heure?'\n⏰ Début : '+heure:''}\n\nMerci de confirmer ta présence.\n— Ali | YAMA Group 📞 0489 33 77 00`;
+    return `Bonjour 👷\n\nSuivi chantier — ${addrFull}\n\nPeux-tu me donner un retour sur l'avancement ?\n\n— Ali | YAMA Group 📞 0489 33 77 00`;
+  }
+
+  window.__ymRappel=function(ckey,type,tel,num){
+    const c=window.__ymRappelContacts[ckey];
+    if(!c){vtoast('Contact introuvable');return;}
+    waOpen(tel,buildRappelMsg(c,type,num));
+  };
+
+  function buildRappelWidget(c){
+    const key=c.contact_id||c.id||String(Date.now());
+    window.__ymRappelContacts[key]=c;
+    const tel =(c.data?.tel||c.tel||'').replace(/\D/g,'');
+    const stNom=(c.data?.st||c.st||'').trim();
+    let stTel='';
+    try{
+      const stList=typeof getSTList==='function'?getSTList():readLS('yama_soustraitants_v1',[]);
+      const found=stList.find(s=>s.nom===stNom);
+      stTel=(found?.tel||'').replace(/\D/g,'');
+    }catch(e){}
+
+    let btns='';
+    if(tel){
+      btns+=`<button class="yama-wa-btn green" onclick="window.__ymRappel('${key}','client','${tel}',1)">💬 Rappel client</button>`;
+      btns+=`<button class="yama-wa-btn outline-g" onclick="window.__ymRappel('${key}','client','${tel}',2)">💬 Suivi client</button>`;
+      btns+=`<button class="yama-wa-btn outline-g" onclick="window.__ymRappel('${key}','client','${tel}',3)">✅ Fin travaux</button>`;
+    }
+    if(stTel){
+      btns+=`<button class="yama-wa-btn teal" onclick="window.__ymRappel('${key}','st','${stTel}',1)">👷 Rappel ST</button>`;
+      btns+=`<button class="yama-wa-btn outline-t" onclick="window.__ymRappel('${key}','st','${stTel}',2)">👷 Suivi ST</button>`;
+    }
+    if(!btns) return null;
+
+    const wrap=document.createElement('div');
+    wrap.className='yama-rappel-wrap';
+    wrap.innerHTML=`<p>📱 Rappels WhatsApp — Chantier</p><div class="yama-rappel-btns">${btns}</div>`;
+    return wrap;
+  }
+
+  // Intercept openContactDetail to inject rappel buttons
+  function patchContactDetail(){
+    const orig=window.openContactDetail;
+    if(typeof orig!=='function'||orig.__yamaRappelPatch) return;
+    window.openContactDetail=function(cid,...args){
+      const result=orig.call(this,cid,...args);
+      setTimeout(()=>{
+        const modal=$id('contact-detail-modal');
+        if(!modal) return;
+        if(modal.dataset.rappelCid===String(cid)) return; // already injected
+        modal.dataset.rappelCid=String(cid);
+        // Remove previous widget if any
+        modal.querySelectorAll('.yama-rappel-wrap').forEach(el=>el.remove());
+        // Get contact
+        let contact=null;
+        try{ contact=typeof getRawContactById==='function'?getRawContactById(String(cid)):null; }catch(e){}
+        if(!contact) return;
+        // Only for chantier stage
+        const stage=contact.data?.followUpStatus||contact.followUpStatus||contact.data?.type||'';
+        const isChantier=['chantier','en_cours','chantier_planifie','termine'].some(s=>stage.includes(s));
+        if(!isChantier) return;
+        const widget=buildRappelWidget(contact);
+        if(!widget) return;
+        // Find injection point: look for message grid or modal body
+        const target=modal.querySelector('.msg-grid,.whatsapp-section,.modal-inner,.modal-body,[class*="contact-detail-body"]')||modal.querySelector('.modal');
+        if(target) target.appendChild(widget);
+      },350);
+      return result;
+    };
+    window.openContactDetail.__yamaRappelPatch=true;
+  }
+
+  /* ── ⑤ AUTO-SCALE PDF/DEVIS SUR MOBILE ──────────────────────────────── */
+  function scalePdfAreas(){
+    document.querySelectorAll('.pdf-render-area').forEach(el=>{
+      const vw=window.innerWidth;
+      if(vw<900&&el.scrollWidth>vw){
+        const s=vw/el.scrollWidth;
+        el.style.transform=`scale(${s})`;
+        el.style.transformOrigin='top left';
+        el.style.marginBottom=`-${el.scrollHeight*(1-s)}px`;
+      } else {
+        el.style.transform='';
+        el.style.marginBottom='';
+      }
+    });
+  }
+  window.addEventListener('resize',()=>setTimeout(scalePdfAreas,100));
+
+  /* ── INIT ────────────────────────────────────────────────────────────── */
+  function init(){
+    initProfilePhoto();
+    injectBankButton();
+    patchContactDetail();
+    scalePdfAreas();
+    console.info('[YAMA VFINAL_2026] ✅ Mobile fixes, photo profil, import bancaire CSV, rappels WhatsApp chantier.');
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,500));
+  else setTimeout(init,500);
+
+})();
+</script>
+</body>
 </html>
