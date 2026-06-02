@@ -30874,5 +30874,84 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   console.info('[YAMA VFIX_2026A] ✅ Loupe, anti-doublon, relance ST/Devis/Facture, rappel chantier, CSS responsive.');
 })();
 </script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   VFIX_2026C — Transformer en facture : confirm → Calculateur → Générer
+   ─────────────────────────────────────────────────────────────────────
+   Remplace openSmartInvoiceModal par un flux simple :
+     1) Boîte de confirmation
+     2) Charge toutes les données du devis dans le Calculateur
+        (lignesClient, lignesST, tous les champs FIELDS)
+     3) Passe la date d'émission à aujourd'hui (facture ≠ devis)
+     4) Bascule sur l'onglet Calculateur
+     5) Toast "→ cliquez Générer Facture"
+   Cela résout aussi la disparition des articles (lignesClient) lors
+   de la transformation, car generatePDF('facture') lit state.lignesClient
+   qui vient d'être rempli par loadFromHistory().
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if (window.__YAMA_VFIX_2026C__) return;
+  window.__YAMA_VFIX_2026C__ = true;
+
+  function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+  function overrideOpenSmartInvoiceModal(){
+    /* Vérifie que les fonctions dépendantes sont disponibles */
+    if (typeof loadFromHistoryByNum !== 'function' || typeof getHistory !== 'function') {
+      setTimeout(overrideOpenSmartInvoiceModal, 200);
+      return;
+    }
+
+    window.openSmartInvoiceModal = function(docNum){
+      if (!docNum) return;
+
+      /* 1. Récupère l'entrée pour afficher le nom client dans le confirm */
+      const hist = (typeof getHistory === 'function') ? getHistory() : [];
+      const entry = hist.find(h => h.docNum === docNum);
+      const clientLabel = (entry && entry.clientNom) ? entry.clientNom : '';
+      const montantLabel = (entry && entry.totalTTC) ? ' · ' + new Intl.NumberFormat('fr-BE', {style:'currency',currency:'EUR'}).format(entry.totalTTC) : '';
+
+      const msg = 'Transformer le devis ' + docNum + ' en facture ?\n'
+                + (clientLabel ? 'Client : ' + clientLabel + '\n' : '')
+                + (montantLabel ? 'Montant : ' + montantLabel.slice(3) + '\n' : '')
+                + '\nToutes les informations seront chargées dans le Calculateur.';
+
+      /* 2. Boîte de confirmation native */
+      if (!confirm(msg)) return;
+
+      /* 3. Charge le devis dans le Calculateur (lignesClient + tous champs) */
+      loadFromHistoryByNum(docNum);
+
+      /* 4. Passe la date d'émission à aujourd'hui (date de la facture) */
+      setTimeout(function(){
+        const dateField = document.getElementById('dateEmission');
+        if (dateField) dateField.value = todayISO();
+
+        /* 5. Toast explicatif */
+        if (typeof showToast === 'function') {
+          showToast('✓ Devis chargé — cliquez "Générer la facture" pour créer la facture', '');
+        }
+
+        /* Met en évidence visuellement le bouton Générer Facture */
+        const btnFacture = document.getElementById('btnGenFacture');
+        if (btnFacture) {
+          btnFacture.style.transition = 'box-shadow .2s';
+          btnFacture.style.boxShadow = '0 0 0 3px rgba(82,199,127,.7)';
+          setTimeout(function(){ btnFacture.style.boxShadow = ''; }, 2500);
+        }
+      }, 80);
+    };
+
+    /* Expose aussi sous l'alias utilisé dans certains patches */
+    window.openTravauxModal = window.openSmartInvoiceModal;
+
+    console.info('[YAMA VFIX_2026C] ✅ openSmartInvoiceModal → flux confirm + Calculateur');
+  }
+
+  /* Lance après le boot V12 (650 ms) + marge */
+  setTimeout(overrideOpenSmartInvoiceModal, 900);
+})();
+</script>
 </body>
 </html>
