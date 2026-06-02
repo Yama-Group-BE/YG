@@ -3395,6 +3395,9 @@ if (token && window.opener) {
           </div>
         </div>
 
+        <!-- ACOMPTE VERSÉ (caché par défaut, rempli lors de transformation devis→facture) -->
+        <input type="hidden" id="acompteVerse" value="">
+
         <!-- SECTION 4 : COÛTS SOUS-TRAITANT (PRIVÉ) -->
         <div class="section">
           <div class="section-header section-private">
@@ -7203,71 +7206,106 @@ function updateNumDisplay() {
 }
 function editNums() {
   const yy = getAppYear();
-  const d = parseInt(localStorage.getItem(LS.devisCounter) || '101');
-  const f = parseInt(localStorage.getItem(LS.factureCounter) || '101');
-
-  // Build or reuse the numbering modal
-  let modal = document.getElementById('yama-editnums-modal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'yama-editnums-modal';
-    modal.className = 'overlay';
-    modal.style.cssText = 'z-index:10010;';
-    modal.innerHTML = `
-      <div class="modal" style="max-width:480px;">
-        <div class="modal-head">
-          <div class="modal-title">🔢 Numérotation des documents</div>
-          <button class="modal-close" onclick="document.getElementById('yama-editnums-modal').classList.remove('show')">×</button>
-        </div>
-        <div class="modal-body">
-          <div style="font-size:12px;color:var(--text2);margin-bottom:18px;line-height:1.6;">
-            Modifie le <strong>prochain numéro</strong> à utiliser pour chaque type de document.<br>
-            Les numéros déjà utilisés sont automatiquement sautés.
-          </div>
-
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-            <div>
-              <label style="font-size:11px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">📄 Devis</label>
-              <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Préfixe : <code style="color:var(--gold);">YG-<span id="yen-yy-devis"></span>-</code></div>
-              <input id="yen-devis-n" type="number" min="101" step="1"
-                style="width:100%;background:var(--input-bg,rgba(255,255,255,.05));border:1px solid var(--input-bd,rgba(255,255,255,.12));border-radius:7px;padding:9px 12px;color:var(--text);font-size:15px;font-weight:700;outline:none;box-sizing:border-box;"
-                oninput="yenPreview()">
-              <div style="margin-top:6px;font-size:12px;color:var(--text2);">→ Prochain : <strong id="yen-preview-devis" style="color:var(--gold);">—</strong></div>
-            </div>
-            <div>
-              <label style="font-size:11px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">🧾 Facture</label>
-              <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Préfixe : <code style="color:var(--gold);">FYG-<span id="yen-yy-facture"></span>-</code></div>
-              <input id="yen-facture-n" type="number" min="101" step="1"
-                style="width:100%;background:var(--input-bg,rgba(255,255,255,.05));border:1px solid var(--input-bd,rgba(255,255,255,.12));border-radius:7px;padding:9px 12px;color:var(--text);font-size:15px;font-weight:700;outline:none;box-sizing:border-box;"
-                oninput="yenPreview()">
-              <div style="margin-top:6px;font-size:12px;color:var(--text2);">→ Prochain : <strong id="yen-preview-facture" style="color:var(--gold);">—</strong></div>
-            </div>
-          </div>
-
-          <div style="background:rgba(201,168,76,.07);border:1px solid rgba(201,168,76,.2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text2);line-height:1.65;margin-bottom:18px;">
-            💡 Les numéros déjà utilisés dans l'historique sont <strong>automatiquement sautés</strong>.<br>
-            Exemple : si YG-${yy}-103 existe déjà, le prochain devis sera YG-${yy}-104.
-          </div>
-
-          <div style="display:flex;gap:10px;justify-content:flex-end;">
-            <button class="btn-secondary" onclick="document.getElementById('yama-editnums-modal').classList.remove('show')" style="padding:9px 20px;font-size:13px;">Annuler</button>
-            <button onclick="yenSave()" style="padding:9px 22px;font-size:13px;border-radius:8px;background:rgba(201,168,76,.2);border:1px solid rgba(201,168,76,.5);color:var(--gold);font-weight:700;cursor:pointer;">💾 Enregistrer</button>
-          </div>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
-    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('show'); });
+  /* Calcule le prochain numéro réel (comme V32 firstFree le ferait) */
+  function nextReal(type) {
+    try {
+      const hist = (typeof getHistory === 'function') ? getHistory() : [];
+      const used = new Set();
+      hist.forEach(h => {
+        const id = String(h.docNum || '');
+        let m = type === 'facture'
+          ? id.match(/^FYG-(\d{2})-(\d+)$/i)
+          : id.match(/^YG-(\d{2})-(\d+)$/i);
+        if (m && m[1] === yy) used.add(Number(m[2]));
+      });
+      const floor = parseInt(localStorage.getItem('yama_num_floor_' + type) || '0') || 0;
+      let n = Math.max(101, floor);
+      while (used.has(n)) n++;
+      return n;
+    } catch(e) { return parseInt(localStorage.getItem(type === 'facture' ? LS.factureCounter : LS.devisCounter) || '101'); }
   }
 
-  // Fill current values
-  const yy2 = getAppYear();
-  ['yen-yy-devis','yen-yy-facture'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = yy2;
-  });
-  document.getElementById('yen-devis-n').value = d;
-  document.getElementById('yen-facture-n').value = f;
-  yenPreview();
+  const dAuto = nextReal('devis');
+  const fAuto = nextReal('facture');
+  const dFloor = parseInt(localStorage.getItem('yama_num_floor_devis') || '0') || dAuto;
+  const fFloor = parseInt(localStorage.getItem('yama_num_floor_facture') || '0') || fAuto;
+
+  /* Crée ou réutilise le modal */
+  let modal = document.getElementById('yama-editnums-modal');
+  if (modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'yama-editnums-modal';
+  modal.className = 'overlay';
+  modal.style.cssText = 'z-index:10010;';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-head" style="background:linear-gradient(135deg,rgba(201,168,76,.15),rgba(201,168,76,.05));border-bottom:1px solid rgba(201,168,76,.2);">
+        <div class="modal-title" style="font-size:16px;">🔢 Numérotation des documents</div>
+        <button class="modal-close" onclick="document.getElementById('yama-editnums-modal').classList.remove('show')">×</button>
+      </div>
+      <div class="modal-body" style="padding:20px;">
+
+        <!-- Numéros actuels (auto-calculés) -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+          <div style="background:rgba(91,156,246,.08);border:1px solid rgba(91,156,246,.25);border-radius:10px;padding:14px;text-align:center;">
+            <div style="font-size:11px;color:#5b9cf6;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">📄 Prochain Devis</div>
+            <div id="yen-auto-devis" style="font-size:22px;font-weight:800;color:#5b9cf6;letter-spacing:1px;">YG-${yy}-${dAuto}</div>
+            <div style="font-size:10px;color:var(--text2);margin-top:4px;">Calculé automatiquement</div>
+          </div>
+          <div style="background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.25);border-radius:10px;padding:14px;text-align:center;">
+            <div style="font-size:11px;color:var(--gold,#c9a84c);font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">🧾 Prochaine Facture</div>
+            <div id="yen-auto-facture" style="font-size:22px;font-weight:800;color:var(--gold,#c9a84c);letter-spacing:1px;">FYG-${yy}-${fAuto}</div>
+            <div style="font-size:10px;color:var(--text2);margin-top:4px;">Calculé automatiquement</div>
+          </div>
+        </div>
+
+        <!-- Séparateur -->
+        <div style="border-top:1px solid rgba(255,255,255,.06);margin-bottom:18px;"></div>
+
+        <!-- Forcer un numéro de départ -->
+        <div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6;">
+          <strong style="color:var(--text);">Forcer un numéro de départ</strong> — si vous avez déjà émis des documents hors plateforme.<br>
+          Entrez uniquement la <strong>partie numérique</strong> (ex: <code style="color:var(--gold);">103</code>). Les numéros déjà utilisés sont automatiquement sautés.
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;">
+          <div>
+            <label style="font-size:11px;color:#5b9cf6;font-weight:700;text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:8px;">📄 Départ Devis</label>
+            <div style="display:flex;align-items:center;background:var(--input-bg,rgba(255,255,255,.05));border:1px solid rgba(91,156,246,.3);border-radius:8px;overflow:hidden;">
+              <span style="padding:0 10px;font-size:12px;color:#5b9cf6;font-weight:700;white-space:nowrap;border-right:1px solid rgba(91,156,246,.2);">YG-${yy}-</span>
+              <input id="yen-devis-n" type="number" min="101" step="1" placeholder="${dFloor}"
+                style="flex:1;background:transparent;border:none;padding:10px 10px;color:var(--text);font-size:15px;font-weight:700;outline:none;min-width:0;"
+                oninput="yenPreview()">
+            </div>
+            <div style="margin-top:5px;font-size:11px;color:var(--text2);">→ Sera : <strong id="yen-preview-devis" style="color:#5b9cf6;">YG-${yy}-${dFloor}</strong></div>
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--gold,#c9a84c);font-weight:700;text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:8px;">🧾 Départ Facture</label>
+            <div style="display:flex;align-items:center;background:var(--input-bg,rgba(255,255,255,.05));border:1px solid rgba(201,168,76,.3);border-radius:8px;overflow:hidden;">
+              <span style="padding:0 10px;font-size:12px;color:var(--gold,#c9a84c);font-weight:700;white-space:nowrap;border-right:1px solid rgba(201,168,76,.2);">FYG-${yy}-</span>
+              <input id="yen-facture-n" type="number" min="101" step="1" placeholder="${fFloor}"
+                style="flex:1;background:transparent;border:none;padding:10px 10px;color:var(--text);font-size:15px;font-weight:700;outline:none;min-width:0;"
+                oninput="yenPreview()">
+            </div>
+            <div style="margin-top:5px;font-size:11px;color:var(--text2);">→ Sera : <strong id="yen-preview-facture" style="color:var(--gold,#c9a84c);">FYG-${yy}-${fFloor}</strong></div>
+          </div>
+        </div>
+
+        <div style="background:rgba(201,168,76,.07);border:1px solid rgba(201,168,76,.2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text2);line-height:1.65;margin-bottom:18px;">
+          ℹ️ Si le numéro que vous entrez est déjà utilisé, la plateforme <strong>saute automatiquement</strong> au suivant disponible.<br>
+          Ex: si FYG-${yy}-103 existe déjà → la prochaine facture sera FYG-${yy}-104.
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button onclick="document.getElementById('yama-editnums-modal').classList.remove('show')"
+            style="padding:10px 20px;font-size:13px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,.12);color:var(--text2);cursor:pointer;">Fermer</button>
+          <button onclick="yenSave()"
+            style="padding:10px 24px;font-size:13px;border-radius:8px;background:rgba(201,168,76,.2);border:1px solid rgba(201,168,76,.5);color:var(--gold,#c9a84c);font-weight:700;cursor:pointer;transition:all .15s;">💾 Appliquer</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('show'); });
   modal.classList.add('show');
 }
 
@@ -7277,26 +7315,34 @@ function yenPreview() {
   const f = parseInt(document.getElementById('yen-facture-n')?.value) || 0;
   const pd = document.getElementById('yen-preview-devis');
   const pf = document.getElementById('yen-preview-facture');
-  if (pd) pd.textContent = d > 0 ? 'YG-' + yy + '-' + d : '—';
-  if (pf) pf.textContent = f > 0 ? 'FYG-' + yy + '-' + f : '—';
+  if (pd) pd.textContent = d >= 101 ? 'YG-' + yy + '-' + d : (d > 0 ? '⚠ Min. 101' : '—');
+  if (pf) pf.textContent = f >= 101 ? 'FYG-' + yy + '-' + f : (f > 0 ? '⚠ Min. 101' : '—');
 }
 
 function yenSave() {
   const d = parseInt(document.getElementById('yen-devis-n')?.value);
   const f = parseInt(document.getElementById('yen-facture-n')?.value);
   let changed = false;
-  if (d >= 1) {
+  if (d >= 101) {
+    localStorage.setItem('yama_num_floor_devis', d.toString());
     localStorage.setItem(LS.devisCounter, d.toString());
     try { syncPushCounter('devis', d); } catch(e){}
     changed = true;
+  } else if (d >= 1 && d < 101) {
+    showToast('Le numéro de devis doit être ≥ 101', 'error');
+    return;
   }
-  if (f >= 1) {
+  if (f >= 101) {
+    localStorage.setItem('yama_num_floor_facture', f.toString());
     localStorage.setItem(LS.factureCounter, f.toString());
     try { syncPushCounter('facture', f); } catch(e){}
     changed = true;
+  } else if (f >= 1 && f < 101) {
+    showToast('Le numéro de facture doit être ≥ 101', 'error');
+    return;
   }
   if (changed) {
-    updateNumDisplay();
+    if (typeof updateNumDisplay === 'function') updateNumDisplay();
     showToast('✓ Numérotation mise à jour — Devis: YG-' + getAppYear() + '-' + d + '  Facture: FYG-' + getAppYear() + '-' + f, 'success');
   }
   document.getElementById('yama-editnums-modal')?.classList.remove('show');
@@ -7556,14 +7602,21 @@ const FIELDS = [
   'clientNom','clientTel','clientEmail','clientAdresse','clientCP','clientVille',
   'chantierRef','chantierAdresse','chantierCP','chantierVille','ageBatiment',
   'dateEmission','dateValidite','remarques','coutMateriaux','autresCouts','stNom','notesInternes',
-  'remisePct','remiseEur','remiseMotif'
+  'remisePct','remiseEur','remiseMotif','acompteVerse'
 ];
 
 function collectState() {
   const data = {};
-  FIELDS.forEach(f => { data[f] = document.getElementById(f).value; });
+  FIELDS.forEach(f => {
+    const el = document.getElementById(f);
+    data[f] = el ? el.value : '';
+  });
   data.lignesClient = state.lignesClient;
   data.lignesST = state.lignesST;
+  /* Acompte versé : aussi depuis le fallback window si champ vide */
+  if (!data.acompteVerse && window.__ytfAcompteVerse > 0) {
+    data.acompteVerse = String(window.__ytfAcompteVerse);
+  }
   return data;
 }
 
@@ -7663,8 +7716,8 @@ function buildPdfHtml(docType, data, meta) {
     </p>
     <p>•  <strong>Remarques :</strong> ${remarquesText}</p>
   ` : `
-    <p>•  Facture à régler sous 8 jours à compter de la date d'émission.</p>
-    <p class="bold">•  Acompte déjà versé : ${fmt(acompte)}  —  Solde restant dû : ${fmt(totalTTC - acompte)}.</p>
+    <p>•  Facture à régler sous <strong>5 jours ouvrables</strong> à compter de la date d'émission.</p>
+    ${data.acompteVerse && parseFloat(data.acompteVerse) > 0 ? `<p class="bold">•  Acompte déjà versé : ${fmt(parseFloat(data.acompteVerse))}  —  <span style="color:#c9a84c;">Solde restant dû : ${fmt(totalTTC - parseFloat(data.acompteVerse))}.</span></p>` : ''}
     <p>•  Paiement par virement bancaire — merci de préciser le numéro de facture en communication.</p>
     <p class="bold">•  Tout retard entraînera des pénalités de 10% à partir du 5ème jour ouvrable.</p>
     <p>•  <strong>Remarques :</strong> ${remarquesText}</p>
@@ -14680,7 +14733,7 @@ order by table_name;</textarea>
         const btn = document.createElement('button');
         btn.className = 'btn-action travaux v12-smart-invoice-btn';
         btn.textContent = '🧾 Transformer en facture';
-        btn.onclick = () => openSmartInvoiceModal(doc);
+        btn.onclick = () => (window.openSmartInvoiceModal || openSmartInvoiceModal)(doc);
         actions.appendChild(btn);
       }
     });
@@ -21160,7 +21213,8 @@ order by table_name;</textarea>
       if (!p || p.year !== yy || p.type !== type) return;
       used.add(p.n);
     });
-    let n = type === 'facture' ? BASE_FACTURE : BASE_DEVIS;
+    const manualFloor = parseInt(localStorage.getItem('yama_num_floor_' + type) || '0') || 0;
+    let n = Math.max(type === 'facture' ? BASE_FACTURE : BASE_DEVIS, manualFloor);
     while (used.has(n)) n += 1;
     return n;
   }
@@ -30877,80 +30931,308 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
-   VFIX_2026C — Transformer en facture : confirm → Calculateur → Générer
+   VFIX_2026C+D — Transformer en facture : Modal HTML → Calculateur
    ─────────────────────────────────────────────────────────────────────
-   Remplace openSmartInvoiceModal par un flux simple :
-     1) Boîte de confirmation
-     2) Charge toutes les données du devis dans le Calculateur
-        (lignesClient, lignesST, tous les champs FIELDS)
-     3) Passe la date d'émission à aujourd'hui (facture ≠ devis)
-     4) Bascule sur l'onglet Calculateur
-     5) Toast "→ cliquez Générer Facture"
-   Cela résout aussi la disparition des articles (lignesClient) lors
-   de la transformation, car generatePDF('facture') lit state.lignesClient
-   qui vient d'être rempli par loadFromHistory().
+   Remplace openSmartInvoiceModal par un flux visuel complet :
+     1) Modal HTML stylisé avec résumé du devis (client, lignes, montant)
+     2) Champ "Acompte versé" optionnel
+     3) OK → charge TOUT le devis dans le Calculateur (lignesClient, FIELDS)
+     4) Date d'émission = aujourd'hui
+     5) Bascule Calculateur + highlight bouton "Générer Facture"
+   Fix: V12 cockpit boutons → window.openSmartInvoiceModal (via direct edit)
+   Fix: firstFree respecte yama_num_floor_* (via direct edit)
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   if (window.__YAMA_VFIX_2026C__) return;
   window.__YAMA_VFIX_2026C__ = true;
 
-  function todayISO(){ return new Date().toISOString().slice(0,10); }
+  const todayISO = () => new Date().toISOString().slice(0,10);
+  const eur = n => new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(n||0);
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
+  /* ── Injection CSS du modal facture ─────────────────────────────── */
+  const style = document.createElement('style');
+  style.textContent = `
+    #yama-to-facture-overlay {
+      position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:10020;
+      display:flex;align-items:center;justify-content:center;
+      opacity:0;transition:opacity .2s;pointer-events:none;
+    }
+    #yama-to-facture-overlay.show { opacity:1; pointer-events:all; }
+    #yama-to-facture-box {
+      background:var(--surface,#1a1a2e);border:1px solid rgba(201,168,76,.25);
+      border-radius:14px;width:min(540px,94vw);max-height:90vh;
+      overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6);
+      transform:translateY(16px);transition:transform .2s;
+    }
+    #yama-to-facture-overlay.show #yama-to-facture-box { transform:translateY(0); }
+    .ytf-head {
+      padding:18px 20px 14px;border-bottom:1px solid rgba(255,255,255,.06);
+      background:linear-gradient(135deg,rgba(201,168,76,.12),transparent);
+      display:flex;align-items:center;justify-content:space-between;
+    }
+    .ytf-title { font-size:16px;font-weight:700;color:var(--gold,#c9a84c); }
+    .ytf-close { background:none;border:none;color:var(--text2,#888);font-size:20px;cursor:pointer;line-height:1;padding:4px 8px;border-radius:6px; }
+    .ytf-close:hover { color:var(--text,#fff);background:rgba(255,255,255,.07); }
+    .ytf-body { padding:18px 20px; }
+    .ytf-client-card {
+      background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+      border-radius:10px;padding:12px 14px;margin-bottom:16px;
+    }
+    .ytf-client-name { font-size:15px;font-weight:700;color:var(--text,#fff);margin-bottom:2px; }
+    .ytf-client-sub { font-size:12px;color:var(--text2,#888); }
+    .ytf-lines-table { width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12px; }
+    .ytf-lines-table th { text-align:left;padding:5px 6px;color:var(--text2,#888);font-size:10px;text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid rgba(255,255,255,.07); }
+    .ytf-lines-table td { padding:6px 6px;color:var(--text,#fff);border-bottom:1px solid rgba(255,255,255,.04); }
+    .ytf-lines-table td.r { text-align:right; }
+    .ytf-total-row { display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.2);border-radius:8px;margin-bottom:16px; }
+    .ytf-total-label { font-size:12px;color:var(--text2,#888);font-weight:600; }
+    .ytf-total-val { font-size:18px;font-weight:800;color:var(--gold,#c9a84c); }
+    .ytf-acompte-row { margin-bottom:16px; }
+    .ytf-acompte-label { font-size:12px;color:var(--text2,#888);margin-bottom:6px;display:flex;align-items:center;gap:8px; }
+    .ytf-acompte-toggle { display:flex;gap:8px; }
+    .ytf-acompte-toggle button {
+      flex:1;padding:7px 10px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;
+      border:1px solid rgba(255,255,255,.1);background:transparent;color:var(--text2,#888);transition:all .15s;
+    }
+    .ytf-acompte-toggle button.active-oui {
+      background:rgba(82,199,127,.15);border-color:rgba(82,199,127,.4);color:#52c77f;
+    }
+    .ytf-acompte-toggle button.active-non {
+      background:rgba(255,80,80,.1);border-color:rgba(255,80,80,.3);color:#ff9696;
+    }
+    #ytf-acompte-amount-wrap {
+      margin-top:10px;display:none;
+    }
+    #ytf-acompte-amount-wrap.show { display:block; }
+    #ytf-acompte-amount {
+      width:100%;background:var(--input-bg,rgba(255,255,255,.05));
+      border:1px solid rgba(201,168,76,.3);border-radius:8px;
+      padding:9px 12px;color:var(--gold,#c9a84c);font-size:15px;font-weight:700;
+      outline:none;box-sizing:border-box;
+    }
+    .ytf-footer { display:flex;gap:10px;justify-content:flex-end;padding-top:14px;border-top:1px solid rgba(255,255,255,.06); }
+    .ytf-btn-cancel {
+      padding:10px 20px;font-size:13px;border-radius:8px;
+      background:transparent;border:1px solid rgba(255,255,255,.12);color:var(--text2,#888);cursor:pointer;
+    }
+    .ytf-btn-go {
+      padding:10px 24px;font-size:13px;font-weight:700;border-radius:8px;
+      background:linear-gradient(135deg,rgba(82,199,127,.25),rgba(82,199,127,.12));
+      border:1px solid rgba(82,199,127,.4);color:#52c77f;cursor:pointer;
+      transition:all .15s;
+    }
+    .ytf-btn-go:hover { background:rgba(82,199,127,.3);transform:translateY(-1px); }
+  `;
+  document.head.appendChild(style);
+
+  /* ── Crée le modal DOM une fois ───────────────────────────────────── */
+  function ensureModal(){
+    if (document.getElementById('yama-to-facture-overlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'yama-to-facture-overlay';
+    overlay.innerHTML = `
+      <div id="yama-to-facture-box">
+        <div class="ytf-head">
+          <span class="ytf-title">🧾 Transformer en Facture</span>
+          <button class="ytf-close" onclick="ytfClose()">×</button>
+        </div>
+        <div class="ytf-body" id="ytf-body"></div>
+      </div>`;
+    overlay.addEventListener('click', e => { if (e.target === overlay) ytfClose(); });
+    document.body.appendChild(overlay);
+  }
+
+  window.ytfClose = function(){
+    const o = document.getElementById('yama-to-facture-overlay');
+    if (o) o.classList.remove('show');
+  };
+
+  /* Bascule acompte versé */
+  window.ytfToggleAcompte = function(val){
+    const wrap = document.getElementById('ytf-acompte-amount-wrap');
+    const btnO = document.getElementById('ytf-btn-oui');
+    const btnN = document.getElementById('ytf-btn-non');
+    if (!wrap) return;
+    if (val === 'oui') {
+      wrap.classList.add('show');
+      btnO.className = 'active-oui';
+      btnN.className = '';
+    } else {
+      wrap.classList.remove('show');
+      btnO.className = '';
+      btnN.className = 'active-non';
+    }
+  };
+
+  /* Charge le devis et génère */
+  window.ytfGo = function(docNum){
+    const acompteWrap = document.getElementById('ytf-acompte-amount-wrap');
+    const acompteInput = document.getElementById('ytf-acompte-amount');
+    const acompteVerse = (acompteWrap && acompteWrap.classList.contains('show') && acompteInput)
+      ? (parseFloat(acompteInput.value) || 0)
+      : 0;
+
+    ytfClose();
+
+    /* Charge toutes les données dans le Calculateur */
+    if (typeof loadFromHistoryByNum === 'function') {
+      loadFromHistoryByNum(docNum);
+    }
+
+    setTimeout(function(){
+      /* Date d'émission = aujourd'hui */
+      const dateField = document.getElementById('dateEmission');
+      if (dateField) dateField.value = todayISO();
+
+      /* Échéance = aujourd'hui + 5 jours ouvrables */
+      function addWorkDays(date, days) {
+        let d = new Date(date), added = 0;
+        while (added < days) {
+          d.setDate(d.getDate() + 1);
+          if (d.getDay() !== 0 && d.getDay() !== 6) added++;
+        }
+        return d.toISOString().slice(0, 10);
+      }
+      const dateValiditeField = document.getElementById('dateValidite');
+      if (dateValiditeField) dateValiditeField.value = addWorkDays(new Date(), 5);
+
+      /* Stocke l'acompte pour le PDF */
+      if (acompteVerse > 0) {
+        const aField = document.getElementById('acompteVerse');
+        if (aField) aField.value = acompteVerse.toFixed(2);
+        else window.__ytfAcompteVerse = acompteVerse;
+      } else {
+        const aField = document.getElementById('acompteVerse');
+        if (aField) aField.value = '';
+        window.__ytfAcompteVerse = 0;
+      }
+
+      if (typeof showToast === 'function') {
+        showToast('✓ Devis chargé — vérifiez les données puis cliquez "Générer la facture"', '');
+      }
+
+      /* Highlight du bouton Générer Facture */
+      const btnFacture = document.getElementById('btnGenFacture');
+      if (btnFacture) {
+        btnFacture.style.transition = 'box-shadow .2s, transform .2s';
+        btnFacture.style.boxShadow = '0 0 0 4px rgba(82,199,127,.6), 0 0 20px rgba(82,199,127,.25)';
+        btnFacture.style.transform = 'scale(1.03)';
+        setTimeout(function(){
+          btnFacture.style.boxShadow = '';
+          btnFacture.style.transform = '';
+        }, 3000);
+      }
+    }, 100);
+  };
+
+  /* ── Override openSmartInvoiceModal ──────────────────────────────── */
   function overrideOpenSmartInvoiceModal(){
-    /* Vérifie que les fonctions dépendantes sont disponibles */
     if (typeof loadFromHistoryByNum !== 'function' || typeof getHistory !== 'function') {
       setTimeout(overrideOpenSmartInvoiceModal, 200);
       return;
     }
 
+    ensureModal();
+
     window.openSmartInvoiceModal = function(docNum){
       if (!docNum) return;
 
-      /* 1. Récupère l'entrée pour afficher le nom client dans le confirm */
       const hist = (typeof getHistory === 'function') ? getHistory() : [];
       const entry = hist.find(h => h.docNum === docNum);
-      const clientLabel = (entry && entry.clientNom) ? entry.clientNom : '';
-      const montantLabel = (entry && entry.totalTTC) ? ' · ' + new Intl.NumberFormat('fr-BE', {style:'currency',currency:'EUR'}).format(entry.totalTTC) : '';
 
-      const msg = 'Transformer le devis ' + docNum + ' en facture ?\n'
-                + (clientLabel ? 'Client : ' + clientLabel + '\n' : '')
-                + (montantLabel ? 'Montant : ' + montantLabel.slice(3) + '\n' : '')
-                + '\nToutes les informations seront chargées dans le Calculateur.';
+      /* Fallback : essaie aussi dans yama_history si non trouvé dans V32 */
+      const entry2 = entry || (function(){
+        try {
+          const raw = JSON.parse(localStorage.getItem('yama_history') || '[]');
+          return raw.find(h => h && h.docNum === docNum);
+        } catch(e) { return null; }
+      })();
 
-      /* 2. Boîte de confirmation native */
-      if (!confirm(msg)) return;
+      const h = entry2 || {};
+      const clientNom = h.clientNom || '—';
+      const chantierRef = h.chantierRef || h.chantierVille || '';
+      const totalTTC = h.totalTTC || 0;
+      const lignes = h.lignesClient || [];
 
-      /* 3. Charge le devis dans le Calculateur (lignesClient + tous champs) */
-      loadFromHistoryByNum(docNum);
+      /* Construit le HTML du corps */
+      const lignesHtml = lignes.length ? `
+        <table class="ytf-lines-table">
+          <thead><tr>
+            <th>Description</th><th style="text-align:center">Qté</th>
+            <th style="text-align:center">Unité</th><th class="r">P.U.</th><th class="r">Total HT</th>
+          </tr></thead>
+          <tbody>
+            ${lignes.map(l => {
+              const ht = (parseFloat(l.qte)||0) * (parseFloat(l.pu)||0);
+              return `<tr>
+                <td>${esc(l.desc||'')}</td>
+                <td style="text-align:center">${esc(l.qte||'')}</td>
+                <td style="text-align:center">${esc(l.unit||'')}</td>
+                <td class="r">${l.pu ? eur(parseFloat(l.pu)) : ''}</td>
+                <td class="r">${ht>0 ? eur(ht) : ''}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      ` : `<div style="color:var(--text2);font-size:12px;margin-bottom:16px;padding:10px;background:rgba(255,165,0,.08);border:1px solid rgba(255,165,0,.2);border-radius:8px;">
+        ⚠️ Aucune ligne détectée dans ce devis. Les données seront chargées dans le Calculateur.
+      </div>`;
 
-      /* 4. Passe la date d'émission à aujourd'hui (date de la facture) */
-      setTimeout(function(){
-        const dateField = document.getElementById('dateEmission');
-        if (dateField) dateField.value = todayISO();
+      const bodyEl = document.getElementById('ytf-body');
+      if (bodyEl) bodyEl.innerHTML = `
+        <div class="ytf-client-card">
+          <div class="ytf-client-name">${esc(clientNom)}</div>
+          <div class="ytf-client-sub">${esc(docNum)}${chantierRef ? '  •  ' + esc(chantierRef) : ''}</div>
+        </div>
 
-        /* 5. Toast explicatif */
-        if (typeof showToast === 'function') {
-          showToast('✓ Devis chargé — cliquez "Générer la facture" pour créer la facture', '');
-        }
+        ${lignesHtml}
 
-        /* Met en évidence visuellement le bouton Générer Facture */
-        const btnFacture = document.getElementById('btnGenFacture');
-        if (btnFacture) {
-          btnFacture.style.transition = 'box-shadow .2s';
-          btnFacture.style.boxShadow = '0 0 0 3px rgba(82,199,127,.7)';
-          setTimeout(function(){ btnFacture.style.boxShadow = ''; }, 2500);
-        }
-      }, 80);
+        <div class="ytf-total-row">
+          <span class="ytf-total-label">TOTAL TTC</span>
+          <span class="ytf-total-val">${eur(totalTTC)}</span>
+        </div>
+
+        <div class="ytf-acompte-row">
+          <div class="ytf-acompte-label">💳 Un acompte a-t-il déjà été versé ?</div>
+          <div class="ytf-acompte-toggle">
+            <button id="ytf-btn-oui" onclick="ytfToggleAcompte('oui')">✓ Oui, acompte versé</button>
+            <button id="ytf-btn-non" onclick="ytfToggleAcompte('non')" class="active-non">✗ Non</button>
+          </div>
+          <div id="ytf-acompte-amount-wrap">
+            <input id="ytf-acompte-amount" type="number" min="0" step="0.01"
+              placeholder="Montant de l'acompte versé (€)">
+          </div>
+        </div>
+
+        <div class="ytf-footer">
+          <button class="ytf-btn-cancel" onclick="ytfClose()">Annuler</button>
+          <button class="ytf-btn-go" onclick="ytfGo('${esc(docNum)}')">
+            ✅ Charger dans le Calculateur
+          </button>
+        </div>
+      `;
+
+      const overlay = document.getElementById('yama-to-facture-overlay');
+      if (overlay) overlay.classList.add('show');
     };
 
-    /* Expose aussi sous l'alias utilisé dans certains patches */
     window.openTravauxModal = window.openSmartInvoiceModal;
-
-    console.info('[YAMA VFIX_2026C] ✅ openSmartInvoiceModal → flux confirm + Calculateur');
+    console.info('[YAMA VFIX_2026C+D] ✅ openSmartInvoiceModal → modal HTML + Calculateur');
   }
 
-  /* Lance après le boot V12 (650 ms) + marge */
-  setTimeout(overrideOpenSmartInvoiceModal, 900);
+  /* Lance après le boot V12 (650ms) + marge */
+  setTimeout(overrideOpenSmartInvoiceModal, 950);
+
+  /* ── Sécurité numéro : s'assure que les compteurs sont >= 101 ───── */
+  (function fixCounterFloor(){
+    try {
+      const fc = parseInt(localStorage.getItem('yama_counter_facture') || '0');
+      if (fc > 0 && fc < 101) localStorage.setItem('yama_counter_facture', '101');
+      const dc = parseInt(localStorage.getItem('yama_counter_devis') || '0');
+      if (dc > 0 && dc < 101) localStorage.setItem('yama_counter_devis', '101');
+    } catch(e){}
+  })();
 })();
 </script>
 </body>
