@@ -376,8 +376,12 @@ function AuthProvider({ children }) {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  const signIn = async (email, password) => {
-    const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
+  const signIn = async (identifier, password) => {
+    // Convertit l'identifiant court (ex: "YG-T") en email Supabase (@aboupro.app)
+    const email = identifier.trim().includes('@')
+      ? identifier.trim()
+      : identifier.trim().toLowerCase().replace(/\s+/g, '-') + '@aboupro.app';
+    const { error } = await sb.auth.signInWithPassword({ email, password });
     if (error) throw error;
   };
   const signOut = async () => { await sb.auth.signOut(); setProfile(null); };
@@ -387,27 +391,59 @@ function AuthProvider({ children }) {
 
 function LoginScreen() {
   const { signIn } = useAuth();
-  const [email, setEmail] = useState(''); const [pw, setPw] = useState('');
+  const [id, setId] = useState(''); const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   const submit = async (e) => {
     e.preventDefault(); setErr(''); setBusy(true);
-    try { await signIn(email, pw); } catch (e) { setErr(e.message === 'Invalid login credentials' ? 'Email ou mot de passe incorrect.' : e.message); }
+    try { await signIn(id, pw); }
+    catch (e) { setErr(e.message === 'Invalid login credentials' ? 'Identifiant ou mot de passe incorrect.' : e.message); }
     setBusy(false);
   };
   return (
     <div className="min-h-full flex items-center justify-center p-5">
       <div className="w-full max-w-sm fadein">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-ink2 border border-line flex items-center justify-center text-brand mb-3"><Ico.truck size={34} /></div>
-          <h1 className="text-2xl font-extrabold tracking-tight">ABOU PRO</h1>
-          <p className="text-sm text-slate-500">Gestion de tournées logistiques</p>
+          <div className="w-20 h-20 rounded-3xl bg-ink2 border border-line flex items-center justify-center text-brand mb-4 shadow-lg">
+            <Ico.truck size={42} />
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight">ABOU PRO</h1>
+          <p className="text-sm text-slate-500 mt-1">Gestion de tournées logistiques</p>
         </div>
-        <Card className="p-6">
+        <Card className="p-6 shadow-2xl">
           <form onSubmit={submit} className="space-y-4">
-            <Field label="Email"><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="vous@exemple.com" autoComplete="username" required /></Field>
-            <Field label="Mot de passe"><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="••••••••" autoComplete="current-password" required /></Field>
-            {err && <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{err}</div>}
-            <Btn type="submit" size="lg" className="w-full" disabled={busy}>{busy ? <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full spin" /> : 'Se connecter'}</Btn>
+            <Field label="Identifiant">
+              <Input
+                type="text"
+                value={id}
+                onChange={(e) => setId(e.target.value)}
+                placeholder="Ex : YG-T"
+                autoComplete="username"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                required
+              />
+            </Field>
+            <Field label="Mot de passe">
+              <Input
+                type="password"
+                value={pw}
+                onChange={(e) => setPw(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                required
+              />
+            </Field>
+            {err && (
+              <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2 flex items-center gap-2">
+                <Ico.alert size={16} className="flex-shrink-0" />{err}
+              </div>
+            )}
+            <Btn type="submit" size="lg" className="w-full mt-2" disabled={busy}>
+              {busy
+                ? <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full spin" />
+                : <><Ico.right size={18} /> Se connecter</>}
+            </Btn>
           </form>
         </Card>
         <p className="text-center text-xs text-slate-600 mt-5">Accès réservé — comptes créés par l'administrateur.</p>
@@ -600,12 +636,15 @@ function NewDriverModal({ open, onClose, onCreated }) {
 
   const create = async () => {
     setErr('');
-    if (!f.email || !f.password || f.password.length < 6) { setErr('Email et mot de passe (min. 6 caractères) requis.'); return; }
+    if (!f.email || !f.password || f.password.length < 6) { setErr('Identifiant et mot de passe (min. 6 caractères) requis.'); return; }
     setBusy(true);
+    // Convertit l'identifiant court en email (@aboupro.app) comme pour la connexion
+    const emailAddr = f.email.trim().includes('@')
+      ? f.email.trim()
+      : f.email.trim().toLowerCase().replace(/\s+/g, '-') + '@aboupro.app';
     try {
-      // Client temporaire isolé : ne touche pas la session admin
       const tmp = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false, storageKey: 'aboupro_tmp_' + Date.now() } });
-      const { data, error } = await tmp.auth.signUp({ email: f.email.trim(), password: f.password });
+      const { data, error } = await tmp.auth.signUp({ email: emailAddr, password: f.password });
       if (error) throw error;
       const userId = data.user && data.user.id;
       if (!userId) throw new Error("Inscription impossible (l'email existe peut-être déjà).");
@@ -613,7 +652,7 @@ function NewDriverModal({ open, onClose, onCreated }) {
       const { error: e2 } = await sb.from('users_profiles').insert({ user_id: userId, name: f.name, phone: f.phone, role: 'chauffeur', active: true });
       try { await tmp.auth.signOut(); } catch (e) {}
       if (e2) throw e2;
-      setDone({ email: f.email, password: f.password });
+      setDone({ email: f.email.trim(), password: f.password });
       toast('Chauffeur créé ✓', 'success'); onCreated && onCreated();
     } catch (e) { setErr(e.message || String(e)); }
     setBusy(false);
@@ -625,19 +664,21 @@ function NewDriverModal({ open, onClose, onCreated }) {
         <div className="space-y-4">
           <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
             <div className="flex items-center gap-2 text-emerald-300 font-semibold mb-3"><Ico.check /> Compte créé</div>
-            <p className="text-sm text-slate-400 mb-3">Transmets ces identifiants au chauffeur :</p>
+            <p className="text-sm text-slate-400 mb-3">Transmets ces accès au chauffeur :</p>
             <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between bg-ink3 rounded-lg px-3 py-2"><span className="text-slate-400">Email</span><span className="font-mono">{done.email}</span></div>
+              <div className="flex items-center justify-between bg-ink3 rounded-lg px-3 py-2"><span className="text-slate-400">Identifiant</span><span className="font-mono font-bold">{done.email}</span></div>
               <div className="flex items-center justify-between bg-ink3 rounded-lg px-3 py-2"><span className="text-slate-400">Mot de passe</span><span className="font-mono">{done.password}</span></div>
             </div>
-            <Btn variant="ghost" size="sm" className="w-full mt-3" onClick={() => { navigator.clipboard.writeText(`ABOU PRO\nEmail: ${done.email}\nMot de passe: ${done.password}`); toast('Copié ✓', 'success'); }}><Ico.copy size={16} /> Copier les identifiants</Btn>
+            <Btn variant="ghost" size="sm" className="w-full mt-3" onClick={() => { navigator.clipboard.writeText(`ABOU PRO\nIdentifiant: ${done.email}\nMot de passe: ${done.password}`); toast('Copié ✓', 'success'); }}><Ico.copy size={16} /> Copier les accès</Btn>
           </div>
           <Btn className="w-full" onClick={onClose}>Terminé</Btn>
         </div>
       ) : (
         <div className="space-y-4">
           <Field label="Nom complet"><Input value={f.name} onChange={set('name')} placeholder="Jean Dupont" /></Field>
-          <Field label="Email (identifiant de connexion)"><Input type="email" value={f.email} onChange={set('email')} placeholder="jean@exemple.com" /></Field>
+          <Field label="Identifiant" hint="Court et sans espaces — ex: JEAN-D, CHAUFFEUR1">
+            <Input type="text" value={f.email} onChange={set('email')} placeholder="Ex : JEAN-D" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+          </Field>
           <Field label="Téléphone"><Input value={f.phone} onChange={set('phone')} placeholder="+32 …" /></Field>
           <Field label="Mot de passe temporaire">
             <div className="flex gap-2"><Input value={f.password} onChange={set('password')} /><Btn variant="ghost" size="sm" onClick={genPw}><Ico.refresh size={16} /></Btn></div>
