@@ -1,0 +1,21 @@
+{
+  "name": "ABOU PRO — Tournées logistiques",
+  "short_name": "ABOU PRO",
+  "description": "Gestion et optimisation de tournées logistiques",
+  "start_url": "./abou_pro.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1120",
+  "theme_color": "#0b1120",
+  "categories": ["business", "productivity", "navigation"],
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%230b1120'/%3E%3Crect x='110' y='196' width='200' height='130' rx='14' fill='%233b82f6'/%3E%3Cpath d='M310 232h70l42 52v42h-112z' fill='%23f59e0b'/%3E%3Ccircle cx='176' cy='350' r='34' fill='%23e2e8f0'/%3E%3Ccircle cx='176' cy='350' r='15' fill='%230b1120'/%3E%3Ccircle cx='356' cy='350' r='34' fill='%23e2e8f0'/%3E%3Ccircle cx='356' cy='350' r='15' fill='%230b1120'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
