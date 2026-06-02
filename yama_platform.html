@@ -6987,9 +6987,9 @@ async function syncCounters() {
     if (error) throw error;
 
     const localDevis = parseInt(localStorage.getItem(LS.devisCounter) || '101');
-    const localFacture = parseInt(localStorage.getItem(LS.factureCounter) || '1');
+    const localFacture = parseInt(localStorage.getItem(LS.factureCounter) || '101');
 
-    let cloudDevis = 101, cloudFacture = 1;
+    let cloudDevis = 101, cloudFacture = 101;
     for (const row of data || []) {
       if (row.id === 'devis') cloudDevis = row.value;
       if (row.id === 'facture') cloudFacture = row.value;
@@ -7160,8 +7160,8 @@ function getDevisNum() {
   return 'YG-' + getAppYear() + '-' + n;
 }
 function getFactureNum() {
-  const n = parseInt(localStorage.getItem(LS.factureCounter) || '1');
-  return 'FYG-' + getAppYear() + '-' + String(n).padStart(3, '0');
+  const n = parseInt(localStorage.getItem(LS.factureCounter) || '101');
+  return 'FYG-' + getAppYear() + '-' + n;
 }
 function incrementDevisNum() {
   const n = parseInt(localStorage.getItem(LS.devisCounter) || '101');
@@ -7171,7 +7171,7 @@ function incrementDevisNum() {
   syncPushCounter('devis', next);
 }
 function incrementFactureNum() {
-  const n = parseInt(localStorage.getItem(LS.factureCounter) || '1');
+  const n = parseInt(localStorage.getItem(LS.factureCounter) || '101');
   const next = n + 1;
   localStorage.setItem(LS.factureCounter, next.toString());
   updateNumDisplay();
@@ -7184,16 +7184,16 @@ function openYearClose() {
   const nextYear = currentYear + 1;
   const nextY2 = String(nextYear).slice(2);
   const histCount = getHistory().length;
-  if (!confirm("Cloture annee " + currentYear + " ?\n" + histCount + " documents archives.\nNumerotation YG-" + nextY2 + "-101 / FYG-" + nextY2 + "-001.\nConfirmer ?")) return;
+  if (!confirm("Cloture annee " + currentYear + " ?\n" + histCount + " documents archives.\nNumerotation YG-" + nextY2 + "-101 / FYG-" + nextY2 + "-101.\nConfirmer ?")) return;
   const hist = getHistory();
   const archiveKey = 'yama_history_archive_' + currentYear;
   const prev = JSON.parse(localStorage.getItem(archiveKey) || '[]');
   localStorage.setItem(archiveKey, JSON.stringify([...prev, ...hist]));
   localStorage.setItem(LS.devisCounter, '101');
-  localStorage.setItem(LS.factureCounter, '1');
+  localStorage.setItem(LS.factureCounter, '101');
   localStorage.setItem(LS.history, '[]');
   syncPushCounter('devis', 101);
-  syncPushCounter('facture', 1);
+  syncPushCounter('facture', 101);
   updateNumDisplay(); renderHistory(); renderDevisTab(); renderSTTab(); renderAnalyse();
   showToast('✓ Clôture ' + currentYear + ' — numérotation ' + nextY2 + ' active', 'success');
 }
@@ -7202,28 +7202,104 @@ function updateNumDisplay() {
     'Devis: ' + getDevisNum() + '  •  Facture: ' + getFactureNum();
 }
 function editNums() {
-  // Propose year close if current year different from numbering year
+  const yy = getAppYear();
   const d = parseInt(localStorage.getItem(LS.devisCounter) || '101');
-  const f = parseInt(localStorage.getItem(LS.factureCounter) || '1');
-  const input = prompt(
-    'Modifier les numéros :\n\n' +
-    'Format : [numéro devis],[numéro facture]\n' +
-    'Ex : "105,3" → prochain devis YG-' + getAppYear() + '-105, prochaine facture FYG-' + getAppYear() + '-003\n\n' +
-    'Laisse un seul nombre pour ne changer que le devis.',
-    d + ',' + f
-  );
-  if (input === null) return;
-  const parts = input.split(',').map(x => parseInt(x.trim()));
-  if (parts[0] && parts[0] > 0) {
-    localStorage.setItem(LS.devisCounter, parts[0].toString());
-    syncPushCounter('devis', parts[0]);
+  const f = parseInt(localStorage.getItem(LS.factureCounter) || '101');
+
+  // Build or reuse the numbering modal
+  let modal = document.getElementById('yama-editnums-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'yama-editnums-modal';
+    modal.className = 'overlay';
+    modal.style.cssText = 'z-index:10010;';
+    modal.innerHTML = `
+      <div class="modal" style="max-width:480px;">
+        <div class="modal-head">
+          <div class="modal-title">🔢 Numérotation des documents</div>
+          <button class="modal-close" onclick="document.getElementById('yama-editnums-modal').classList.remove('show')">×</button>
+        </div>
+        <div class="modal-body">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:18px;line-height:1.6;">
+            Modifie le <strong>prochain numéro</strong> à utiliser pour chaque type de document.<br>
+            Les numéros déjà utilisés sont automatiquement sautés.
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+            <div>
+              <label style="font-size:11px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">📄 Devis</label>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Préfixe : <code style="color:var(--gold);">YG-<span id="yen-yy-devis"></span>-</code></div>
+              <input id="yen-devis-n" type="number" min="101" step="1"
+                style="width:100%;background:var(--input-bg,rgba(255,255,255,.05));border:1px solid var(--input-bd,rgba(255,255,255,.12));border-radius:7px;padding:9px 12px;color:var(--text);font-size:15px;font-weight:700;outline:none;box-sizing:border-box;"
+                oninput="yenPreview()">
+              <div style="margin-top:6px;font-size:12px;color:var(--text2);">→ Prochain : <strong id="yen-preview-devis" style="color:var(--gold);">—</strong></div>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">🧾 Facture</label>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Préfixe : <code style="color:var(--gold);">FYG-<span id="yen-yy-facture"></span>-</code></div>
+              <input id="yen-facture-n" type="number" min="101" step="1"
+                style="width:100%;background:var(--input-bg,rgba(255,255,255,.05));border:1px solid var(--input-bd,rgba(255,255,255,.12));border-radius:7px;padding:9px 12px;color:var(--text);font-size:15px;font-weight:700;outline:none;box-sizing:border-box;"
+                oninput="yenPreview()">
+              <div style="margin-top:6px;font-size:12px;color:var(--text2);">→ Prochain : <strong id="yen-preview-facture" style="color:var(--gold);">—</strong></div>
+            </div>
+          </div>
+
+          <div style="background:rgba(201,168,76,.07);border:1px solid rgba(201,168,76,.2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text2);line-height:1.65;margin-bottom:18px;">
+            💡 Les numéros déjà utilisés dans l'historique sont <strong>automatiquement sautés</strong>.<br>
+            Exemple : si YG-${yy}-103 existe déjà, le prochain devis sera YG-${yy}-104.
+          </div>
+
+          <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button class="btn-secondary" onclick="document.getElementById('yama-editnums-modal').classList.remove('show')" style="padding:9px 20px;font-size:13px;">Annuler</button>
+            <button onclick="yenSave()" style="padding:9px 22px;font-size:13px;border-radius:8px;background:rgba(201,168,76,.2);border:1px solid rgba(201,168,76,.5);color:var(--gold);font-weight:700;cursor:pointer;">💾 Enregistrer</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('show'); });
   }
-  if (parts[1] && parts[1] > 0) {
-    localStorage.setItem(LS.factureCounter, parts[1].toString());
-    syncPushCounter('facture', parts[1]);
+
+  // Fill current values
+  const yy2 = getAppYear();
+  ['yen-yy-devis','yen-yy-facture'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = yy2;
+  });
+  document.getElementById('yen-devis-n').value = d;
+  document.getElementById('yen-facture-n').value = f;
+  yenPreview();
+  modal.classList.add('show');
+}
+
+function yenPreview() {
+  const yy = getAppYear();
+  const d = parseInt(document.getElementById('yen-devis-n')?.value) || 0;
+  const f = parseInt(document.getElementById('yen-facture-n')?.value) || 0;
+  const pd = document.getElementById('yen-preview-devis');
+  const pf = document.getElementById('yen-preview-facture');
+  if (pd) pd.textContent = d > 0 ? 'YG-' + yy + '-' + d : '—';
+  if (pf) pf.textContent = f > 0 ? 'FYG-' + yy + '-' + f : '—';
+}
+
+function yenSave() {
+  const d = parseInt(document.getElementById('yen-devis-n')?.value);
+  const f = parseInt(document.getElementById('yen-facture-n')?.value);
+  let changed = false;
+  if (d >= 1) {
+    localStorage.setItem(LS.devisCounter, d.toString());
+    try { syncPushCounter('devis', d); } catch(e){}
+    changed = true;
   }
-  updateNumDisplay();
-  showToast('✓ Numéros mis à jour', 'success');
+  if (f >= 1) {
+    localStorage.setItem(LS.factureCounter, f.toString());
+    try { syncPushCounter('facture', f); } catch(e){}
+    changed = true;
+  }
+  if (changed) {
+    updateNumDisplay();
+    showToast('✓ Numérotation mise à jour — Devis: YG-' + getAppYear() + '-' + d + '  Facture: FYG-' + getAppYear() + '-' + f, 'success');
+  }
+  document.getElementById('yama-editnums-modal')?.classList.remove('show');
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -21011,7 +21087,7 @@ order by table_name;</textarea>
     supaKey:'yama_supabase_key'
   };
   const BASE_DEVIS = 101;
-  const BASE_FACTURE = 1;
+  const BASE_FACTURE = 101;
   const state = { client:null, inFlight:null, timer:null, lastOk:0, lastStatus:'local', lastHistoryHash:'' };
   const $ = id => document.getElementById(id);
   const nowISO = () => new Date().toISOString();
@@ -21096,7 +21172,7 @@ order by table_name;</textarea>
     return { devis, facture };
   }
   function devisLabel(n){ return 'YG-' + appYear() + '-' + n; }
-  function factureLabel(n){ return 'FYG-' + appYear() + '-' + String(n).padStart(3, '0'); }
+  function factureLabel(n){ return 'FYG-' + appYear() + '-' + n; }
   function updateNumDisplayV32(){
     const c = recomputeCounters();
     const el = $('numDisplay');
