@@ -380,34 +380,28 @@ group by up.user_id, up.name;
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- ÉTAPE 10 : COMPTE ADMIN — YG-T
--- Crée l'utilisateur auth + le profil admin en une seule fois
+-- Crée auth.users + auth.identities + users_profiles en une seule fois
+-- auth.identities est OBLIGATOIRE : sans lui → "Database error querying schema"
 -- ═══════════════════════════════════════════════════════════════════════
 do $$
 declare
-  v_uid  uuid;
+  v_uid   uuid;
   v_email text := 'yg-t@aboupro.app';
   v_pass  text := 'Aboumohandyounesali649005';
   v_name  text := 'YG-T';
 begin
-  -- Vérifie si l'email existe déjà dans auth.users
+  -- Vérifie si le compte existe déjà
   select id into v_uid from auth.users where email = v_email limit 1;
 
   if v_uid is null then
-    -- Crée l'utilisateur auth avec mot de passe bcrypt
     v_uid := gen_random_uuid();
+
+    -- 1) Créer l'utilisateur dans auth.users
     insert into auth.users (
-      id,
-      instance_id,
-      email,
-      encrypted_password,
-      email_confirmed_at,
-      raw_app_meta_data,
-      raw_user_meta_data,
-      is_super_admin,
-      role,
-      created_at,
-      updated_at,
-      aud
+      id, instance_id, email, encrypted_password,
+      email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+      is_super_admin, role, created_at, updated_at, aud,
+      confirmation_token, recovery_token, email_change_token_new, email_change
     ) values (
       v_uid,
       '00000000-0000-0000-0000-000000000000',
@@ -418,21 +412,34 @@ begin
       '{}',
       false,
       'authenticated',
-      now(),
-      now(),
-      'authenticated'
+      now(), now(),
+      'authenticated',
+      '', '', '', ''
+    );
+
+    -- 2) Créer l'identité email (CRITIQUE — manquant = "Database error querying schema")
+    insert into auth.identities (
+      id, user_id, provider_id, identity_data, provider,
+      last_sign_in_at, created_at, updated_at
+    ) values (
+      gen_random_uuid(),
+      v_uid,
+      v_email,
+      jsonb_build_object('sub', v_uid::text, 'email', v_email, 'email_verified', true),
+      'email',
+      now(), now(), now()
     );
   end if;
 
-  -- Crée ou met à jour le profil admin
+  -- 3) Créer ou mettre à jour le profil admin
   insert into public.users_profiles (user_id, name, role, active)
   values (v_uid, v_name, 'admin', true)
   on conflict (user_id) do update
-    set name = excluded.name,
-        role = 'admin',
+    set name   = excluded.name,
+        role   = 'admin',
         active = true;
 
-  raise notice 'Compte admin créé — email: % | mot de passe: %', v_email, v_pass;
+  raise notice '✓ Compte admin prêt — identifiant: YG-T | mot de passe: %', v_pass;
 end $$;
 
 
