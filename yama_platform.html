@@ -31233,6 +31233,145 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
       if (dc > 0 && dc < 101) localStorage.setItem('yama_counter_devis', '101');
     } catch(e){}
   })();
+
+  /* ── MERGE getHistory : lit yama_history ET yama_history_v3 ────────
+     V31 sauve dans 'yama_history', V32 lit 'yama_history_v3'.
+     Ce override fusionne les deux pour que loadFromHistoryByNum trouve
+     toujours les devis quel que soit le chemin de sauvegarde.           */
+  function installMergedGetHistory(){
+    const _origGetHistory = window.getHistory;
+    window.getHistory = function mergedGetHistory(){
+      try {
+        let base = [];
+        try { base = _origGetHistory ? _origGetHistory() : []; } catch(e){}
+        const h1 = (function(){
+          try { return JSON.parse(localStorage.getItem('yama_history') || '[]'); } catch(e){ return []; }
+        })();
+        const h2 = (function(){
+          try { return JSON.parse(localStorage.getItem('yama_history_v3') || '[]'); } catch(e){ return []; }
+        })();
+        const map = new Map();
+        const timeOf = s => { try { return s ? new Date(s).getTime() : 0; } catch(e){ return 0; } };
+        [...base, ...h1, ...h2].forEach(h => {
+          if (!h || !h.docNum) return;
+          const prev = map.get(h.docNum);
+          if (!prev || timeOf(h.savedAt || h.updatedAt) >= timeOf(prev.savedAt || prev.updatedAt)) {
+            map.set(h.docNum, h);
+          }
+        });
+        return Array.from(map.values())
+          .filter(h => !h.deleted && !h.deletedAt)
+          .sort((a,b) => timeOf(b.savedAt || b.updatedAt) - timeOf(a.savedAt || a.updatedAt));
+      } catch(err){
+        try { return window.__origGetHistoryFallback ? window.__origGetHistoryFallback() : []; } catch(e){ return []; }
+      }
+    };
+    window.__origGetHistoryFallback = _origGetHistory;
+    console.info('[YAMA VFIX_2026E] ✅ getHistory merge yama_history + yama_history_v3');
+  }
+  /* Installe dès que possible, puis re-installe après le boot V32 */
+  installMergedGetHistory();
+  setTimeout(installMergedGetHistory, 1200);
+
+  /* ── Override prepareFactureFromCRMContact ──────────────────────────
+     Le bouton "🧾 Facture" du CRM appelait resetAll() + formulaire vide.
+     Maintenant : cherche le dernier devis du client → ouvre notre modal
+     HTML. Si aucun devis trouvé → remplit juste les champs client.      */
+  function installPrepareFactureOverride(){
+    const _origPrepare = window.prepareFactureFromCRMContact;
+
+    window.prepareFactureFromCRMContact = function(cid){
+      try {
+        /* 1. Récupère les infos du contact */
+        const raw = (typeof findRawContact === 'function') ? findRawContact(cid)
+          : (typeof getContacts === 'function' ? getContacts().find(x => String(x.id||x._id||x.cid||'') === String(cid)) : null);
+        const c = (typeof normalizeContact === 'function' && raw) ? normalizeContact(raw) : (raw || {});
+
+        /* 2. Construit le nom client normalisé pour la recherche */
+        const contactNom = (c.clientType === 'pro' && c.company)
+          ? c.company.trim().toLowerCase()
+          : [c.civilite, c.prenom, c.nom].filter(Boolean).join(' ').trim().toLowerCase()
+            || [c.civilite, c.nom].filter(Boolean).join(' ').trim().toLowerCase()
+            || (c.clientNom || '').trim().toLowerCase();
+
+        /* 3. Cherche un devis correspondant dans l'historique fusionné */
+        const hist = (typeof getHistory === 'function') ? getHistory() : [];
+        const devisCandidats = hist.filter(h =>
+          h && h.docType !== 'facture' && h.clientNom &&
+          (function(){
+            const hNom = h.clientNom.trim().toLowerCase();
+            return hNom === contactNom
+              || (contactNom.length >= 4 && hNom.includes(contactNom))
+              || (hNom.length >= 4 && contactNom.includes(hNom));
+          })()
+        );
+
+        /* 4. Prend le plus récent */
+        const best = devisCandidats.sort((a,b) =>
+          new Date(b.savedAt||0) - new Date(a.savedAt||0))[0];
+
+        if (best && best.docNum) {
+          /* Devis trouvé → switch vers platform + ouvrir notre modal */
+          try { if (typeof switchApp === 'function') switchApp('platform'); } catch(e){}
+          setTimeout(function(){
+            if (typeof window.openSmartInvoiceModal === 'function') {
+              window.openSmartInvoiceModal(best.docNum);
+            }
+          }, 250);
+          return;
+        }
+
+        /* 5. Pas de devis → comportement original SANS resetAll() */
+        try { if (typeof switchApp === 'function') switchApp('platform'); } catch(e){}
+        setTimeout(function(){
+          /* Vide le formulaire sans dialog confirm */
+          try {
+            if (typeof FIELDS !== 'undefined') {
+              FIELDS.forEach(f => { const el = document.getElementById(f); if (el) el.value = ''; });
+            }
+            if (typeof state !== 'undefined') {
+              state = { lignesClient:[], lignesST:[], nextClientId:1, nextSTId:1 };
+            }
+            ['lignesClient','lignesST'].forEach(id => {
+              const el = document.getElementById(id);
+              if (el) el.innerHTML = '';
+            });
+            if (typeof recalcTotals === 'function') recalcTotals();
+          } catch(e){}
+
+          /* Remplit les champs client */
+          const set = function(id, val){
+            const el = document.getElementById(id);
+            if (el) { el.value = val||''; el.dispatchEvent(new Event('input',{bubbles:true})); }
+          };
+          const nom = (c.clientType==='pro' && c.company)
+            ? c.company
+            : [c.civilite, c.prenom, c.nom].filter(Boolean).join(' ') || c.nom || '';
+          set('clientNom', nom);
+          set('clientTel', c.tel || c.telephone || '');
+          set('clientEmail', c.email || '');
+          set('clientAdresse', c.adresse || '');
+          set('clientCP', c.cp || '');
+          set('clientVille', c.ville || c.commune || '');
+          set('chantierRef', c.note || c.chantierRef || 'Travaux réalisés');
+          set('dateEmission', new Date().toISOString().slice(0,10));
+          const d = new Date(); d.setDate(d.getDate()+5);
+          set('dateValidite', d.toISOString().slice(0,10));
+
+          if (typeof switchTab === 'function') switchTab('calculator');
+          if (typeof showToast === 'function')
+            showToast('Client chargé — ajoutez les prestations puis générez la facture', '');
+        }, 200);
+
+      } catch(err){
+        /* En cas d'erreur, appelle l'original */
+        if (_origPrepare) try { _origPrepare(cid); } catch(e){}
+      }
+    };
+    console.info('[YAMA VFIX_2026E] ✅ prepareFactureFromCRMContact patchée');
+  }
+  setTimeout(installPrepareFactureOverride, 1000);
+
 })();
 </script>
 </body>
