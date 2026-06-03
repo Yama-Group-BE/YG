@@ -21207,16 +21207,34 @@ order by table_name;</textarea>
   }
   function firstFree(type){
     const yy = appYear();
-    const used = new Set();
-    activeHistory(rawHistory()).forEach(entry => {
+    let maxUsed = 0;
+    /* Scanne TOUTES les sources d'historique pour ne rien manquer :
+       getHistory() fusionné (yama_history + yama_history_v3 + base) */
+    let allEntries = [];
+    try {
+      allEntries = (typeof window.getHistory === 'function')
+        ? window.getHistory()
+        : activeHistory(rawHistory());
+    } catch(e) { allEntries = activeHistory(rawHistory()); }
+    /* Ajoute aussi les deux clés brutes en filet de sécurité */
+    try {
+      ['yama_history','yama_history_v3'].forEach(k => {
+        const arr = JSON.parse(localStorage.getItem(k) || '[]');
+        if (Array.isArray(arr)) allEntries = allEntries.concat(arr);
+      });
+    } catch(e){}
+
+    allEntries.forEach(entry => {
+      if (!entry || entry.deleted || entry.deletedAt) return;
       const p = docParts(docNumOf(entry));
       if (!p || p.year !== yy || p.type !== type) return;
-      used.add(p.n);
+      if (p.n > maxUsed) maxUsed = p.n;
     });
+
     const manualFloor = parseInt(localStorage.getItem('yama_num_floor_' + type) || '0') || 0;
-    let n = Math.max(type === 'facture' ? BASE_FACTURE : BASE_DEVIS, manualFloor);
-    while (used.has(n)) n += 1;
-    return n;
+    const base = type === 'facture' ? BASE_FACTURE : BASE_DEVIS;
+    /* Numérotation MONOTONE : prochain = max(plus haut utilisé + 1, base, plancher) */
+    return Math.max(maxUsed > 0 ? maxUsed + 1 : base, base, manualFloor);
   }
   function recomputeCounters(){
     const devis = firstFree('devis');
@@ -21332,7 +21350,8 @@ order by table_name;</textarea>
       }, 'doc_num', { doc_num:docNum, data:light, saved_at:saved });
       return true;
     } catch(e) {
-      setCloud('error', 'Erreur sync devis');
+      /* Ne force PAS l'état erreur global : un seul échec d'entrée ne doit
+         pas masquer une sync globalement réussie. Le pull décide de l'état. */
       console.error('[YAMA V32] push history:', e.message || e);
       return false;
     }
@@ -21390,6 +21409,11 @@ order by table_name;</textarea>
           _timeout(15000)
         ]);
         if (res.error) throw res.error;
+        /* Index des entrées locales vivantes (pour ne pas re-supprimer
+           une entrée restaurée plus récente qu'un tombstone cloud) */
+        const localLive = new Map();
+        activeHistory(rawHistory()).forEach(l => localLive.set(docNumOf(l), l));
+
         const cloudMap = new Map();
         for (const row of (res.data || [])) {
           const data = row.data || {};
@@ -21397,6 +21421,14 @@ order by table_name;</textarea>
           if (!id) continue;
           const delAt = row.deleted_at || data.deleted_at || data.deletedAt;
           if (data.deleted || delAt || row.doc_type === 'deleted') {
+            const tombTime = time(delAt || row.saved_at || nowISO());
+            const live = localLive.get(id);
+            /* Si une version locale vivante est PLUS RÉCENTE que le
+               tombstone → on ignore la suppression (l'entrée a été
+               restaurée/recréée volontairement après la suppression) */
+            if (live && time(savedAtOf(live)) > tombTime) {
+              continue;
+            }
             markDeleted(id, delAt || row.saved_at || nowISO());
             continue;
           }
@@ -21421,10 +21453,17 @@ order by table_name;</textarea>
             doc_num:id, doc_type:'deleted', data:{ docNum:id, deleted:true, deleted_at:at }, saved_at:at, updated_at:at, deleted_at:at
           }, 'doc_num', { doc_num:id, data:{ docNum:id, deleted:true, deleted_at:at }, saved_at:at }).catch(e => console.warn('[YAMA V32] tombstone:', e.message || e));
         }
+        /* Push résilient : une entrée en échec ne casse pas tout le pull */
+        let pushFailures = 0;
         for (const local of merged) {
           const id = docNumOf(local);
           const cloud = cloudMap.get(id);
-          if (!cloud || time(savedAtOf(local)) > time(savedAtOf(cloud))) await syncPushHistoryV32(local);
+          if (!cloud || time(savedAtOf(local)) > time(savedAtOf(cloud))) {
+            try {
+              const ok = await syncPushHistoryV32(local);
+              if (ok === false) pushFailures++;
+            } catch(e) { pushFailures++; }
+          }
         }
         cleanStatuses();
         await syncCountersV32();
@@ -31377,13 +31416,20 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
-   RECOVERY — Restauration YG-26-103 (Monsieur Jérôme Laurent-Michel)
-   Exécuté une seule fois au chargement. Supprime l'entrée du map
-   "deleted" et réinjecte le devis complet dans les deux clés history.
+   RECOVERY v2 — Restauration définitive YG-26-103 (Jérôme Laurent-Michel)
+   ─────────────────────────────────────────────────────────────────────
+   CAUSE de la disparition récurrente : isDeletedEntry() garde une entrée
+   supprimée tant que savedAt < date_de_suppression. La v1 utilisait
+   savedAt='2026-05-15' (passé) < suppression (aujourd'hui) → re-supprimée.
+   FIX : savedAt = MAINTENANT (postérieur à toute suppression) + on écrase
+   le tombstone Supabase en poussant l'entrée avec deleted_at:null.
    ═══════════════════════════════════════════════════════════════════════ */
-(function recoverYG26103(){
-  const DONE_KEY = 'yama_recovery_YG26103_done';
+(function recoverYG26103v2(){
+  const DONE_KEY = 'yama_recovery_YG26103_v2_done';
   if (localStorage.getItem(DONE_KEY)) return;
+
+  /* savedAt = maintenant → bat tout tombstone de suppression */
+  const NOW = new Date().toISOString();
 
   const ENTRY = {
     docNum: 'YG-26-103',
@@ -31418,10 +31464,11 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     lignesST: [],
     totalTTC: 2756,
     chantierKey: 'monsieur jérôme laurent-michel|68 boulevard émile bockstael|2756',
-    savedAt: '2026-05-15T10:00:00.000Z'
+    savedAt: NOW,
+    updatedAt: NOW
   };
 
-  /* 1. Supprime YG-26-103 du map des entrées supprimées */
+  /* 1. Supprime YG-26-103 du map des entrées supprimées (local) */
   try {
     const DELETED_KEY = 'yama_history_deleted_v32';
     const delMap = JSON.parse(localStorage.getItem(DELETED_KEY) || '{}');
@@ -31431,34 +31478,31 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     }
   } catch(e){}
 
-  /* 2. Injecte dans yama_history */
-  try {
-    const h1 = JSON.parse(localStorage.getItem('yama_history') || '[]');
-    if (!h1.find(h => h && h.docNum === 'YG-26-103')) {
-      h1.unshift(ENTRY);
-      localStorage.setItem('yama_history', JSON.stringify(h1));
-    }
-  } catch(e){}
+  /* 2. Injecte / remplace dans yama_history */
+  function upsertLocal(key){
+    try {
+      let arr = JSON.parse(localStorage.getItem(key) || '[]');
+      if (!Array.isArray(arr)) arr = [];
+      arr = arr.filter(h => !(h && h.docNum === 'YG-26-103'));
+      arr.unshift(ENTRY);
+      localStorage.setItem(key, JSON.stringify(arr));
+    } catch(e){}
+  }
+  upsertLocal('yama_history');
+  upsertLocal('yama_history_v3');
 
-  /* 3. Injecte dans yama_history_v3 */
-  try {
-    const h2 = JSON.parse(localStorage.getItem('yama_history_v3') || '[]');
-    if (!h2.find(h => h && h.docNum === 'YG-26-103')) {
-      h2.unshift(ENTRY);
-      localStorage.setItem('yama_history_v3', JSON.stringify(h2));
-    }
-  } catch(e){}
-
-  /* 4. Pousse vers Supabase si disponible */
+  /* 3. Écrase le tombstone Supabase + re-rend, après le boot V32 */
   setTimeout(function(){
-    try { if (typeof syncPushHistory === 'function') syncPushHistory(ENTRY); } catch(e){}
-    /* 5. Re-rend les onglets */
+    /* Pousse l'entrée vivante (deleted_at:null) pour écraser le tombstone */
+    try { if (typeof window.syncPushHistory === 'function') window.syncPushHistory(ENTRY); } catch(e){}
     try { if (typeof renderHistory === 'function') renderHistory(); } catch(e){}
     try { if (typeof renderDevisTab === 'function') renderDevisTab(); } catch(e){}
-  }, 1500);
+    try { if (typeof renderAnalyse === 'function') renderAnalyse(); } catch(e){}
+    try { if (typeof updateNumDisplay === 'function') updateNumDisplay(); } catch(e){}
+  }, 2000);
 
   localStorage.setItem(DONE_KEY, '1');
-  console.info('[YAMA RECOVERY] ✅ YG-26-103 restauré dans l\'historique');
+  console.info('[YAMA RECOVERY v2] ✅ YG-26-103 restauré définitivement (savedAt=now)');
 })();
 </script>
 </body>
