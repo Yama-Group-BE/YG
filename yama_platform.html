@@ -7959,13 +7959,12 @@ async function generatePDF(docType) {
 
     const hist = getHistory();
 
-    // Si une facture remplace un devis du même chantier → retirer l'ancien
+    // Si une facture remplace un devis du même chantier → retirer l'ancien LOCALEMENT
+    // (pas de syncDeleteHistory : ne jamais supprimer définitivement de façon automatique)
     const filteredHist = hist.filter(h => {
       if (!h.chantierKey || h.chantierKey !== chantierKey) return true;
-      // Garder l'entrée existante seulement si c'est une facture qu'on ne remplace pas
       if (h.docType === 'facture' && docType === 'devis') return true;
-      // Sinon on la retire (elle sera remplacée par la nouvelle)
-      if (h.docNum) syncDeleteHistory(h.docNum);
+      // Retrait local uniquement — pas de suppression cloud
       return false;
     });
 
@@ -20294,10 +20293,10 @@ order by table_name;</textarea>
         fname
       );
       const hist = getHistory();
+      // Retrait local uniquement — pas de syncDeleteHistory (suppression définitive évitée)
       const filteredHist = hist.filter(h => {
         if (!h.chantierKey || h.chantierKey !== chantierKey) return true;
         if (h.docType === 'facture' && docType === 'devis') return true;
-        if (h.docNum) { syncDeleteHistory(h.docNum); syncDeletePdfDocument(h.docNum); }
         return false;
       });
       filteredHist.unshift(histData);
@@ -31373,6 +31372,93 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   }
   setTimeout(installPrepareFactureOverride, 1000);
 
+})();
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   RECOVERY — Restauration YG-26-103 (Monsieur Jérôme Laurent-Michel)
+   Exécuté une seule fois au chargement. Supprime l'entrée du map
+   "deleted" et réinjecte le devis complet dans les deux clés history.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function recoverYG26103(){
+  const DONE_KEY = 'yama_recovery_YG26103_done';
+  if (localStorage.getItem(DONE_KEY)) return;
+
+  const ENTRY = {
+    docNum: 'YG-26-103',
+    docType: 'devis',
+    clientNom: 'Monsieur Jérôme Laurent-Michel',
+    clientTel: '+32 488 24 58 55',
+    clientEmail: '',
+    clientAdresse: '68 Boulevard Émile Bockstael',
+    clientCP: '1020',
+    clientVille: 'Laeken',
+    chantierRef: 'Devis - Jérôme Laurent-Michel',
+    chantierAdresse: '68 Boulevard Émile Bockstael',
+    chantierCP: '1020',
+    chantierVille: 'Laeken',
+    ageBatiment: 'plus10',
+    dateEmission: '2026-05-15',
+    dateValidite: '2026-06-14',
+    remarques: '',
+    coutMateriaux: '',
+    autresCouts: '',
+    stNom: '',
+    notesInternes: '',
+    remisePct: '',
+    remiseEur: '',
+    remiseMotif: '',
+    acompteVerse: '',
+    lignesClient: [
+      { id: 1, desc: "Dépose du bac de douche existant, dépose partielle du carrelage nécessaire à l'accès, recherche et réparation de la fuite, remise en place du bac de douche, remise en état du carrelage déposé et fourniture des marchandises nécessaires", qte: '1', unit: 'Forfait', pu: '2000', tva: '0.06' },
+      { id: 2, desc: 'Protection du chantier', qte: '1', unit: 'Forfait', pu: '300', tva: '0.06' },
+      { id: 3, desc: 'Évacuation des déchets / poubelles', qte: '1', unit: 'Forfait', pu: '300', tva: '0.06' }
+    ],
+    lignesST: [],
+    totalTTC: 2756,
+    chantierKey: 'monsieur jérôme laurent-michel|68 boulevard émile bockstael|2756',
+    savedAt: '2026-05-15T10:00:00.000Z'
+  };
+
+  /* 1. Supprime YG-26-103 du map des entrées supprimées */
+  try {
+    const DELETED_KEY = 'yama_history_deleted_v32';
+    const delMap = JSON.parse(localStorage.getItem(DELETED_KEY) || '{}');
+    if (delMap['YG-26-103']) {
+      delete delMap['YG-26-103'];
+      localStorage.setItem(DELETED_KEY, JSON.stringify(delMap));
+    }
+  } catch(e){}
+
+  /* 2. Injecte dans yama_history */
+  try {
+    const h1 = JSON.parse(localStorage.getItem('yama_history') || '[]');
+    if (!h1.find(h => h && h.docNum === 'YG-26-103')) {
+      h1.unshift(ENTRY);
+      localStorage.setItem('yama_history', JSON.stringify(h1));
+    }
+  } catch(e){}
+
+  /* 3. Injecte dans yama_history_v3 */
+  try {
+    const h2 = JSON.parse(localStorage.getItem('yama_history_v3') || '[]');
+    if (!h2.find(h => h && h.docNum === 'YG-26-103')) {
+      h2.unshift(ENTRY);
+      localStorage.setItem('yama_history_v3', JSON.stringify(h2));
+    }
+  } catch(e){}
+
+  /* 4. Pousse vers Supabase si disponible */
+  setTimeout(function(){
+    try { if (typeof syncPushHistory === 'function') syncPushHistory(ENTRY); } catch(e){}
+    /* 5. Re-rend les onglets */
+    try { if (typeof renderHistory === 'function') renderHistory(); } catch(e){}
+    try { if (typeof renderDevisTab === 'function') renderDevisTab(); } catch(e){}
+  }, 1500);
+
+  localStorage.setItem(DONE_KEY, '1');
+  console.info('[YAMA RECOVERY] ✅ YG-26-103 restauré dans l\'historique');
 })();
 </script>
 </body>
