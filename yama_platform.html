@@ -3423,7 +3423,7 @@ if (token && window.opener) {
 
             <div class="field-row" style="margin-top:20px;">
               <div class="field">
-                <label>Coût matériaux directs (€)</label>
+                <label>Coût du sous-traitant (€)</label>
                 <input type="number" id="coutMateriaux" class="euro" placeholder="0.00" min="0" step="0.01">
               </div>
               <div class="field">
@@ -8161,16 +8161,18 @@ function saveToHistory() {
 
 function renderHistory() {
   const _rawHist = getHistory();
-  const hist = _rawHist.slice().sort((a, b) => {
+  const sortByNum = (a, b) => {
     const n = d => { const m = String(d.docNum || '').match(/(\d+)$/); return m ? parseInt(m[1]) : 0; };
     const diff = n(b) - n(a);
-    if (diff !== 0) return diff;
-    return String(b.dateEmission || b.savedAt || '').localeCompare(String(a.dateEmission || a.savedAt || ''));
-  });
-  document.getElementById('historyCount').textContent = hist.length;
+    return diff !== 0 ? diff : String(b.dateEmission || b.savedAt || '').localeCompare(String(a.dateEmission || a.savedAt || ''));
+  };
+  const factures = _rawHist.filter(h => h.docType === 'facture').sort(sortByNum);
+  const devisAll  = _rawHist.filter(h => h.docType !== 'facture').sort(sortByNum);
+
+  document.getElementById('historyCount').textContent = _rawHist.length;
   const list = document.getElementById('historyList');
 
-  if (hist.length === 0) {
+  if (_rawHist.length === 0) {
     list.innerHTML = `
       <div class="history-empty">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -8181,7 +8183,8 @@ function renderHistory() {
     return;
   }
 
-  const devisStatuses = getDevisStatuses ? getDevisStatuses() : {};
+  const devisStatuses  = getDevisStatuses ? getDevisStatuses() : {};
+  const invoiceStatuses = (typeof getInvoiceStatuses === 'function') ? getInvoiceStatuses() : {};
   const STATUS_HIST = {
     pending:  { label: '⏳ En attente',   col: 'rgba(201,168,76,.8)' },
     accepted: { label: '✅ Accepté',       col: '#52c77f' },
@@ -8191,17 +8194,24 @@ function renderHistory() {
   };
 
   list.innerHTML = '';
-  hist.forEach((h, idx) => {
+
+  function makeItem(h) {
     const item = document.createElement('div');
     item.className = 'history-item';
+    const isFacture = h.docType === 'facture';
 
-    let badge = '';
-    if (h.docType === 'devis') badge = '<span class="type-badge devis">Devis</span>';
-    else if (h.docType === 'facture') badge = '<span class="type-badge facture">Facture</span>';
-    else badge = '<span class="type-badge devis">Brouillon</span>';
+    let badge = isFacture
+      ? '<span class="type-badge facture">Facture</span>'
+      : (h.docType === 'devis' ? '<span class="type-badge devis">Devis</span>' : '<span class="type-badge devis">Brouillon</span>');
 
     let statusBadge = '';
-    if (h.docType === 'devis' || !h.docType) {
+    if (isFacture) {
+      const inv = invoiceStatuses[h.docNum] || {};
+      const paid = inv.status === 'paid';
+      statusBadge = paid
+        ? `<span style="font-size:10px;font-weight:700;color:#52c77f;margin-left:6px;background:rgba(82,199,127,.12);padding:2px 8px;border-radius:10px;">✅ Payée</span>`
+        : `<span style="font-size:10px;font-weight:700;color:rgba(201,168,76,.9);margin-left:6px;background:rgba(201,168,76,.1);padding:2px 8px;border-radius:10px;">⏳ En attente</span>`;
+    } else {
       const st = devisStatuses[h.docNum];
       const si = st ? (STATUS_HIST[st.status] || STATUS_HIST.pending) : STATUS_HIST.pending;
       statusBadge = `<span style="font-size:10px;font-weight:600;color:${si.col};margin-left:6px;">${si.label}</span>`;
@@ -8211,7 +8221,7 @@ function renderHistory() {
       <div class="history-num">${h.docNum || '—'}</div>
       <div class="history-info">
         <div class="hi-title">${badge}${escapeHtml(h.clientNom || 'Client sans nom')} — ${escapeHtml(h.chantierRef || 'Chantier')}${statusBadge}</div>
-        <div class="hi-sub">${fmtDate(h.dateEmission) || new Date(h.savedAt).toLocaleDateString('fr-BE')} · ${escapeHtml(h.chantierVille || '')}</div>
+        <div class="hi-sub">${fmtDate(h.dateEmission) || new Date(h.savedAt || Date.now()).toLocaleDateString('fr-BE')} · ${escapeHtml(h.chantierVille || '')}</div>
       </div>
       <div class="history-amount">${fmt(h.totalTTC || 0)}</div>
       <div class="history-actions"></div>
@@ -8219,38 +8229,47 @@ function renderHistory() {
     const actions = item.querySelector('.history-actions');
 
     const btnLoad = document.createElement('button');
-    btnLoad.className = 'btn-icon';
-    btnLoad.title = 'Charger pour modifier';
-    btnLoad.innerHTML = '📂';
+    btnLoad.className = 'btn-icon'; btnLoad.title = 'Charger'; btnLoad.innerHTML = '📂';
     btnLoad.onclick = () => loadFromHistoryByNum(h.docNum);
     actions.appendChild(btnLoad);
 
     const btnPdf = document.createElement('button');
-    btnPdf.className = 'btn-icon';
-    btnPdf.title = h.pdfStored || h.pdfDataUrl ? 'Récupérer le PDF généré' : 'PDF non encore archivé';
-    btnPdf.innerHTML = '📄';
+    btnPdf.className = 'btn-icon'; btnPdf.title = h.pdfStored || h.pdfDataUrl ? 'Récupérer PDF' : 'PDF non archivé'; btnPdf.innerHTML = '📄';
     btnPdf.onclick = () => downloadHistoryPDF(h.docNum);
     actions.appendChild(btnPdf);
 
     const btnDel = document.createElement('button');
-    btnDel.className = 'btn-icon danger';
-    btnDel.title = 'Supprimer';
-    btnDel.innerHTML = '🗑';
+    btnDel.className = 'btn-icon danger'; btnDel.title = 'Supprimer'; btnDel.innerHTML = '🗑';
     btnDel.onclick = () => {
-      if (!confirm('Supprimer ce document ?')) return;
+      if (!confirm('Supprimer ' + h.docNum + ' ?')) return;
       const h2 = getHistory();
-      const removed = h2.splice(idx, 1)[0];
+      const idx2 = h2.findIndex(e => e && e.docNum === h.docNum);
+      const removed = idx2 >= 0 ? h2.splice(idx2, 1)[0] : { docNum: h.docNum };
       localStorage.setItem(LS.history, JSON.stringify(h2));
       if (removed && removed.docNum) { syncDeleteHistory(removed.docNum); syncDeletePdfDocument(removed.docNum); }
-      renderHistory();
-      renderSTTab();
-      renderAnalyse();
+      renderHistory(); renderSTTab(); renderAnalyse();
       showToast('Document supprimé');
     };
     actions.appendChild(btnDel);
+    return item;
+  }
 
-    list.appendChild(item);
-  });
+  function addSectionHeader(label, count, color) {
+    const sep = document.createElement('div');
+    sep.style.cssText = `display:flex;align-items:center;gap:10px;padding:10px 0 8px;margin-top:10px;border-bottom:1px solid rgba(${color},0.35);`;
+    sep.innerHTML = `<span style="font-size:11px;font-weight:800;letter-spacing:1.5px;color:rgba(${color},1);">${label}</span>`
+      + `<span style="font-size:11px;background:rgba(${color},.15);color:rgba(${color},1);padding:2px 9px;border-radius:10px;font-weight:700;">${count}</span>`;
+    list.appendChild(sep);
+  }
+
+  if (factures.length > 0) {
+    addSectionHeader('FACTURES', factures.length, '201,168,76');
+    factures.forEach(h => list.appendChild(makeItem(h)));
+  }
+  if (devisAll.length > 0) {
+    addSectionHeader('DEVIS', devisAll.length, '160,170,200');
+    devisAll.forEach(h => list.appendChild(makeItem(h)));
+  }
 }
 
 function loadFromHistory(idx) {
@@ -8650,7 +8669,10 @@ function setDevisFilter(f){ window._devisFilter = f; renderDevisTab(); }
 function renderDevisTab() {
   const hist = getHistory();
   const statuses = getDevisStatuses();
-  const allDevis = hist.filter(h => h.docType !== 'facture');
+  const allDevis = hist.filter(h => h.docType !== 'facture').sort((a, b) => {
+    const n = d => { const m = String(d.docNum || '').match(/(\d+)$/); return m ? parseInt(m[1]) : 0; };
+    return n(b) - n(a);
+  });
 
   document.getElementById('devisCount').textContent = allDevis.length;
 
@@ -31149,8 +31171,19 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
       const hist = (typeof getHistory === 'function') ? getHistory() : [];
       const devisEntry = hist.find(function(h){ return h && h.docNum === docNum; });
       if (devisEntry) {
+        /* Peuple le dropdown AVANT d'y mettre une valeur */
+        if (typeof populateSTSelect === 'function') populateSTSelect();
         const stNomField = document.getElementById('stNom');
-        if (stNomField && devisEntry.stNom) stNomField.value = devisEntry.stNom;
+        if (stNomField && devisEntry.stNom) {
+          stNomField.value = devisEntry.stNom;
+          /* Si la valeur n'est pas reconnue par le select, l'ajouter dynamiquement */
+          if (stNomField.value !== devisEntry.stNom) {
+            const opt = document.createElement('option');
+            opt.value = devisEntry.stNom; opt.textContent = devisEntry.stNom;
+            stNomField.appendChild(opt);
+            stNomField.value = devisEntry.stNom;
+          }
+        }
         const coutMatField = document.getElementById('coutMateriaux');
         if (coutMatField && devisEntry.coutMateriaux) coutMatField.value = devisEntry.coutMateriaux;
         const autresCoutsField = document.getElementById('autresCouts');
