@@ -7716,10 +7716,11 @@ function buildPdfHtml(docType, data, meta) {
     </p>
     <p>•  <strong>Remarques :</strong> ${remarquesText}</p>
   ` : `
-    <p>•  Facture à régler par <strong>paiement immédiat</strong> à réception de la présente facture.</p>
+    <p>•  Facture payable à réception. Délai de grâce : <strong>5 jours ouvrables</strong> à compter de la date d'émission.</p>
     ${data.acompteVerse && parseFloat(data.acompteVerse) > 0 ? `<p class="bold">•  Acompte déjà versé : ${fmt(parseFloat(data.acompteVerse))}  —  <span style="color:#c9a84c;">Solde restant dû : ${fmt(totalTTC - parseFloat(data.acompteVerse))}.</span></p>` : ''}
-    <p>•  Paiement par virement bancaire — merci de préciser le numéro de facture en communication.</p>
-    <p class="bold">•  Tout retard entraînera des pénalités de 10% à partir du 5ème jour ouvrable.</p>
+    <p>•  Paiement par virement bancaire — merci de mentionner le numéro de facture en communication.</p>
+    <p class="bold">•  Après 5 jours ouvrables sans règlement : frais administratifs forfaitaires de <strong>50,00 €</strong>.</p>
+    <p class="bold">•  Au-delà de 10 jours ouvrables : majoration de <strong>5% du montant TTC</strong> s'applique de plein droit.</p>
     <p>•  <strong>Remarques :</strong> ${remarquesText}</p>
   `;
 
@@ -20887,20 +20888,23 @@ order by table_name;</textarea>
     const _acomptePct20038 = (typeof getSetting==='function' ? (getSetting('financier.acomptePct')||30) : 30);
     const acompte = totals.totalTTC * _acomptePct20038 / 100;
     const rem = clean(data.remarques) || '_____________________________________________________________';
-    const texts = docType === 'devis' ? [
+    const acompteVerse = parseFloat(data.acompteVerse || 0) || 0;
+    const soldeRestant = totals.totalTTC - acompteVerse;
+    const rawTexts = docType === 'devis' ? [
       "Devis valable 30 jours a compter de la date d'emission.",
       'Acompte de ' + _acomptePct20038 + '% obligatoire a la commande, soit ' + euro(acompte) + '.',
       'Paiement du solde attendu a la fin des travaux, sous 24 heures.',
       'Tout retard entrainera des penalites de 10% a partir du 5eme jour ouvrable.',
       'Remarques : ' + rem
     ] : [
-      'Facture a regler par paiement immediat a reception de la presente facture.',
-      acompte > 0 ? ('Acompte deja verse : ' + euro(acompte) + ' - Solde restant du : ' + euro(totals.totalTTC - acompte) + '.') : null,
-      'Paiement par virement bancaire avec le numero de facture en communication.',
-      'Tout retard entrainera des penalites de 10% a partir du 5eme jour ouvrable.',
+      'Facture payable a reception. Delai de grace : 5 jours ouvrables a compter de la date d\'emission.',
+      acompteVerse > 0 ? ('Acompte deja verse : ' + euro(acompteVerse) + '  -  Solde restant du : ' + euro(soldeRestant) + '.') : null,
+      'Paiement par virement bancaire - merci de mentionner le numero de facture en communication.',
+      'Apres 5 jours ouvrables sans reglement : frais administratifs forfaitaires de 50,00 EUR.',
+      'Au-dela de 10 jours ouvrables : majoration de 5% du montant total TTC s\'applique de plein droit.',
       'Remarques : ' + rem
     ];
-    texts = texts.filter(t => t != null);
+    const texts = rawTexts.filter(t => t != null);
     const gap = compact ? 3.25 : 3.65;
     let count = 0;
     texts.forEach(t => { count += split(pdf, '- ' + t, 174).length; });
@@ -31120,21 +31124,26 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     }
 
     setTimeout(function(){
-      /* Date d'émission = aujourd'hui */
+      /* Date d'émission = aujourd'hui (date de la facture) */
       const dateField = document.getElementById('dateEmission');
       if (dateField) dateField.value = todayISO();
 
-      /* Échéance = aujourd'hui + 5 jours ouvrables */
-      function addWorkDays(date, days) {
-        let d = new Date(date), added = 0;
-        while (added < days) {
-          d.setDate(d.getDate() + 1);
-          if (d.getDay() !== 0 && d.getDay() !== 6) added++;
-        }
-        return d.toISOString().slice(0, 10);
-      }
+      /* Validité : vide pour les factures (pas de date de validité) */
       const dateValiditeField = document.getElementById('dateValidite');
-      if (dateValiditeField) dateValiditeField.value = addWorkDays(new Date(), 5);
+      if (dateValiditeField) dateValiditeField.value = '';
+
+      /* Sous-traitant : recharge les champs ST depuis le devis */
+      const hist = (typeof getHistory === 'function') ? getHistory() : [];
+      const devisEntry = hist.find(function(h){ return h && h.docNum === docNum; });
+      if (devisEntry) {
+        const stNomField = document.getElementById('stNom');
+        if (stNomField && devisEntry.stNom) stNomField.value = devisEntry.stNom;
+        const coutMatField = document.getElementById('coutMateriaux');
+        if (coutMatField && devisEntry.coutMateriaux) coutMatField.value = devisEntry.coutMateriaux;
+        const autresCoutsField = document.getElementById('autresCouts');
+        if (autresCoutsField && devisEntry.autresCouts) autresCoutsField.value = devisEntry.autresCouts;
+        if (typeof recalcTotals === 'function') recalcTotals();
+      }
 
       /* Stocke l'acompte pour le PDF */
       if (acompteVerse > 0) {
