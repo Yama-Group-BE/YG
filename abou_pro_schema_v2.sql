@@ -1,6 +1,8 @@
 -- ============================================================
--- ABOU PRO LOGISTICS — Supabase Schema v2
--- Idempotent: safe to run multiple times (relançable sans risque)
+-- ABOU PRO LOGISTICS — Supabase Schema v2 (CLEAN INSTALL)
+-- Supprime les anciens objets et recrée tout proprement.
+-- SAFE: ne touche pas à auth.users — les comptes existants
+-- sont conservés, seuls les profils sont recréés.
 -- ============================================================
 
 -- ============================================================
@@ -10,71 +12,31 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- ============================================================
--- 0b. MIGRATION: rename old columns if coming from schema v1
+-- 0b. NETTOYAGE COMPLET des anciens objets (DROP CASCADE)
 -- ============================================================
-DO $$
-BEGIN
-  -- Rename active → is_active
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema='public' AND table_name='users_profiles' AND column_name='active'
-  ) AND NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema='public' AND table_name='users_profiles' AND column_name='is_active'
-  ) THEN
-    ALTER TABLE users_profiles RENAME COLUMN active TO is_active;
-  END IF;
+DROP VIEW  IF EXISTS aboupro_driver_kpis        CASCADE;
+DROP VIEW  IF EXISTS aboupro_assignments_view   CASCADE;
+DROP TABLE IF EXISTS driver_positions           CASCADE;
+DROP TABLE IF EXISTS photos                     CASCADE;
+DROP TABLE IF EXISTS tour_logs                  CASCADE;
+DROP TABLE IF EXISTS assignment_stops           CASCADE;
+DROP TABLE IF EXISTS assignments                CASCADE;
+DROP TABLE IF EXISTS stops                      CASCADE;
+DROP TABLE IF EXISTS routes                     CASCADE;
+DROP TABLE IF EXISTS users_profiles             CASCADE;
 
-  -- Add is_active if missing entirely
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema='public' AND table_name='users_profiles' AND column_name='is_active'
-  ) AND EXISTS (
-    SELECT 1 FROM information_schema.tables
-    WHERE table_schema='public' AND table_name='users_profiles'
-  ) THEN
-    ALTER TABLE users_profiles ADD COLUMN is_active boolean NOT NULL DEFAULT true;
-  END IF;
-
-  -- Add identifier if missing (old schema used name/login instead)
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema='public' AND table_name='users_profiles' AND column_name='identifier'
-  ) AND EXISTS (
-    SELECT 1 FROM information_schema.tables
-    WHERE table_schema='public' AND table_name='users_profiles'
-  ) THEN
-    -- Try to populate from existing login or name column
-    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users_profiles' AND column_name='login') THEN
-      ALTER TABLE users_profiles ADD COLUMN identifier text;
-      UPDATE users_profiles SET identifier = login WHERE identifier IS NULL;
-      ALTER TABLE users_profiles ALTER COLUMN identifier SET NOT NULL;
-    ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users_profiles' AND column_name='name') THEN
-      ALTER TABLE users_profiles ADD COLUMN identifier text;
-      UPDATE users_profiles SET identifier = name WHERE identifier IS NULL;
-      ALTER TABLE users_profiles ALTER COLUMN identifier SET NOT NULL;
-    ELSE
-      ALTER TABLE users_profiles ADD COLUMN IF NOT EXISTS identifier text NOT NULL DEFAULT '';
-    END IF;
-  END IF;
-
-  -- role: update old 'chauffeur' value to 'driver'
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema='public' AND table_name='users_profiles' AND column_name='role'
-  ) THEN
-    UPDATE users_profiles SET role='driver' WHERE role='chauffeur';
-  END IF;
-END;
-$$;
+DROP FUNCTION IF EXISTS aboupro_has_admin()              CASCADE;
+DROP FUNCTION IF EXISTS aboupro_is_admin()               CASCADE;
+DROP FUNCTION IF EXISTS aboupro_set_updated_at()         CASCADE;
+DROP FUNCTION IF EXISTS aboupro_update_assignment_progress(uuid) CASCADE;
+DROP FUNCTION IF EXISTS aboupro_trigger_update_progress() CASCADE;
+DROP FUNCTION IF EXISTS aboupro_today_summary()          CASCADE;
 
 -- ============================================================
--- 1. UTILITY FUNCTION: aboupro_set_updated_at (no dependencies)
+-- 1. UTILITY TRIGGER FUNCTION
 -- ============================================================
 CREATE OR REPLACE FUNCTION aboupro_set_updated_at()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   NEW.updated_at = now();
   RETURN NEW;
@@ -82,9 +44,9 @@ END;
 $$;
 
 -- ============================================================
--- 2. TABLE: users_profiles (must be first — others FK to it)
+-- 2. TABLE: users_profiles
 -- ============================================================
-CREATE TABLE IF NOT EXISTS users_profiles (
+CREATE TABLE users_profiles (
   id            uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   identifier    text NOT NULL UNIQUE,
   full_name     text,
@@ -97,28 +59,17 @@ CREATE TABLE IF NOT EXISTS users_profiles (
 );
 
 -- ============================================================
--- 3. SECURITY FUNCTIONS (depend on users_profiles)
+-- 3. SECURITY FUNCTIONS (dépendent de users_profiles)
 -- ============================================================
-
--- aboupro_has_admin(): callable by anon — returns true if any admin exists
 CREATE OR REPLACE FUNCTION aboupro_has_admin()
-RETURNS boolean
-LANGUAGE sql
-SECURITY DEFINER
-STABLE
-AS $$
+RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE AS $$
   SELECT EXISTS (
     SELECT 1 FROM users_profiles WHERE role = 'admin' AND is_active = true
   );
 $$;
 
--- aboupro_is_admin(): for RLS policies — checks current user role
 CREATE OR REPLACE FUNCTION aboupro_is_admin()
-RETURNS boolean
-LANGUAGE sql
-SECURITY DEFINER
-STABLE
-AS $$
+RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE AS $$
   SELECT EXISTS (
     SELECT 1 FROM users_profiles
     WHERE id = auth.uid() AND role = 'admin' AND is_active = true
@@ -126,12 +77,12 @@ AS $$
 $$;
 
 GRANT EXECUTE ON FUNCTION aboupro_has_admin() TO anon, authenticated;
-GRANT EXECUTE ON FUNCTION aboupro_is_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION aboupro_is_admin()  TO authenticated;
 
 -- ============================================================
 -- 4. TABLE: routes
 -- ============================================================
-CREATE TABLE IF NOT EXISTS routes (
+CREATE TABLE routes (
   id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   name          text NOT NULL,
   color         text NOT NULL DEFAULT '#3b82f6',
@@ -148,7 +99,7 @@ CREATE TABLE IF NOT EXISTS routes (
 -- ============================================================
 -- 5. TABLE: stops
 -- ============================================================
-CREATE TABLE IF NOT EXISTS stops (
+CREATE TABLE stops (
   id              uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   route_id        uuid NOT NULL REFERENCES routes(id) ON DELETE CASCADE,
   order_index     integer NOT NULL DEFAULT 0,
@@ -158,7 +109,8 @@ CREATE TABLE IF NOT EXISTS stops (
   lng             numeric(10,7),
   scheduled_time  time,
   days_active     text[] DEFAULT ARRAY['LU','MA','ME','JE','VE'],
-  operation_type  text NOT NULL DEFAULT 'livraison' CHECK (operation_type IN ('livraison','collecte','service','autre')),
+  operation_type  text NOT NULL DEFAULT 'livraison'
+                  CHECK (operation_type IN ('livraison','collecte','service','autre')),
   notes           text,
   access_code     text,
   parking_info    text,
@@ -172,15 +124,17 @@ CREATE TABLE IF NOT EXISTS stops (
 -- ============================================================
 -- 6. TABLE: assignments
 -- ============================================================
-CREATE TABLE IF NOT EXISTS assignments (
+CREATE TABLE assignments (
   id              uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   route_id        uuid NOT NULL REFERENCES routes(id) ON DELETE RESTRICT,
   driver_id       uuid NOT NULL REFERENCES users_profiles(id) ON DELETE RESTRICT,
   assigned_date   date NOT NULL,
-  vehicle_type    text NOT NULL DEFAULT 'voiture' CHECK (vehicle_type IN ('pied','velo','voiture','camionnette','camion')),
+  vehicle_type    text NOT NULL DEFAULT 'voiture'
+                  CHECK (vehicle_type IN ('pied','velo','voiture','camionnette','camion')),
   start_time      time,
   end_time_max    time,
-  status          text NOT NULL DEFAULT 'planifie' CHECK (status IN ('planifie','en_cours','termine','incident','annule')),
+  status          text NOT NULL DEFAULT 'planifie'
+                  CHECK (status IN ('planifie','en_cours','termine','incident','annule')),
   notes           text,
   started_at      timestamptz,
   completed_at    timestamptz,
@@ -196,12 +150,13 @@ CREATE TABLE IF NOT EXISTS assignments (
 -- ============================================================
 -- 7. TABLE: assignment_stops
 -- ============================================================
-CREATE TABLE IF NOT EXISTS assignment_stops (
+CREATE TABLE assignment_stops (
   id              uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   assignment_id   uuid NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
   stop_id         uuid NOT NULL REFERENCES stops(id) ON DELETE CASCADE,
   order_index     integer NOT NULL DEFAULT 0,
-  status          text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','done','problem','skipped')),
+  status          text NOT NULL DEFAULT 'pending'
+                  CHECK (status IN ('pending','done','problem','skipped')),
   arrived_at      timestamptz,
   completed_at    timestamptz,
   lat_arrived     numeric(10,7),
@@ -221,7 +176,7 @@ CREATE TABLE IF NOT EXISTS assignment_stops (
 -- ============================================================
 -- 8. TABLE: tour_logs
 -- ============================================================
-CREATE TABLE IF NOT EXISTS tour_logs (
+CREATE TABLE tour_logs (
   id              uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   assignment_id   uuid NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
   driver_id       uuid NOT NULL REFERENCES users_profiles(id) ON DELETE CASCADE,
@@ -240,13 +195,14 @@ CREATE TABLE IF NOT EXISTS tour_logs (
 -- ============================================================
 -- 9. TABLE: photos
 -- ============================================================
-CREATE TABLE IF NOT EXISTS photos (
+CREATE TABLE photos (
   id              uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   assignment_id   uuid NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
   stop_id         uuid REFERENCES stops(id) ON DELETE SET NULL,
   driver_id       uuid NOT NULL REFERENCES users_profiles(id) ON DELETE CASCADE,
   storage_path    text NOT NULL,
-  photo_type      text NOT NULL DEFAULT 'delivery' CHECK (photo_type IN ('delivery','problem','other')),
+  photo_type      text NOT NULL DEFAULT 'delivery'
+                  CHECK (photo_type IN ('delivery','problem','other')),
   taken_at        timestamptz NOT NULL DEFAULT now(),
   created_at      timestamptz NOT NULL DEFAULT now()
 );
@@ -254,7 +210,7 @@ CREATE TABLE IF NOT EXISTS photos (
 -- ============================================================
 -- 10. TABLE: driver_positions
 -- ============================================================
-CREATE TABLE IF NOT EXISTS driver_positions (
+CREATE TABLE driver_positions (
   id              uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   driver_id       uuid NOT NULL REFERENCES users_profiles(id) ON DELETE CASCADE,
   assignment_id   uuid REFERENCES assignments(id) ON DELETE SET NULL,
@@ -269,30 +225,14 @@ CREATE TABLE IF NOT EXISTS driver_positions (
 );
 
 -- ============================================================
--- 11. UPDATED_AT TRIGGERS (loop for all tables that need it)
+-- 11. TRIGGERS updated_at
 -- ============================================================
 DO $$
-DECLARE
-  tbl text;
-  tbl_list text[] := ARRAY[
-    'users_profiles',
-    'routes',
-    'stops',
-    'assignments',
-    'assignment_stops'
-  ];
+DECLARE tbl text;
 BEGIN
-  FOREACH tbl IN ARRAY tbl_list LOOP
-    EXECUTE format(
-      'DROP TRIGGER IF EXISTS trg_%s_updated_at ON %I',
-      tbl, tbl
-    );
-    EXECUTE format(
-      'CREATE TRIGGER trg_%s_updated_at
-       BEFORE UPDATE ON %I
-       FOR EACH ROW EXECUTE FUNCTION aboupro_set_updated_at()',
-      tbl, tbl
-    );
+  FOREACH tbl IN ARRAY ARRAY['users_profiles','routes','stops','assignments','assignment_stops'] LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_%s_updated_at ON %I', tbl, tbl);
+    EXECUTE format('CREATE TRIGGER trg_%s_updated_at BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION aboupro_set_updated_at()', tbl, tbl);
   END LOOP;
 END;
 $$;
@@ -300,295 +240,130 @@ $$;
 -- ============================================================
 -- 12. INDEXES
 -- ============================================================
--- users_profiles
-CREATE INDEX IF NOT EXISTS idx_users_profiles_role       ON users_profiles(role);
-CREATE INDEX IF NOT EXISTS idx_users_profiles_identifier ON users_profiles(identifier);
-CREATE INDEX IF NOT EXISTS idx_users_profiles_is_active  ON users_profiles(is_active);
+CREATE INDEX idx_up_role       ON users_profiles(role);
+CREATE INDEX idx_up_identifier ON users_profiles(identifier);
+CREATE INDEX idx_up_is_active  ON users_profiles(is_active);
 
--- routes
-CREATE INDEX IF NOT EXISTS idx_routes_is_active    ON routes(is_active);
-CREATE INDEX IF NOT EXISTS idx_routes_is_archived  ON routes(is_archived);
+CREATE INDEX idx_routes_active   ON routes(is_active);
+CREATE INDEX idx_routes_archived ON routes(is_archived);
 
--- stops
-CREATE INDEX IF NOT EXISTS idx_stops_route_id     ON stops(route_id);
-CREATE INDEX IF NOT EXISTS idx_stops_order_index  ON stops(route_id, order_index);
-CREATE INDEX IF NOT EXISTS idx_stops_address_trgm ON stops USING gin(address gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS idx_stops_is_active    ON stops(is_active);
+CREATE INDEX idx_stops_route    ON stops(route_id);
+CREATE INDEX idx_stops_order    ON stops(route_id, order_index);
+CREATE INDEX idx_stops_active   ON stops(is_active);
+CREATE INDEX idx_stops_addr_trg ON stops USING gin(address gin_trgm_ops);
 
--- assignments
-CREATE INDEX IF NOT EXISTS idx_assignments_driver_id      ON assignments(driver_id);
-CREATE INDEX IF NOT EXISTS idx_assignments_route_id       ON assignments(route_id);
-CREATE INDEX IF NOT EXISTS idx_assignments_assigned_date  ON assignments(assigned_date);
-CREATE INDEX IF NOT EXISTS idx_assignments_status         ON assignments(status);
-CREATE INDEX IF NOT EXISTS idx_assignments_date_driver    ON assignments(assigned_date, driver_id);
+CREATE INDEX idx_asgn_driver ON assignments(driver_id);
+CREATE INDEX idx_asgn_route  ON assignments(route_id);
+CREATE INDEX idx_asgn_date   ON assignments(assigned_date);
+CREATE INDEX idx_asgn_status ON assignments(status);
+CREATE INDEX idx_asgn_dd     ON assignments(assigned_date, driver_id);
 
--- assignment_stops
-CREATE INDEX IF NOT EXISTS idx_assignment_stops_assignment ON assignment_stops(assignment_id);
-CREATE INDEX IF NOT EXISTS idx_assignment_stops_stop       ON assignment_stops(stop_id);
-CREATE INDEX IF NOT EXISTS idx_assignment_stops_status     ON assignment_stops(status);
+CREATE INDEX idx_as_assignment ON assignment_stops(assignment_id);
+CREATE INDEX idx_as_stop       ON assignment_stops(stop_id);
+CREATE INDEX idx_as_status     ON assignment_stops(status);
 
--- tour_logs
-CREATE INDEX IF NOT EXISTS idx_tour_logs_assignment  ON tour_logs(assignment_id);
-CREATE INDEX IF NOT EXISTS idx_tour_logs_driver      ON tour_logs(driver_id);
-CREATE INDEX IF NOT EXISTS idx_tour_logs_created_at  ON tour_logs(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_tour_logs_event_type  ON tour_logs(event_type);
+CREATE INDEX idx_tl_assignment ON tour_logs(assignment_id);
+CREATE INDEX idx_tl_driver     ON tour_logs(driver_id);
+CREATE INDEX idx_tl_created    ON tour_logs(created_at DESC);
 
--- photos
-CREATE INDEX IF NOT EXISTS idx_photos_assignment ON photos(assignment_id);
-CREATE INDEX IF NOT EXISTS idx_photos_driver     ON photos(driver_id);
-CREATE INDEX IF NOT EXISTS idx_photos_stop       ON photos(stop_id);
+CREATE INDEX idx_ph_assignment ON photos(assignment_id);
+CREATE INDEX idx_ph_driver     ON photos(driver_id);
 
--- driver_positions
-CREATE INDEX IF NOT EXISTS idx_driver_positions_driver      ON driver_positions(driver_id);
-CREATE INDEX IF NOT EXISTS idx_driver_positions_recorded_at ON driver_positions(recorded_at DESC);
-CREATE INDEX IF NOT EXISTS idx_driver_positions_assignment  ON driver_positions(assignment_id);
+CREATE INDEX idx_dp_driver     ON driver_positions(driver_id);
+CREATE INDEX idx_dp_recorded   ON driver_positions(recorded_at DESC);
+CREATE INDEX idx_dp_assignment ON driver_positions(assignment_id);
 
 -- ============================================================
 -- 13. ROW LEVEL SECURITY
 -- ============================================================
--- Enable RLS on all tables
 DO $$
-DECLARE
-  tbl text;
-  tbl_list text[] := ARRAY[
-    'users_profiles','routes','stops','assignments',
-    'assignment_stops','tour_logs','photos','driver_positions'
-  ];
+DECLARE tbl text;
 BEGIN
-  FOREACH tbl IN ARRAY tbl_list LOOP
+  FOREACH tbl IN ARRAY ARRAY['users_profiles','routes','stops','assignments','assignment_stops','tour_logs','photos','driver_positions'] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
     EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', tbl);
   END LOOP;
 END;
 $$;
 
--- Drop all existing policies (idempotent cleanup)
+-- users_profiles
+CREATE POLICY "admin_all_profiles"          ON users_profiles FOR ALL       TO authenticated USING (aboupro_is_admin()) WITH CHECK (aboupro_is_admin());
+CREATE POLICY "driver_select_own_profile"   ON users_profiles FOR SELECT    TO authenticated USING (id = auth.uid());
+CREATE POLICY "driver_update_own_profile"   ON users_profiles FOR UPDATE    TO authenticated USING (id = auth.uid()) WITH CHECK (id = auth.uid());
+CREATE POLICY "user_insert_own_profile"     ON users_profiles FOR INSERT    TO authenticated WITH CHECK (id = auth.uid());
+
+-- routes
+CREATE POLICY "admin_all_routes"            ON routes FOR ALL    TO authenticated USING (aboupro_is_admin()) WITH CHECK (aboupro_is_admin());
+CREATE POLICY "driver_read_routes"          ON routes FOR SELECT TO authenticated USING (is_active = true AND is_archived = false);
+
+-- stops
+CREATE POLICY "admin_all_stops"             ON stops FOR ALL    TO authenticated USING (aboupro_is_admin()) WITH CHECK (aboupro_is_admin());
+CREATE POLICY "driver_read_stops"           ON stops FOR SELECT TO authenticated USING (is_active = true AND EXISTS (SELECT 1 FROM routes r WHERE r.id = stops.route_id AND r.is_active = true));
+
+-- assignments
+CREATE POLICY "admin_all_assignments"       ON assignments FOR ALL    TO authenticated USING (aboupro_is_admin()) WITH CHECK (aboupro_is_admin());
+CREATE POLICY "driver_select_own_asgn"      ON assignments FOR SELECT TO authenticated USING (driver_id = auth.uid());
+CREATE POLICY "driver_update_own_asgn"      ON assignments FOR UPDATE TO authenticated USING (driver_id = auth.uid()) WITH CHECK (driver_id = auth.uid());
+
+-- assignment_stops
+CREATE POLICY "admin_all_as"                ON assignment_stops FOR ALL    TO authenticated USING (aboupro_is_admin()) WITH CHECK (aboupro_is_admin());
+CREATE POLICY "driver_select_own_as"        ON assignment_stops FOR SELECT TO authenticated USING (EXISTS (SELECT 1 FROM assignments a WHERE a.id = assignment_stops.assignment_id AND a.driver_id = auth.uid()));
+CREATE POLICY "driver_update_own_as"        ON assignment_stops FOR UPDATE TO authenticated USING (EXISTS (SELECT 1 FROM assignments a WHERE a.id = assignment_stops.assignment_id AND a.driver_id = auth.uid())) WITH CHECK (EXISTS (SELECT 1 FROM assignments a WHERE a.id = assignment_stops.assignment_id AND a.driver_id = auth.uid()));
+
+-- tour_logs
+CREATE POLICY "admin_all_tl"                ON tour_logs FOR ALL    TO authenticated USING (aboupro_is_admin()) WITH CHECK (aboupro_is_admin());
+CREATE POLICY "driver_select_own_tl"        ON tour_logs FOR SELECT TO authenticated USING (driver_id = auth.uid());
+CREATE POLICY "driver_insert_own_tl"        ON tour_logs FOR INSERT TO authenticated WITH CHECK (driver_id = auth.uid());
+
+-- photos
+CREATE POLICY "admin_all_photos"            ON photos FOR ALL    TO authenticated USING (aboupro_is_admin()) WITH CHECK (aboupro_is_admin());
+CREATE POLICY "driver_select_own_photos"    ON photos FOR SELECT TO authenticated USING (driver_id = auth.uid());
+CREATE POLICY "driver_insert_own_photos"    ON photos FOR INSERT TO authenticated WITH CHECK (driver_id = auth.uid());
+
+-- driver_positions
+CREATE POLICY "admin_all_dp"                ON driver_positions FOR ALL    TO authenticated USING (aboupro_is_admin()) WITH CHECK (aboupro_is_admin());
+CREATE POLICY "driver_select_own_dp"        ON driver_positions FOR SELECT TO authenticated USING (driver_id = auth.uid());
+CREATE POLICY "driver_insert_own_dp"        ON driver_positions FOR INSERT TO authenticated WITH CHECK (driver_id = auth.uid());
+CREATE POLICY "driver_update_own_dp"        ON driver_positions FOR UPDATE TO authenticated USING (driver_id = auth.uid()) WITH CHECK (driver_id = auth.uid());
+
+-- ============================================================
+-- 14. REALTIME
+-- ============================================================
 DO $$
-DECLARE
-  pol record;
+DECLARE tbl text;
 BEGIN
-  FOR pol IN
-    SELECT policyname, tablename
-    FROM pg_policies
-    WHERE schemaname = 'public'
-      AND tablename IN (
-        'users_profiles','routes','stops','assignments',
-        'assignment_stops','tour_logs','photos','driver_positions'
-      )
-  LOOP
-    EXECUTE format('DROP POLICY IF EXISTS %I ON %I', pol.policyname, pol.tablename);
+  FOREACH tbl IN ARRAY ARRAY['assignments','assignment_stops','tour_logs','driver_positions','routes','stops','photos'] LOOP
+    BEGIN
+      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %I', tbl);
+    EXCEPTION WHEN others THEN NULL;
+    END;
   END LOOP;
-END;
-$$;
-
--- ---- users_profiles ----
-CREATE POLICY "admin_all_profiles" ON users_profiles
-  FOR ALL TO authenticated
-  USING (aboupro_is_admin())
-  WITH CHECK (aboupro_is_admin());
-
-CREATE POLICY "driver_own_profile_select" ON users_profiles
-  FOR SELECT TO authenticated
-  USING (id = auth.uid());
-
-CREATE POLICY "driver_update_own_profile" ON users_profiles
-  FOR UPDATE TO authenticated
-  USING (id = auth.uid())
-  WITH CHECK (id = auth.uid());
-
--- Allow insert so new users can create their own profile row at signup
-CREATE POLICY "user_insert_own_profile" ON users_profiles
-  FOR INSERT TO authenticated
-  WITH CHECK (id = auth.uid());
-
--- ---- routes ----
-CREATE POLICY "admin_all_routes" ON routes
-  FOR ALL TO authenticated
-  USING (aboupro_is_admin())
-  WITH CHECK (aboupro_is_admin());
-
-CREATE POLICY "driver_read_active_routes" ON routes
-  FOR SELECT TO authenticated
-  USING (is_active = true AND is_archived = false);
-
--- ---- stops ----
-CREATE POLICY "admin_all_stops" ON stops
-  FOR ALL TO authenticated
-  USING (aboupro_is_admin())
-  WITH CHECK (aboupro_is_admin());
-
-CREATE POLICY "driver_read_stops" ON stops
-  FOR SELECT TO authenticated
-  USING (
-    is_active = true AND EXISTS (
-      SELECT 1 FROM routes r WHERE r.id = stops.route_id AND r.is_active = true
-    )
-  );
-
--- ---- assignments ----
-CREATE POLICY "admin_all_assignments" ON assignments
-  FOR ALL TO authenticated
-  USING (aboupro_is_admin())
-  WITH CHECK (aboupro_is_admin());
-
-CREATE POLICY "driver_own_assignments_select" ON assignments
-  FOR SELECT TO authenticated
-  USING (driver_id = auth.uid());
-
-CREATE POLICY "driver_update_own_assignment" ON assignments
-  FOR UPDATE TO authenticated
-  USING (driver_id = auth.uid())
-  WITH CHECK (driver_id = auth.uid());
-
--- ---- assignment_stops ----
-CREATE POLICY "admin_all_assignment_stops" ON assignment_stops
-  FOR ALL TO authenticated
-  USING (aboupro_is_admin())
-  WITH CHECK (aboupro_is_admin());
-
-CREATE POLICY "driver_own_assignment_stops_select" ON assignment_stops
-  FOR SELECT TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM assignments a
-      WHERE a.id = assignment_stops.assignment_id AND a.driver_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "driver_own_assignment_stops_update" ON assignment_stops
-  FOR UPDATE TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM assignments a
-      WHERE a.id = assignment_stops.assignment_id AND a.driver_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM assignments a
-      WHERE a.id = assignment_stops.assignment_id AND a.driver_id = auth.uid()
-    )
-  );
-
--- ---- tour_logs ----
-CREATE POLICY "admin_all_tour_logs" ON tour_logs
-  FOR ALL TO authenticated
-  USING (aboupro_is_admin())
-  WITH CHECK (aboupro_is_admin());
-
-CREATE POLICY "driver_own_tour_logs_select" ON tour_logs
-  FOR SELECT TO authenticated
-  USING (driver_id = auth.uid());
-
-CREATE POLICY "driver_own_tour_logs_insert" ON tour_logs
-  FOR INSERT TO authenticated
-  WITH CHECK (driver_id = auth.uid());
-
--- ---- photos ----
-CREATE POLICY "admin_all_photos" ON photos
-  FOR ALL TO authenticated
-  USING (aboupro_is_admin())
-  WITH CHECK (aboupro_is_admin());
-
-CREATE POLICY "driver_own_photos_select" ON photos
-  FOR SELECT TO authenticated
-  USING (driver_id = auth.uid());
-
-CREATE POLICY "driver_own_photos_insert" ON photos
-  FOR INSERT TO authenticated
-  WITH CHECK (driver_id = auth.uid());
-
--- ---- driver_positions ----
-CREATE POLICY "admin_all_driver_positions" ON driver_positions
-  FOR ALL TO authenticated
-  USING (aboupro_is_admin())
-  WITH CHECK (aboupro_is_admin());
-
-CREATE POLICY "driver_own_positions_select" ON driver_positions
-  FOR SELECT TO authenticated
-  USING (driver_id = auth.uid());
-
-CREATE POLICY "driver_own_positions_insert" ON driver_positions
-  FOR INSERT TO authenticated
-  WITH CHECK (driver_id = auth.uid());
-
-CREATE POLICY "driver_own_positions_update" ON driver_positions
-  FOR UPDATE TO authenticated
-  USING (driver_id = auth.uid())
-  WITH CHECK (driver_id = auth.uid());
-
--- ============================================================
--- 14. REALTIME PUBLICATION (with existence check)
--- ============================================================
-DO $$
-DECLARE
-  tbl text;
-  tbl_list text[] := ARRAY[
-    'assignments','assignment_stops','tour_logs',
-    'driver_positions','routes','stops','photos'
-  ];
-BEGIN
-  -- Create publication if not exists
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime'
-  ) THEN
-    EXECUTE 'CREATE PUBLICATION supabase_realtime FOR TABLE ' ||
-      array_to_string(tbl_list, ', ');
-  ELSE
-    FOREACH tbl IN ARRAY tbl_list LOOP
-      BEGIN
-        EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %I', tbl);
-      EXCEPTION WHEN others THEN
-        -- table already in publication, ignore
-        NULL;
-      END;
-    END LOOP;
-  END IF;
 END;
 $$;
 
 -- ============================================================
 -- 15. VIEWS
 -- ============================================================
-
--- Drop and recreate views (idempotent)
-DROP VIEW IF EXISTS aboupro_assignments_view CASCADE;
-DROP VIEW IF EXISTS aboupro_driver_kpis CASCADE;
-
 CREATE VIEW aboupro_assignments_view AS
 SELECT
-  a.id,
-  a.assigned_date,
-  a.vehicle_type,
-  a.status,
-  a.start_time,
-  a.end_time_max,
-  a.started_at,
-  a.completed_at,
-  a.total_stops,
-  a.done_stops,
-  a.problem_stops,
-  a.total_km,
-  a.notes,
-  a.created_at,
-  -- Route info
+  a.id, a.assigned_date, a.vehicle_type, a.status,
+  a.start_time, a.end_time_max, a.started_at, a.completed_at,
+  a.total_stops, a.done_stops, a.problem_stops, a.total_km, a.notes, a.created_at,
   r.id           AS route_id,
   r.name         AS route_name,
   r.color        AS route_color,
   r.estimated_km AS route_estimated_km,
-  -- Driver info
   d.id           AS driver_id,
   d.identifier   AS driver_identifier,
   d.full_name    AS driver_name,
   d.phone        AS driver_phone,
-  -- Progress percentage
   CASE WHEN a.total_stops > 0
     THEN round((a.done_stops::numeric / a.total_stops::numeric) * 100, 1)
     ELSE 0
   END AS progress_pct
 FROM assignments a
-JOIN routes r          ON r.id = a.route_id
-JOIN users_profiles d  ON d.id = a.driver_id;
+JOIN routes r         ON r.id = a.route_id
+JOIN users_profiles d ON d.id = a.driver_id;
 
 CREATE VIEW aboupro_driver_kpis AS
 SELECT
@@ -596,12 +371,12 @@ SELECT
   d.identifier      AS driver_identifier,
   d.full_name       AS driver_name,
   d.is_active,
-  COUNT(a.id)                                                  AS total_assignments,
-  COUNT(a.id) FILTER (WHERE a.status = 'termine')              AS completed_assignments,
-  COUNT(a.id) FILTER (WHERE a.status = 'incident')             AS incident_assignments,
-  COALESCE(SUM(a.done_stops), 0)                               AS total_stops_done,
-  COALESCE(SUM(a.problem_stops), 0)                            AS total_stops_problem,
-  COALESCE(SUM(a.total_km), 0)                                 AS total_km,
+  COUNT(a.id)                                                   AS total_assignments,
+  COUNT(a.id) FILTER (WHERE a.status = 'termine')               AS completed_assignments,
+  COUNT(a.id) FILTER (WHERE a.status = 'incident')              AS incident_assignments,
+  COALESCE(SUM(a.done_stops),    0)                             AS total_stops_done,
+  COALESCE(SUM(a.problem_stops), 0)                             AS total_stops_problem,
+  COALESCE(SUM(a.total_km),      0)                             AS total_km,
   CASE
     WHEN COUNT(a.id) FILTER (WHERE a.status IN ('termine','incident')) > 0
     THEN round(
@@ -610,72 +385,19 @@ SELECT
     )
     ELSE 0
   END AS success_rate_pct,
-  -- Last position
-  (SELECT dp.lat FROM driver_positions dp
-   WHERE dp.driver_id = d.id ORDER BY dp.recorded_at DESC LIMIT 1) AS last_lat,
-  (SELECT dp.lng FROM driver_positions dp
-   WHERE dp.driver_id = d.id ORDER BY dp.recorded_at DESC LIMIT 1) AS last_lng,
-  (SELECT dp.recorded_at FROM driver_positions dp
-   WHERE dp.driver_id = d.id ORDER BY dp.recorded_at DESC LIMIT 1) AS last_position_at
+  (SELECT dp.lat        FROM driver_positions dp WHERE dp.driver_id = d.id ORDER BY dp.recorded_at DESC LIMIT 1) AS last_lat,
+  (SELECT dp.lng        FROM driver_positions dp WHERE dp.driver_id = d.id ORDER BY dp.recorded_at DESC LIMIT 1) AS last_lng,
+  (SELECT dp.recorded_at FROM driver_positions dp WHERE dp.driver_id = d.id ORDER BY dp.recorded_at DESC LIMIT 1) AS last_position_at
 FROM users_profiles d
 LEFT JOIN assignments a ON a.driver_id = d.id
 WHERE d.role = 'driver'
 GROUP BY d.id, d.identifier, d.full_name, d.is_active;
 
 -- ============================================================
--- 16. STORAGE BUCKET (abou-pro-photos)
--- ============================================================
-DO $$
-BEGIN
-  INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-  VALUES (
-    'abou-pro-photos',
-    'abou-pro-photos',
-    false,
-    5242880, -- 5 MB
-    ARRAY['image/jpeg','image/png','image/webp']
-  )
-  ON CONFLICT (id) DO NOTHING;
-EXCEPTION WHEN others THEN NULL;
-END;
-$$;
-
--- Storage RLS policies (drop old, recreate)
-DO $$
-BEGIN
-  DROP POLICY IF EXISTS "drivers_upload_photos" ON storage.objects;
-  DROP POLICY IF EXISTS "drivers_read_own_photos" ON storage.objects;
-  DROP POLICY IF EXISTS "admin_all_photos_storage" ON storage.objects;
-EXCEPTION WHEN others THEN NULL;
-END;
-$$;
-
-DO $$
-BEGIN
-  CREATE POLICY "drivers_upload_photos" ON storage.objects
-    FOR INSERT TO authenticated
-    WITH CHECK (bucket_id = 'abou-pro-photos' AND (storage.foldername(name))[1] = auth.uid()::text);
-EXCEPTION WHEN duplicate_object THEN NULL;
-END;
-$$;
-
-DO $$
-BEGIN
-  CREATE POLICY "drivers_read_own_photos" ON storage.objects
-    FOR SELECT TO authenticated
-    USING (bucket_id = 'abou-pro-photos' AND (aboupro_is_admin() OR (storage.foldername(name))[1] = auth.uid()::text));
-EXCEPTION WHEN duplicate_object THEN NULL;
-END;
-$$;
-
--- ============================================================
--- 17. HELPER: auto-update assignment progress on stop change
+-- 16. PROGRESS TRIGGER
 -- ============================================================
 CREATE OR REPLACE FUNCTION aboupro_update_assignment_progress(p_assignment_id uuid)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
   UPDATE assignments SET
     done_stops    = (SELECT COUNT(*) FROM assignment_stops WHERE assignment_id = p_assignment_id AND status = 'done'),
@@ -685,84 +407,70 @@ BEGIN
   WHERE id = p_assignment_id;
 END;
 $$;
-
 GRANT EXECUTE ON FUNCTION aboupro_update_assignment_progress(uuid) TO authenticated;
 
 CREATE OR REPLACE FUNCTION aboupro_trigger_update_progress()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  PERFORM aboupro_update_assignment_progress(
-    COALESCE(NEW.assignment_id, OLD.assignment_id)
-  );
+  PERFORM aboupro_update_assignment_progress(COALESCE(NEW.assignment_id, OLD.assignment_id));
   RETURN COALESCE(NEW, OLD);
 END;
 $$;
 
-DROP TRIGGER IF EXISTS trg_assignment_stops_progress ON assignment_stops;
-CREATE TRIGGER trg_assignment_stops_progress
+CREATE TRIGGER trg_as_progress
   AFTER INSERT OR UPDATE OR DELETE ON assignment_stops
   FOR EACH ROW EXECUTE FUNCTION aboupro_trigger_update_progress();
 
 -- ============================================================
--- 18. HELPER: today's summary for dashboard KPIs
+-- 17. DASHBOARD KPI FUNCTION
 -- ============================================================
 CREATE OR REPLACE FUNCTION aboupro_today_summary()
-RETURNS TABLE (
-  active_routes   bigint,
-  total_drivers   bigint,
-  tours_today     bigint,
-  avg_progress    numeric
-)
-LANGUAGE sql
-SECURITY DEFINER
-STABLE
-AS $$
+RETURNS TABLE (active_routes bigint, total_drivers bigint, tours_today bigint, avg_progress numeric)
+LANGUAGE sql SECURITY DEFINER STABLE AS $$
   SELECT
-    (SELECT COUNT(*) FROM routes WHERE is_active = true AND is_archived = false),
+    (SELECT COUNT(*) FROM routes        WHERE is_active = true AND is_archived = false),
     (SELECT COUNT(*) FROM users_profiles WHERE role = 'driver' AND is_active = true),
-    (SELECT COUNT(*) FROM assignments WHERE assigned_date = CURRENT_DATE),
+    (SELECT COUNT(*) FROM assignments   WHERE assigned_date = CURRENT_DATE),
     COALESCE((
-      SELECT AVG(
-        CASE WHEN total_stops > 0
-          THEN (done_stops::numeric / total_stops::numeric) * 100
-          ELSE 0
-        END
-      )
+      SELECT AVG(CASE WHEN total_stops > 0 THEN (done_stops::numeric/total_stops::numeric)*100 ELSE 0 END)
       FROM assignments WHERE assigned_date = CURRENT_DATE
     ), 0);
 $$;
-
 GRANT EXECUTE ON FUNCTION aboupro_today_summary() TO authenticated;
 
 -- ============================================================
--- 19. FINAL VERIFICATION — all 8 tables with column counts
+-- 18. STORAGE BUCKET
 -- ============================================================
-SELECT
-  table_name,
-  (SELECT COUNT(*) FROM information_schema.columns c
-   WHERE c.table_name = t.table_name AND c.table_schema = 'public') AS column_count
-FROM (VALUES
-  ('users_profiles'),
-  ('routes'),
-  ('stops'),
-  ('assignments'),
-  ('assignment_stops'),
-  ('tour_logs'),
-  ('photos'),
-  ('driver_positions')
-) AS t(table_name)
-ORDER BY table_name;
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES ('abou-pro-photos','abou-pro-photos', false, 5242880, ARRAY['image/jpeg','image/png','image/webp'])
+ON CONFLICT (id) DO NOTHING;
+
+DO $$
+BEGIN
+  DROP POLICY IF EXISTS "drivers_upload_photos"      ON storage.objects;
+  DROP POLICY IF EXISTS "drivers_read_own_photos"    ON storage.objects;
+  DROP POLICY IF EXISTS "admin_all_photos_storage"   ON storage.objects;
+EXCEPTION WHEN others THEN NULL;
+END;
+$$;
+
+CREATE POLICY "drivers_upload_photos" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'abou-pro-photos' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+CREATE POLICY "drivers_read_own_photos" ON storage.objects
+  FOR SELECT TO authenticated
+  USING (bucket_id = 'abou-pro-photos' AND (aboupro_is_admin() OR (storage.foldername(name))[1] = auth.uid()::text));
 
 -- ============================================================
--- DONE — ABOU PRO schema v2 installed successfully
--- Column naming reference:
---   users_profiles.id         (uuid, PK = auth.users.id)
---   users_profiles.identifier (text, short login e.g. "YG-T")
---   users_profiles.full_name  (text)
---   users_profiles.role       ('admin' | 'driver')
---   users_profiles.is_active  (boolean)
---   assignments.assigned_date (date)
---   assignments.driver_id     (uuid → users_profiles.id)
+-- VÉRIFICATION FINALE
 -- ============================================================
+SELECT table_name,
+  (SELECT COUNT(*) FROM information_schema.columns c
+   WHERE c.table_name = t.table_name AND c.table_schema = 'public') AS colonnes
+FROM (VALUES ('users_profiles'),('routes'),('stops'),('assignments'),('assignment_stops'),('tour_logs'),('photos'),('driver_positions')) AS t(table_name)
+ORDER BY table_name;
+
+-- DONE — Schema ABOU PRO v2 installé avec succès.
+-- Ouvrez abou_pro.html, l'écran de configuration s'affichera
+-- pour créer le compte administrateur.
