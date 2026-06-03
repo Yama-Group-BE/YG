@@ -21216,7 +21216,22 @@ order by table_name;</textarea>
     return !!map[id] && time(map[id]) >= time(savedAtOf(entry));
   }
   function rawHistory(){
-    try { return JSON.parse(localStorage.getItem(K.history) || '[]'); } catch(e){ return []; }
+    /* Fusionne les DEUX clés : la génération PDF V31 écrit dans 'yama_history'
+       tandis que le moteur de sync V32 travaille sur 'yama_history_v3'. Sans
+       cette fusion, une facture générée via V31 reste invisible au push-back
+       de sync → jamais propagée aux autres appareils. */
+    const merged = new Map();
+    ['yama_history', K.history].forEach(key => {
+      let arr = [];
+      try { arr = JSON.parse(localStorage.getItem(key) || '[]'); } catch(e){}
+      (Array.isArray(arr) ? arr : []).forEach(entry => {
+        const id = docNumOf(entry);
+        if (!id) return;
+        const prev = merged.get(id);
+        if (!prev || time(savedAtOf(entry)) >= time(savedAtOf(prev))) merged.set(id, entry);
+      });
+    });
+    return Array.from(merged.values());
   }
   function activeHistory(list){
     const map = new Map();
@@ -21231,6 +21246,10 @@ order by table_name;</textarea>
   function saveActiveHistory(list){
     const active = activeHistory(list);
     writeJSON(K.history, active);
+    /* Miroir dans la clé V31 'yama_history' pour que la génération PDF et
+       getHistory() voient le même historique canonique — évite la divergence
+       dual-key qui faisait disparaître des factures. */
+    try { writeJSON('yama_history', active); } catch(e){}
     return active;
   }
   function historyHash(list){
@@ -31558,6 +31577,85 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 
   localStorage.setItem(DONE_KEY, '1');
   console.info('[YAMA RECOVERY v2] ✅ YG-26-103 restauré définitivement (savedAt=now)');
+})();
+</script>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  YAMA HEADER MOBILE — règle autoritaire (iPhone)                  ║
+     ║  Plusieurs media queries contradictoires + .u-header{overflow:    ║
+     ║  visible!important} rendaient les contrôles de droite (Forcer     ║
+     ║  sync, numéros) inaccessibles sur petit écran. On injecte UNE     ║
+     ║  feuille de haute spécificité (body .u-header …) gardée en        ║
+     ║  dernière position du <head> pour gagner la cascade proprement.   ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<script>
+(function yamaHeaderMobileFix(){
+  var CSS = [
+    '@media (max-width: 820px){',
+    '  body .u-header{',
+    '    flex-wrap: wrap !important;',
+    '    height: auto !important;',
+    '    min-height: 48px !important;',
+    '    overflow: visible !important;',
+    '    padding: 6px 10px !important;',
+    '    row-gap: 6px !important;',
+    '    column-gap: 8px !important;',
+    '    align-items: center !important;',
+    '  }',
+    '  body .u-header .u-logo{ flex: 0 0 auto !important; }',
+    '  body .u-header .u-switcher{ flex: 0 0 auto !important; }',
+    '  body .u-header .u-search-wrap{ display: none !important; }',
+    /* La barre de contrôles passe sur sa propre ligne pleine largeur,
+       avec retour à la ligne : chaque pastille reste atteignable. */
+    '  body .u-header .u-right{',
+    '    order: 3 !important;',
+    '    margin-left: 0 !important;',
+    '    flex: 1 1 100% !important;',
+    '    width: 100% !important;',
+    '    display: flex !important;',
+    '    flex-wrap: wrap !important;',
+    '    align-items: center !important;',
+    '    justify-content: flex-start !important;',
+    '    gap: 6px !important;',
+    '    overflow: visible !important;',
+    '  }',
+    '  body .u-header .u-right > *{ flex: 0 0 auto !important; }',
+    '  body .u-header .u-pill,',
+    '  body .u-header .cloud-pill,',
+    '  body .u-header #yama-final-force-sync,',
+    '  body .u-header #numDisplay{',
+    '    white-space: nowrap !important;',
+    '    font-size: 11px !important;',
+    '  }',
+    /* On laisse les libellés visibles puisqu\'il y a de la place sur la ligne dédiée */
+    '  body .u-header .cloud-pill span:last-child,',
+    '  body .u-header #gcalPill span:last-child{ display: inline !important; }',
+    '}',
+    '@media (max-width: 430px){',
+    '  body .u-header .u-switcher{ flex: 1 1 auto !important; }',
+    '  body .u-header .u-btn{ flex: 1 1 0 !important; text-align: center !important; }',
+    '  body .u-header #numDisplay{ flex: 1 1 100% !important; text-align: center !important; }',
+    '}'
+  ].join('\n');
+
+  function ensure(){
+    var s = document.getElementById('yama-header-mobile-fix');
+    if (!s){
+      s = document.createElement('style');
+      s.id = 'yama-header-mobile-fix';
+      document.head.appendChild(s);
+    }
+    if (s.textContent !== CSS) s.textContent = CSS;
+    /* Garder en dernière position du <head> pour gagner à spécificité égale
+       face aux feuilles injectées plus tard par d\'autres patchs. */
+    if (s !== document.head.lastElementChild) document.head.appendChild(s);
+  }
+
+  ensure();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ensure);
+  setTimeout(ensure, 800);
+  setTimeout(ensure, 2000);
+  console.info('[YAMA HEADER MOBILE] règle autoritaire appliquée.');
 })();
 </script>
 </body>
