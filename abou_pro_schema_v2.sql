@@ -10,6 +10,65 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- ============================================================
+-- 0b. MIGRATION: rename old columns if coming from schema v1
+-- ============================================================
+DO $$
+BEGIN
+  -- Rename active → is_active
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='users_profiles' AND column_name='active'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='users_profiles' AND column_name='is_active'
+  ) THEN
+    ALTER TABLE users_profiles RENAME COLUMN active TO is_active;
+  END IF;
+
+  -- Add is_active if missing entirely
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='users_profiles' AND column_name='is_active'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema='public' AND table_name='users_profiles'
+  ) THEN
+    ALTER TABLE users_profiles ADD COLUMN is_active boolean NOT NULL DEFAULT true;
+  END IF;
+
+  -- Add identifier if missing (old schema used name/login instead)
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='users_profiles' AND column_name='identifier'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema='public' AND table_name='users_profiles'
+  ) THEN
+    -- Try to populate from existing login or name column
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users_profiles' AND column_name='login') THEN
+      ALTER TABLE users_profiles ADD COLUMN identifier text;
+      UPDATE users_profiles SET identifier = login WHERE identifier IS NULL;
+      ALTER TABLE users_profiles ALTER COLUMN identifier SET NOT NULL;
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users_profiles' AND column_name='name') THEN
+      ALTER TABLE users_profiles ADD COLUMN identifier text;
+      UPDATE users_profiles SET identifier = name WHERE identifier IS NULL;
+      ALTER TABLE users_profiles ALTER COLUMN identifier SET NOT NULL;
+    ELSE
+      ALTER TABLE users_profiles ADD COLUMN IF NOT EXISTS identifier text NOT NULL DEFAULT '';
+    END IF;
+  END IF;
+
+  -- role: update old 'chauffeur' value to 'driver'
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='users_profiles' AND column_name='role'
+  ) THEN
+    UPDATE users_profiles SET role='driver' WHERE role='chauffeur';
+  END IF;
+END;
+$$;
+
+-- ============================================================
 -- 1. UTILITY FUNCTION: aboupro_set_updated_at (no dependencies)
 -- ============================================================
 CREATE OR REPLACE FUNCTION aboupro_set_updated_at()
