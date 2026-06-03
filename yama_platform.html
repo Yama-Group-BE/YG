@@ -8160,7 +8160,13 @@ function saveToHistory() {
 }
 
 function renderHistory() {
-  const hist = getHistory();
+  const _rawHist = getHistory();
+  const hist = _rawHist.slice().sort((a, b) => {
+    const n = d => { const m = String(d.docNum || '').match(/(\d+)$/); return m ? parseInt(m[1]) : 0; };
+    const diff = n(b) - n(a);
+    if (diff !== 0) return diff;
+    return String(b.dateEmission || b.savedAt || '').localeCompare(String(a.dateEmission || a.savedAt || ''));
+  });
   document.getElementById('historyCount').textContent = hist.length;
   const list = document.getElementById('historyList');
 
@@ -8216,7 +8222,7 @@ function renderHistory() {
     btnLoad.className = 'btn-icon';
     btnLoad.title = 'Charger pour modifier';
     btnLoad.innerHTML = '📂';
-    btnLoad.onclick = () => loadFromHistory(idx);
+    btnLoad.onclick = () => loadFromHistoryByNum(h.docNum);
     actions.appendChild(btnLoad);
 
     const btnPdf = document.createElement('button');
@@ -20053,6 +20059,7 @@ order by table_name;</textarea>
       ? escapeHtml(data.remarques.trim()).replace(/\n/g, '<br>')
       : '_____________________________________________________________';
 
+    const acompteVerse = parseFloat(data.acompteVerse) || 0;
     const conditionsHtml = isDevis ? `
       <p>•  Devis valable 30 jours à compter de la date d'émission.</p>
       <p class="bold">•  Acompte de ${_acomptePct19195}% obligatoire à la commande, soit ${fmt(acompte)}.</p>
@@ -20061,9 +20068,10 @@ order by table_name;</textarea>
       <p>•  <strong>Remarques :</strong> ${remarquesText}</p>
     ` : `
       <p>•  Facture à régler par <strong>paiement immédiat</strong> à réception de la présente facture.</p>
-      ${acompte > 0 ? `<p class="bold">•  Acompte déjà versé : ${fmt(acompte)}  —  Solde restant dû : ${fmt(totalTTC - acompte)}.</p>` : ''}
-      <p>•  Paiement par virement bancaire — merci de préciser le numéro de facture en communication.</p>
-      <p class="bold">•  Tout retard entraînera des pénalités de 10% à partir du 5ème jour ouvrable.</p>
+      ${acompteVerse > 0 ? `<p class="bold">•  Acompte déjà versé : ${fmt(acompteVerse)}  —  Solde restant dû : ${fmt(totalTTC - acompteVerse)}.</p>` : ''}
+      <p>•  Paiement par virement bancaire — merci de mentionner le numéro de facture en communication.</p>
+      <p class="bold">•  Après 5 jours ouvrables sans règlement : frais administratifs forfaitaires de <strong>50,00 €</strong>.</p>
+      <p class="bold">•  Au-delà de 10 jours ouvrables : majoration de <strong>5 % du montant TTC</strong> s'applique de plein droit.</p>
       <p>•  <strong>Remarques :</strong> ${remarquesText}</p>
     `;
 
@@ -20092,7 +20100,6 @@ order by table_name;</textarea>
       <p><strong>Valable jusqu'au :</strong>  ${fmtDate(data.dateValidite)}</p>
     ` : `
       <p><strong>Date de facture :</strong>  ${fmtDate(data.dateEmission)}</p>
-      <p><strong>Échéance :</strong>  ${fmtDate(data.dateValidite)}</p>
     `;
 
     const chunks = yamaPdfSplitRows(lignes);
@@ -20135,8 +20142,8 @@ order by table_name;</textarea>
                   <p><strong>Référence :</strong>  ${escapeHtml(data.chantierRef || '')}</p>
                   <p><strong>Adresse travaux :</strong>  ${escapeHtml(data.chantierAdresse || '')}</p>
                   <p><strong>Code postal / Ville :</strong>  ${escapeHtml(chantierLine2)}</p>
-                  <p><strong>Âge du bâtiment :</strong>  &gt; 10 ans ${isPlus10 ? '☑' : '☐'}  &lt; 10 ans ${!isPlus10 ? '☑' : '☐'}</p>
-                  <p><strong>TVA applicable :</strong>  6% ${isPlus10 ? '☑' : '☐'}   21% ${!isPlus10 ? '☑' : '☐'}</p>
+                  ${isDevis ? `<p><strong>Âge du bâtiment :</strong>  &gt; 10 ans ${isPlus10 ? '☑' : '☐'}  &lt; 10 ans ${!isPlus10 ? '☑' : '☐'}</p>
+                  <p><strong>TVA applicable :</strong>  6% ${isPlus10 ? '☑' : '☐'}   21% ${!isPlus10 ? '☑' : '☐'}</p>` : ''}
                 </div>
               </div>` : `
               <div class="pdf-continuation-row">
@@ -20748,16 +20755,19 @@ order by table_name;</textarea>
     }
     setFont(pdf, 25, 'bold', DARK);
     text(pdf, title, A4.m, 50);
-    setFont(pdf, 12.5, 'normal', GOLD);
-    text(pdf, 'N ' + (meta.docNum || ''), A4.m + 39, 50);
+    setFont(pdf, 11, 'normal', GOLD);
+    text(pdf, 'N° ' + (meta.docNum || ''), A4.m + 60, 50);
     const dateLabel = docType === 'facture' ? 'Date de facture :' : "Date d'emission :";
-    const validLabel = docType === 'facture' ? 'Echeance :' : "Valable jusqu'au :";
     setFont(pdf, 8.5, 'bold', DARK);
-    text(pdf, dateLabel, A4.w - A4.m - 40, 44);
-    text(pdf, validLabel, A4.w - A4.m - 40, 50);
+    text(pdf, dateLabel, A4.w - A4.m - 40, docType === 'facture' ? 47 : 44);
+    if (docType !== 'facture') {
+      text(pdf, "Valable jusqu'au :", A4.w - A4.m - 40, 50);
+    }
     setFont(pdf, 8.5, 'normal', DARK);
-    text(pdf, dateFmt(data.dateEmission), A4.w - A4.m, 44, { align:'right' });
-    text(pdf, dateFmt(data.dateValidite), A4.w - A4.m, 50, { align:'right' });
+    text(pdf, dateFmt(data.dateEmission), A4.w - A4.m, docType === 'facture' ? 47 : 44, { align:'right' });
+    if (docType !== 'facture') {
+      text(pdf, dateFmt(data.dateValidite), A4.w - A4.m, 50, { align:'right' });
+    }
     pdf.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
     pdf.line(A4.m, 57, A4.w - A4.m, 57);
     return 66;
@@ -20775,10 +20785,11 @@ order by table_name;</textarea>
     pairs.forEach(p => { h += Math.max(1, split(pdf, clean(p[1]), w - 36).length) * 3.75 + 1.15; });
     return Math.max(42, h);
   }
-  function drawInfoBlocks(pdf, y, data){
+  function drawInfoBlocks(pdf, y, data, docType){
     const gap = 9;
     const bw = (A4.w - A4.m * 2 - gap) / 2;
     const isPlus10 = data.ageBatiment === 'plus10';
+    const isFacture = docType === 'facture';
     const client = [
       ['Nom / Societe', data.clientNom],
       ['Adresse', data.clientAdresse],
@@ -20790,8 +20801,10 @@ order by table_name;</textarea>
       ['Reference', data.chantierRef],
       ['Adresse travaux', data.chantierAdresse],
       ['CP / Ville', [data.chantierCP, data.chantierVille].filter(Boolean).join(' ')],
-      ['Age batiment', '> 10 ans ' + (isPlus10 ? '[x]' : '[ ]') + '    < 10 ans ' + (!isPlus10 ? '[x]' : '[ ]')],
-      ['TVA applicable', '6% ' + (isPlus10 ? '[x]' : '[ ]') + '    21% ' + (!isPlus10 ? '[x]' : '[ ]')]
+      ...(!isFacture ? [
+        ['Age batiment', '> 10 ans ' + (isPlus10 ? '[x]' : '[ ]') + '    < 10 ans ' + (!isPlus10 ? '[x]' : '[ ]')],
+        ['TVA applicable', '6% ' + (isPlus10 ? '[x]' : '[ ]') + '    21% ' + (!isPlus10 ? '[x]' : '[ ]')]
+      ] : [])
     ];
     const h = Math.max(infoBlockHeight(pdf, client, bw), infoBlockHeight(pdf, chantier, bw));
     function box(x, title, pairs){
@@ -20956,7 +20969,7 @@ order by table_name;</textarea>
     const rows = (data.lignesClient || []).filter(l => l && (l.desc || l.qte || l.pu));
     const totals = totalsFrom(rows);
     let y = drawTop(pdf, docType, data, meta, '');
-    y = drawInfoBlocks(pdf, y, data);
+    y = drawInfoBlocks(pdf, y, data, docType);
     y = drawSectionTitle(pdf, 'DESCRIPTION DES TRAVAUX', y);
     y = drawTableHeader(pdf, y);
     setFont(pdf, 7.25, 'normal', DARK); // police description avant split() pour métriques correctes
