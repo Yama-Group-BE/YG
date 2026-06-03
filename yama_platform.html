@@ -7716,7 +7716,7 @@ function buildPdfHtml(docType, data, meta) {
     </p>
     <p>•  <strong>Remarques :</strong> ${remarquesText}</p>
   ` : `
-    <p>•  Facture à régler sous <strong>5 jours ouvrables</strong> à compter de la date d'émission.</p>
+    <p>•  Facture à régler par <strong>paiement immédiat</strong> à réception de la présente facture.</p>
     ${data.acompteVerse && parseFloat(data.acompteVerse) > 0 ? `<p class="bold">•  Acompte déjà versé : ${fmt(parseFloat(data.acompteVerse))}  —  <span style="color:#c9a84c;">Solde restant dû : ${fmt(totalTTC - parseFloat(data.acompteVerse))}.</span></p>` : ''}
     <p>•  Paiement par virement bancaire — merci de préciser le numéro de facture en communication.</p>
     <p class="bold">•  Tout retard entraînera des pénalités de 10% à partir du 5ème jour ouvrable.</p>
@@ -20060,8 +20060,8 @@ order by table_name;</textarea>
       <p class="bold">•  Tout retard entraînera des pénalités de 10% à partir du 5ème jour ouvrable.</p>
       <p>•  <strong>Remarques :</strong> ${remarquesText}</p>
     ` : `
-      <p>•  Facture à régler sous 8 jours à compter de la date d'émission.</p>
-      <p class="bold">•  Acompte déjà versé : ${fmt(acompte)}  —  Solde restant dû : ${fmt(totalTTC - acompte)}.</p>
+      <p>•  Facture à régler par <strong>paiement immédiat</strong> à réception de la présente facture.</p>
+      ${acompte > 0 ? `<p class="bold">•  Acompte déjà versé : ${fmt(acompte)}  —  Solde restant dû : ${fmt(totalTTC - acompte)}.</p>` : ''}
       <p>•  Paiement par virement bancaire — merci de préciser le numéro de facture en communication.</p>
       <p class="bold">•  Tout retard entraînera des pénalités de 10% à partir du 5ème jour ouvrable.</p>
       <p>•  <strong>Remarques :</strong> ${remarquesText}</p>
@@ -20895,12 +20895,13 @@ order by table_name;</textarea>
       'Tout retard entrainera des penalites de 10% a partir du 5eme jour ouvrable.',
       'Remarques : ' + rem
     ] : [
-      "Facture a regler sous 8 jours a compter de la date d'emission.",
-      'Acompte deja verse : ' + euro(acompte) + ' - Solde restant du : ' + euro(totals.totalTTC - acompte) + '.',
+      'Facture a regler par paiement immediat a reception de la presente facture.',
+      acompte > 0 ? ('Acompte deja verse : ' + euro(acompte) + ' - Solde restant du : ' + euro(totals.totalTTC - acompte) + '.') : null,
       'Paiement par virement bancaire avec le numero de facture en communication.',
       'Tout retard entrainera des penalites de 10% a partir du 5eme jour ouvrable.',
       'Remarques : ' + rem
     ];
+    texts = texts.filter(t => t != null);
     const gap = compact ? 3.25 : 3.65;
     let count = 0;
     texts.forEach(t => { count += split(pdf, '- ' + t, 174).length; });
