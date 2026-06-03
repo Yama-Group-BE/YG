@@ -9471,10 +9471,11 @@ document.addEventListener('DOMContentLoaded', () => {
       <h3>📋 Script SQL à exécuter dans Supabase</h3>
       <p style="font-size:12px;">Va dans <strong>SQL Editor</strong> de ton projet Supabase et exécute ce script complet :</p>
       <textarea id="sqlScriptArea" readonly style="width:100%; min-height:260px; background:rgba(0,0,0,0.3); border:1px solid var(--border); color:var(--gold); font-family:'Courier New',monospace; font-size:11px; padding:12px; border-radius:3px;">-- ═══════════════════════════════════════════════════════════════════════
--- YAMA GROUP — Schéma Supabase complet v12
--- Date           : 2026-05-21
+-- YAMA GROUP — Schéma Supabase complet v13
+-- Date           : 2026-06-03
 -- À exécuter dans Supabase &gt; SQL Editor.
 -- Idempotent : peut être relancé sans risque sur une base existante.
+-- Cohérent avec la sync inter-appareils (historique, compteurs, photo profil).
 -- ═══════════════════════════════════════════════════════════════════════
 
 create extension if not exists pgcrypto;
@@ -9576,9 +9577,11 @@ create trigger yama_devis_status_set_updated_at
   for each row execute function yama_set_updated_at();
 
 -- ═══════════════════════════════════════════════════════════════════════
--- TABLE 4 : yama_counters — Numérotation devis / factures
+-- TABLE 4 : yama_counters — Store clé-valeur (numérotation + réglages)
 -- ═══════════════════════════════════════════════════════════════════════
--- rows : 'devis_counter', 'facture_counter', 'st_updated_at'
+-- id='devis' / id='facture' : value = dernier numéro (numérotation monotone)
+-- id='st_updated_at'        : ts = horodatage carnet sous-traitants
+-- id='profile_photo'        : data = { photo:&lt;dataURL&gt;, ts:&lt;ISO&gt; }  (logo partagé)
 create table if not exists yama_counters (
   id         text        primary key,
   value      integer     not null default 0,
@@ -9593,8 +9596,8 @@ alter table yama_counters add column if not exists data       jsonb;
 alter table yama_counters add column if not exists saved_at   timestamptz not null default now();
 alter table yama_counters add column if not exists updated_at timestamptz not null default now();
 
-insert into yama_counters (id, value) values ('devis_counter',   0) on conflict (id) do nothing;
-insert into yama_counters (id, value) values ('facture_counter', 0) on conflict (id) do nothing;
+insert into yama_counters (id, value) values ('devis',   101) on conflict (id) do nothing;
+insert into yama_counters (id, value) values ('facture', 101) on conflict (id) do nothing;
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- TABLE 5 : yama_sous_traitants — Carnet sous-traitants (CRM)
@@ -31656,6 +31659,220 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   setTimeout(ensure, 800);
   setTimeout(ensure, 2000);
   console.info('[YAMA HEADER MOBILE] règle autoritaire appliquée.');
+})();
+</script>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  YAMA PARITÉ INTER-APPAREILS 2026                                 ║
+     ║  • Photo de profil synchronisée (push+pull via yama_counters)     ║
+     ║  • Re-push complet de l'historique → garantit que chaque facture  ║
+     ║    atteint le cloud même si le push initial a échoué              ║
+     ║  • Parité mobile : boutons d'action devis/facture toujours        ║
+     ║    visibles et cliquables sur téléphone                           ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<script>
+(function yamaCrossDeviceParity(){
+  if (window.__YAMA_PARITY_2026__) return;
+  window.__YAMA_PARITY_2026__ = true;
+
+  var PHOTO_KEY = 'yama_profile_photo_v1';
+  var PHOTO_TS_KEY = 'yama_profile_photo_ts_v1';
+  var repushedThisSession = false;
+
+  /* Récupère un client Supabase : réutilise le client global si connecté,
+     sinon en reconstruit un à partir de la config stockée. */
+  function getClient(){
+    try { if (typeof supaClient !== 'undefined' && supaClient) return supaClient; } catch(e){}
+    try {
+      var url = localStorage.getItem('yama_supabase_url');
+      var key = localStorage.getItem('yama_supabase_key');
+      if (url && key && window.supabase && window.supabase.createClient) {
+        return window.supabase.createClient(url, key, { auth:{ persistSession:true, storageKey:'yama_supa_auth' } });
+      }
+    } catch(e){}
+    return null;
+  }
+
+  /* ── PHOTO DE PROFIL : applique au header (autonome, ne dépend pas
+       d'applyProfilePhoto qui est encapsulé dans un autre IIFE) ── */
+  function reapplyPhoto(photo){
+    var icon = document.querySelector('.u-logo-icon');
+    if (!icon) return;
+    if (photo){
+      icon.classList.add('has-photo');
+      icon.innerHTML = '<img src="'+photo+'" alt="logo" style="width:100%;height:100%;object-fit:cover;border-radius:7px;">';
+    } else {
+      icon.classList.remove('has-photo');
+      icon.innerHTML = 'YG';
+    }
+    try { if (typeof applyProfilePhoto === 'function') applyProfilePhoto(); } catch(e){}
+  }
+
+  async function pushProfilePhoto(){
+    var client = getClient(); if (!client) return false;
+    var photo = localStorage.getItem(PHOTO_KEY) || '';
+    var ts = localStorage.getItem(PHOTO_TS_KEY) || new Date().toISOString();
+    if (!localStorage.getItem(PHOTO_TS_KEY)) { try { localStorage.setItem(PHOTO_TS_KEY, ts); } catch(e){} }
+    try {
+      var res = await client.from('yama_counters').upsert(
+        { id:'profile_photo', value:0, data:{ photo:photo, ts:ts }, saved_at:ts, updated_at:ts },
+        { onConflict:'id' }
+      );
+      if (res.error) res = await client.from('yama_counters').upsert(
+        { id:'profile_photo', value:0, data:{ photo:photo, ts:ts } }, { onConflict:'id' }
+      );
+      return !res.error;
+    } catch(e){ console.warn('[YAMA Photo] push:', e.message||e); return false; }
+  }
+
+  async function pullProfilePhoto(){
+    var client = getClient(); if (!client) return false;
+    try {
+      var r = await client.from('yama_counters').select('*').eq('id','profile_photo').limit(1);
+      if (r.error || !r.data || !r.data.length) return false;
+      var row = r.data[0];
+      var cloud = (row.data && row.data.photo) || '';
+      var cloudTs = (row.data && row.data.ts) || row.updated_at || row.saved_at || '';
+      var localTs = localStorage.getItem(PHOTO_TS_KEY) || '';
+      var cloudNewer = cloudTs && (!localTs || new Date(cloudTs).getTime() > new Date(localTs).getTime());
+      if (cloud && cloudNewer) {
+        localStorage.setItem(PHOTO_KEY, cloud);
+        localStorage.setItem(PHOTO_TS_KEY, cloudTs);
+        reapplyPhoto(cloud);
+      } else if (!cloud && cloudNewer) {
+        localStorage.removeItem(PHOTO_KEY);
+        localStorage.setItem(PHOTO_TS_KEY, cloudTs);
+        reapplyPhoto('');
+      }
+      return true;
+    } catch(e){ console.warn('[YAMA Photo] pull:', e.message||e); return false; }
+  }
+
+  /* Hook upload/suppression de photo → horodate + pousse au cloud */
+  function wrapPhotoHandlers(){
+    if (typeof window.__yamaUploadPhoto === 'function' && !window.__yamaUploadPhoto.__paritySync){
+      var up = window.__yamaUploadPhoto;
+      window.__yamaUploadPhoto = function(input){
+        var r = up.apply(this, arguments);
+        setTimeout(function(){
+          try { localStorage.setItem(PHOTO_TS_KEY, new Date().toISOString()); } catch(e){}
+          pushProfilePhoto();
+        }, 600); /* attendre que le FileReader ait écrit PHOTO_KEY */
+        return r;
+      };
+      window.__yamaUploadPhoto.__paritySync = true;
+    }
+    if (typeof window.__yamaDeletePhoto === 'function' && !window.__yamaDeletePhoto.__paritySync){
+      var del = window.__yamaDeletePhoto;
+      window.__yamaDeletePhoto = function(){
+        var r = del.apply(this, arguments);
+        try { localStorage.setItem(PHOTO_TS_KEY, new Date().toISOString()); } catch(e){}
+        pushProfilePhoto();
+        return r;
+      };
+      window.__yamaDeletePhoto.__paritySync = true;
+    }
+  }
+
+  /* ── RE-PUSH COMPLET DE L'HISTORIQUE ──
+     Pousse CHAQUE entrée locale (les deux clés) vers le cloud, pour qu'une
+     facture/devis générée localement atteigne toujours le cloud — même si
+     le push immédiat avait échoué. C'est la clé de la parité inter-appareils. */
+  async function repushAllHistory(){
+    if (typeof window.syncPushHistory !== 'function') return;
+    var seen = {};
+    var keys = ['yama_history','yama_history_v3'];
+    for (var ki=0; ki<keys.length; ki++){
+      var arr = [];
+      try { arr = JSON.parse(localStorage.getItem(keys[ki]) || '[]'); } catch(e){}
+      if (!Array.isArray(arr)) continue;
+      for (var i=0; i<arr.length; i++){
+        var entry = arr[i];
+        var id = entry && (entry.docNum || entry.doc_num);
+        if (!id || seen[id]) continue;
+        if (entry.deleted || entry.deletedAt || entry.deleted_at) continue;
+        seen[id] = true;
+        try { await window.syncPushHistory(entry); } catch(e){}
+      }
+    }
+  }
+
+  /* ── WIRING ──
+     1. Sync forcée : re-push historique + push photo AVANT, pull photo APRÈS */
+  function wrapForceSync(){
+    if (typeof window.forceSyncAll === 'function' && !window.forceSyncAll.__parity){
+      var orig = window.forceSyncAll;
+      window.forceSyncAll = async function(){
+        try { await repushAllHistory(); } catch(e){}
+        try { await pushProfilePhoto(); } catch(e){}
+        var res;
+        try { res = await orig.apply(this, arguments); } catch(e){ console.error('[YAMA Parity] force:', e); }
+        try { await pullProfilePhoto(); } catch(e){}
+        return res;
+      };
+      window.forceSyncAll.__parity = true;
+    }
+  }
+
+  /* 2. Sync auto (pull périodique) : tire aussi la photo */
+  function wrapFullPull(){
+    if (typeof window.syncFullPull === 'function' && !window.syncFullPull.__parity){
+      var orig = window.syncFullPull;
+      window.syncFullPull = async function(){
+        var res;
+        try { res = await orig.apply(this, arguments); } catch(e){ throw e; }
+        finally { try { await pullProfilePhoto(); } catch(e){} }
+        return res;
+      };
+      window.syncFullPull.__parity = true;
+    }
+  }
+
+  /* 3. Boot : applique la photo locale, puis pull cloud + re-push une fois */
+  function boot(){
+    wrapPhotoHandlers();
+    wrapForceSync();
+    wrapFullPull();
+    var local = localStorage.getItem(PHOTO_KEY);
+    if (local) reapplyPhoto(local);
+    /* Après connexion cloud probable, synchronise photo + historique une fois */
+    setTimeout(function(){
+      pullProfilePhoto();
+      if (!repushedThisSession){ repushedThisSession = true; repushAllHistory(); }
+    }, 3500);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+  /* Re-hook après les patchs tardifs qui pourraient redéfinir les handlers/sync */
+  setTimeout(function(){ wrapPhotoHandlers(); wrapForceSync(); wrapFullPull(); }, 1500);
+  setTimeout(function(){ wrapPhotoHandlers(); wrapForceSync(); wrapFullPull(); }, 4000);
+
+  /* ── PARITÉ MOBILE : boutons d'action devis/facture toujours visibles ── */
+  (function mobileActionsCss(){
+    var CSS = [
+      '@media (max-width: 820px){',
+      '  #devisList .devis-item, #historyList .history-item{',
+      '    flex-wrap: wrap !important;',
+      '  }',
+      '  #devisList .devis-item-actions, #devisList .card-actions,',
+      '  #historyList .history-actions{',
+      '    display: flex !important; flex-wrap: wrap !important; gap: 6px !important;',
+      '    width: 100% !important; margin-top: 8px !important;',
+      '  }',
+      '  #devisList .btn-action, #historyList .btn-icon{',
+      '    flex: 1 1 auto !important; min-height: 38px !important; font-size: 12px !important;',
+      '  }',
+      '  /* La modal de sync (Forcer sync, modifier, déconnexion) plein écran lisible */',
+      '  #syncModal .modal, #syncModal .modal-box{ max-height: 92vh !important; overflow-y: auto !important; }',
+      '}'
+    ].join('\n');
+    var s = document.getElementById('yama-mobile-actions-fix');
+    if (!s){ s = document.createElement('style'); s.id = 'yama-mobile-actions-fix'; document.head.appendChild(s); }
+    s.textContent = CSS;
+  })();
+
+  console.info('[YAMA PARITÉ 2026] Photo + historique synchronisés inter-appareils, parité mobile active.');
 })();
 </script>
 </body>
