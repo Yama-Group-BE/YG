@@ -12,6 +12,28 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- ============================================================
+-- 0a. SUPPRIME les anciens triggers sur auth.users
+--     (cause principale de "Database error finding user")
+-- ============================================================
+DO $$
+BEGIN
+  DROP TRIGGER IF EXISTS on_auth_user_created          ON auth.users;
+  DROP TRIGGER IF EXISTS on_auth_user_created_trigger  ON auth.users;
+  DROP TRIGGER IF EXISTS handle_new_user_trigger       ON auth.users;
+  DROP TRIGGER IF EXISTS create_profile_trigger        ON auth.users;
+EXCEPTION WHEN others THEN NULL;
+END;
+$$;
+DO $$
+BEGIN
+  DROP FUNCTION IF EXISTS public.handle_new_user()   CASCADE;
+  DROP FUNCTION IF EXISTS public.create_profile()    CASCADE;
+  DROP FUNCTION IF EXISTS public.sync_user_profile() CASCADE;
+EXCEPTION WHEN others THEN NULL;
+END;
+$$;
+
+-- ============================================================
 -- 0b. NETTOYAGE COMPLET des anciens objets (DROP CASCADE)
 -- ============================================================
 DROP VIEW  IF EXISTS aboupro_driver_kpis        CASCADE;
