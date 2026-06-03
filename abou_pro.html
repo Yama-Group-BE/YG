@@ -1,1607 +1,662 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
-<meta name="theme-color" content="#0b1120">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="ABOU PRO">
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
 <title>ABOU PRO — Tournées logistiques</title>
-<link rel="manifest" href="./manifest.json">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%230b1120'/%3E%3Crect x='110' y='196' width='200' height='130' rx='14' fill='%233b82f6'/%3E%3Cpath d='M310 232h70l42 52v42h-112z' fill='%23f59e0b'/%3E%3Ccircle cx='176' cy='350' r='34' fill='%23e2e8f0'/%3E%3Ccircle cx='356' cy='350' r='34' fill='%23e2e8f0'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="manifest" href="./manifest.json"/>
+<meta name="theme-color" content="#0b1120"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: { extend: { colors: {
-      ink: '#0b1120', ink2: '#0f172a', ink3: '#1e293b', line: '#1e293b',
-      brand: '#3b82f6', brand2: '#60a5fa', amber: '#f59e0b',
-      ok: '#10b981', bad: '#ef4444', warn: '#f59e0b'
-    }, fontFamily: { sans: ['Inter','system-ui','sans-serif'] } } }
-  };
-</script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
 <style>
-  html,body,#root{height:100%;}
-  body{background:#0b1120;color:#e2e8f0;margin:0;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none;}
-  *{-webkit-user-select:none;user-select:none;}
-  input,textarea,select{-webkit-user-select:text;user-select:text;font-size:16px;}
-  .leaflet-container{background:#0f172a;border-radius:12px;}
-  .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#1e293b;color:#e2e8f0;}
-  ::-webkit-scrollbar{width:6px;height:6px;}::-webkit-scrollbar-thumb{background:#334155;border-radius:3px;}
-  .num-pin{display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;border-radius:50%;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);font-size:13px;}
-  @keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin 1s linear infinite;}
-  @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}.fadein{animation:fadein .25s ease;}
-  .splash{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#0b1120;z-index:9999;}
+*{box-sizing:border-box}
+body{background:#0b1120;color:#e2e8f0;font-family:system-ui,-apple-system,sans-serif;margin:0}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:#1e293b}
+::-webkit-scrollbar-thumb{background:#3b82f6;border-radius:3px}
+.card{background:#1e293b;border:1px solid #334155;border-radius:12px}
+.inp{background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:10px 14px;width:100%;outline:none;transition:border-color .2s;font-size:14px}
+.inp:focus{border-color:#3b82f6}
+.btn{border-radius:8px;padding:10px 20px;font-weight:600;cursor:pointer;border:none;transition:all .2s;font-size:14px}
+.bp{background:#3b82f6;color:white}.bp:hover{background:#2563eb}.bp:disabled{background:#334155;cursor:not-allowed;color:#94a3b8}
+.bg2{background:#374151;color:#e2e8f0}.bg2:hover{background:#4b5563}
+.bgrn{background:#059669;color:white}.bgrn:hover{background:#047857}
+.bred{background:#dc2626;color:white}.bred:hover{background:#b91c1c}
+.nav-item{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:all .2s;color:#94a3b8;font-size:14px;font-weight:500;border:none;background:transparent;width:100%;text-align:left}
+.nav-item:hover{background:#1e293b;color:#e2e8f0}
+.nav-item.active{background:#1e3a8a33;color:#3b82f6}
+.leaflet-container{background:#1e293b}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{animation:spin 1s linear infinite;display:inline-block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fi{animation:fadeIn .25s ease}
 </style>
 </head>
 <body>
-<div id="root">
-  <div class="splash">
-    <div style="width:72px;height:72px;border-radius:18px;background:#0f172a;display:flex;align-items:center;justify-content:center;border:1px solid #1e293b;">
-      <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
-    </div>
-    <div style="font-weight:800;letter-spacing:.5px;color:#e2e8f0;font-family:system-ui;">ABOU PRO</div>
-    <div style="width:26px;height:26px;border:3px solid #1e293b;border-top-color:#3b82f6;border-radius:50%;" class="spin"></div>
-  </div>
-</div>
-
-<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
+<div id="root"></div>
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext } = React;
+const {useState,useEffect,useRef,useCallback,useMemo} = React;
 
-/* ═══════════════════════════════════════════════════════════════════
-   CONFIG — remplace ici si besoin
-   ═══════════════════════════════════════════════════════════════════ */
-const CONFIG = {
-  SUPABASE_URL: 'https://rvxgttilsqendbolbnql.supabase.co',
-  SUPABASE_KEY: 'sb_publishable_JhK2yNtRTIWPA6JWWXYu4g_508ZyZxl',
-  ORS_KEY: 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjA2NGM4ZDVhZmViYzQwNzk4MjcwOGU4YzcwM2NlOWJkIiwiaCI6Im11cm11cjY0In0=',
-  GEOCODE_COUNTRY: 'BE',
-  PHOTO_BUCKET: 'abou-pro-photos',
-  ARRIVAL_RADIUS_M: 100
-};
+const SUPA_URL='https://rvxgttilsqendbolbnql.supabase.co';
+const SUPA_KEY='sb_publishable_JhK2yNtRTIWPA6JWWXYu4g_508ZyZxl';
+const ORS_KEY='eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjA2NGM4ZDVhZmViYzQwNzk4MjcwOGU4YzcwM2NlOWJkIiwiaCI6Im11cm11cjY0In0=';
+const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 
-const sb = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, storageKey: 'aboupro_auth', detectSessionInUrl: false }
-});
+const toEmail=id=>id.includes('@')?id.trim():id.trim().toLowerCase().replace(/\s+/g,'-')+'@aboupro.app';
+const fmtDate=d=>d?new Date(d).toLocaleDateString('fr-FR'):'—';
+const fmtTime=d=>d?new Date(d).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'—';
+const todayStr=()=>new Date().toISOString().slice(0,10);
+const haversine=(a,b,c,d)=>{const R=6371000,dL=(c-a)*Math.PI/180,dN=(d-b)*Math.PI/180,x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dN/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));};
+const VEH={pied:'🚶',velo:'🚲',voiture:'🚗',camionnette:'🚐',camion:'🚛'};
 
-/* ═══════════════════════════════════════════════════════════════════
-   HELPERS
-   ═══════════════════════════════════════════════════════════════════ */
-const cx = (...a) => a.filter(Boolean).join(' ');
-const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + Math.random().toString(16).slice(2));
-const todayISO = () => new Date().toISOString().slice(0, 10);
-const fmtDate = (d) => d ? new Date(d).toLocaleDateString('fr-BE', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-const fmtTime = (t) => !t ? '' : (typeof t === 'string' && t.length <= 8 ? t.slice(0, 5) : new Date(t).toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' }));
-const fmtKm = (m) => m == null ? '—' : (m / 1000).toFixed(1) + ' km';
-const fmtDur = (s) => s == null ? '—' : (s >= 3600 ? Math.floor(s / 3600) + 'h' + String(Math.round((s % 3600) / 60)).padStart(2, '0') : Math.round(s / 60) + ' min');
-const DAYS = ['LU', 'MA', 'ME', 'JE', 'VE', 'SA', 'DI'];
-const VEHICLES = [
-  { id: 'pied', label: 'À pied', profile: 'foot-walking' },
-  { id: 'velo', label: 'Vélo', profile: 'cycling-regular' },
-  { id: 'voiture', label: 'Voiture', profile: 'driving-car' },
-  { id: 'camionnette', label: 'Camionnette', profile: 'driving-car' },
-  { id: 'camion', label: 'Camion', profile: 'driving-hgv' }
-];
-const ISSUES = [
-  { id: 'sac_absent', label: 'Sac absent' },
-  { id: 'acces_refuse', label: 'Accès refusé' },
-  { id: 'client_ferme', label: 'Client fermé' },
-  { id: 'mauvaise_adresse', label: 'Mauvaise adresse' },
-  { id: 'autre', label: 'Autre' }
-];
-const STATUS_META = {
-  planifie: { label: 'Planifiée', c: 'text-slate-300 bg-slate-700/40' },
-  en_cours: { label: 'En cours', c: 'text-blue-300 bg-blue-500/15' },
-  termine:  { label: 'Terminée', c: 'text-emerald-300 bg-emerald-500/15' },
-  incident: { label: 'Incident', c: 'text-red-300 bg-red-500/15' }
-};
-
-function haversine(a, b) {
-  if (!a || !b) return Infinity;
-  const R = 6371000, toR = (x) => x * Math.PI / 180;
-  const dLat = toR(b.lat - a.lat), dLng = toR(b.lng - a.lng);
-  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(s));
+function useToast(){
+  const[list,setList]=useState([]);
+  const add=(msg,type='info')=>{const id=Date.now();setList(t=>[...t,{id,msg,type}]);setTimeout(()=>setList(t=>t.filter(x=>x.id!==id)),4200);};
+  return{list,toast:add};
+}
+function Toasts({list}){
+  const C={info:'#3b82f6',success:'#059669',error:'#dc2626',warning:'#d97706'};
+  return <div style={{position:'fixed',bottom:16,right:16,zIndex:9999,display:'flex',flexDirection:'column',gap:8}}>
+    {list.map(t=><div key={t.id} style={{background:C[t.type]||C.info,color:'white',padding:'10px 16px',borderRadius:10,fontSize:13,fontWeight:500,maxWidth:280,boxShadow:'0 4px 20px rgba(0,0,0,.4)'}}>{t.msg}</div>)}
+  </div>;
 }
 
-/* Toast global */
-let toastFn = null;
-const toast = (msg, type = 'info') => toastFn && toastFn(msg, type);
-
-/* ═══════════════════════════════════════════════════════════════════
-   ORS — géocodage, optimisation, itinéraire
-   ═══════════════════════════════════════════════════════════════════ */
-async function orsGeocode(address) {
-  if (!address) return null;
-  const url = `https://api.openrouteservice.org/geocode/search?api_key=${CONFIG.ORS_KEY}` +
-    `&text=${encodeURIComponent(address)}&boundary.country=${CONFIG.GEOCODE_COUNTRY}&size=1`;
-  try {
-    const r = await fetch(url);
-    const j = await r.json();
-    const f = j.features && j.features[0];
-    if (!f) return null;
-    return { lng: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], label: f.properties && f.properties.label };
-  } catch (e) { return null; }
+async function geocode(addr){
+  try{const r=await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${ORS_KEY}&text=${encodeURIComponent(addr)}&size=1`);const d=await r.json();if(d.features?.length){const[lng,lat]=d.features[0].geometry.coordinates;return{lat,lng};}}catch{}
+  return null;
+}
+async function optimizeStops(stops){
+  const pts=stops.filter(s=>s.lat&&s.lng);
+  if(pts.length<2)return stops;
+  try{
+    const jobs=pts.map((s,i)=>({id:i+1,location:[parseFloat(s.lng),parseFloat(s.lat)],service:300}));
+    const body={jobs,vehicles:[{id:1,profile:'driving-car',start:jobs[0].location,end:jobs[0].location}]};
+    const r=await fetch('https://api.openrouteservice.org/optimization',{method:'POST',headers:{'Authorization':ORS_KEY,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(d.routes?.[0]?.steps){const ord=d.routes[0].steps.filter(s=>s.type==='job').map(s=>s.id-1);return ord.map((i,idx)=>({...pts[i],order_index:idx}));}
+  }catch{}
+  const pool=[...pts],opt=[pool.shift()];
+  while(pool.length){const last=opt[opt.length-1];let mi=Infinity,mx=0;pool.forEach((s,i)=>{const d2=haversine(last.lat,last.lng,s.lat,s.lng);if(d2<mi){mi=d2;mx=i;}});opt.push(pool.splice(mx,1)[0]);}
+  return opt.map((s,i)=>({...s,order_index:i}));
 }
 
-async function orsOptimize(stops, profile, start) {
-  // stops: [{lat,lng}] -> renvoie {order:[indices], distance, duration}
-  const pts = stops.filter((s) => s.lat != null && s.lng != null);
-  if (pts.length < 2) return { order: stops.map((_, i) => i), distance: null, duration: null };
-  const s0 = start || [pts[0].lng, pts[0].lat];
-  try {
-    const body = {
-      jobs: pts.map((s, i) => ({ id: i + 1, location: [s.lng, s.lat] })),
-      vehicles: [{ id: 1, profile, start: s0, end: s0 }]
-    };
-    const r = await fetch('https://api.openrouteservice.org/optimization', {
-      method: 'POST',
-      headers: { Authorization: CONFIG.ORS_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    const j = await r.json();
-    const route = j.routes && j.routes[0];
-    if (!route) throw new Error('no route');
-    const order = route.steps.filter((st) => st.type === 'job').map((st) => st.job - 1);
-    return { order, distance: route.distance, duration: route.duration };
-  } catch (e) {
-    // Fallback : plus proche voisin (haversine)
-    const remaining = pts.map((_, i) => i);
-    const order = [];
-    let cur = { lat: s0[1], lng: s0[0] };
-    while (remaining.length) {
-      let best = 0, bestD = Infinity;
-      remaining.forEach((idx, k) => { const d = haversine(cur, pts[idx]); if (d < bestD) { bestD = d; best = k; } });
-      const idx = remaining.splice(best, 1)[0];
-      order.push(idx); cur = pts[idx];
-    }
-    return { order, distance: null, duration: null, fallback: true };
-  }
+function parseRows(rows){
+  return rows.map(row=>{
+    const get=(...cc)=>{for(const c of cc){const k=Object.keys(row).find(k=>k.toLowerCase().includes(c));if(k&&row[k])return String(row[k]).trim();}return'';};
+    return{client_name:get('client','nom','name','destinataire','raison'),address:get('adresse','address','addr','rue','location','lieu','destination'),scheduled_time:get('heure','time','horaire','rdv'),notes:get('note','comment','remarque','info'),operation_type:get('type','operation')||'livraison'};
+  }).filter(r=>r.address.length>2);
+}
+function parseText(txt){
+  return txt.split('\n').filter(l=>l.trim()).map(line=>{const p=line.split(/[,;|\t]/);return{client_name:p.length>1?p[0].trim():'',address:p.length>1?p[1].trim():p[0].trim(),scheduled_time:p[2]?.trim()||'',notes:p[3]?.trim()||'',operation_type:'livraison'};}).filter(r=>r.address.length>2);
 }
 
-async function orsRoute(coords, profile) {
-  // coords: [[lng,lat]...] -> renvoie polyline [[lat,lng]...]
-  if (!coords || coords.length < 2) return null;
-  try {
-    const r = await fetch(`https://api.openrouteservice.org/v2/directions/${profile}/geojson`, {
-      method: 'POST',
-      headers: { Authorization: CONFIG.ORS_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ coordinates: coords })
-    });
-    const j = await r.json();
-    const line = j.features && j.features[0] && j.features[0].geometry.coordinates;
-    const sum = j.features && j.features[0] && j.features[0].properties.summary;
-    if (!line) return null;
-    return { line: line.map((c) => [c[1], c[0]]), distance: sum && sum.distance, duration: sum && sum.duration };
-  } catch (e) { return null; }
+/* LOGIN */
+function LoginScreen({onLogin,toast}){
+  const[id,setId]=useState('');const[pw,setPw]=useState('');const[busy,setBusy]=useState(false);const[show,setShow]=useState(false);
+  const submit=async e=>{e.preventDefault();if(!id||!pw)return toast('Remplissez tous les champs','warning');setBusy(true);const{data,error}=await sb.auth.signInWithPassword({email:toEmail(id),password:pw});if(error)toast(error.message.includes('Invalid')?'Identifiant ou code incorrect':error.message,'error');else onLogin(data.session);setBusy(false);};
+  return<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+    <div style={{width:'100%',maxWidth:420}}>
+      <div style={{textAlign:'center',marginBottom:32}}><div style={{fontSize:56,marginBottom:8}}>🚚</div><h1 style={{fontSize:28,fontWeight:800,color:'white',margin:0}}>ABOU PRO</h1><p style={{color:'#94a3b8',marginTop:4,fontSize:14}}>Gestion de tournées logistiques</p></div>
+      <div className="card" style={{padding:32}}>
+        <form onSubmit={submit} style={{display:'flex',flexDirection:'column',gap:16}}>
+          <div><label style={{display:'block',fontSize:13,fontWeight:500,color:'#cbd5e1',marginBottom:6}}>Identifiant</label><input className="inp" placeholder="ex: YG-T" value={id} onChange={e=>setId(e.target.value)} autoFocus autoComplete="username"/></div>
+          <div><label style={{display:'block',fontSize:13,fontWeight:500,color:'#cbd5e1',marginBottom:6}}>Code d'accès</label>
+            <div style={{position:'relative'}}><input className="inp" style={{paddingRight:44}} type={show?'text':'password'} placeholder="••••••••" value={pw} onChange={e=>setPw(e.target.value)} autoComplete="current-password"/>
+            <button type="button" style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:16}} onClick={()=>setShow(!show)}>{show?'🙈':'👁️'}</button></div></div>
+          <button type="submit" className="btn bp" style={{marginTop:4,padding:'12px 20px',fontSize:15}} disabled={busy}>{busy?<span className="spin">⏳</span>:'🔑'} Connexion</button>
+        </form>
+      </div>
+      <p style={{textAlign:'center',color:'#475569',fontSize:12,marginTop:16}}>ABOU PRO v2.0</p>
+    </div>
+  </div>;
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   ICONS (inline SVG, style Lucide)
-   ═══════════════════════════════════════════════════════════════════ */
-const I = (paths, props = {}) => function Icon(p) {
-  const s = p.size || 20;
-  return (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth={p.sw || 2} strokeLinecap="round" strokeLinejoin="round" className={p.className} {...props}>
-      {paths}
-    </svg>
-  );
-};
-const Ico = {
-  truck: I(<><path d="M10 17h4V5H2v12h3" /><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1" /><circle cx="7.5" cy="17.5" r="2.5" /><circle cx="17.5" cy="17.5" r="2.5" /></>),
-  pin: I(<><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" /></>),
-  pkg: I(<><path d="m7.5 4.27 9 5.15" /><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" /><path d="m3.3 7 8.7 5 8.7-5" /><path d="M12 22V12" /></>),
-  user: I(<><circle cx="12" cy="8" r="4" /><path d="M6 21v-1a6 6 0 0 1 12 0v1" /></>),
-  users: I(<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>),
-  logout: I(<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>),
-  plus: I(<><path d="M5 12h14" /><path d="M12 5v14" /></>),
-  check: I(<polyline points="20 6 9 17 4 12" />),
-  x: I(<><path d="M18 6 6 18" /><path d="m6 6 12 12" /></>),
-  alert: I(<><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></>),
-  cam: I(<><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" /><circle cx="12" cy="13" r="3" /></>),
-  nav: I(<polygon points="3 11 22 2 13 21 11 13 3 11" />),
-  cog: I(<><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></>),
-  chart: I(<><line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line x1="6" y1="20" x2="6" y2="16" /></>),
-  cal: I(<><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /><path d="M8 2v4" /><path d="M16 2v4" /></>),
-  clock: I(<><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>),
-  edit: I(<><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" /></>),
-  trash: I(<><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></>),
-  right: I(<polyline points="9 18 15 12 9 6" />),
-  left: I(<polyline points="15 18 9 12 15 6" />),
-  map: I(<><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" /><line x1="9" y1="3" x2="9" y2="18" /><line x1="15" y1="6" x2="15" y2="21" /></>),
-  list: I(<><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></>),
-  upload: I(<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></>),
-  phone: I(<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92Z" />),
-  home: I(<><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></>),
-  play: I(<polygon points="5 3 19 12 5 21 5 3" />),
-  flag: I(<><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></>),
-  zap: I(<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />),
-  qr: I(<><rect width="5" height="5" x="3" y="3" rx="1" /><rect width="5" height="5" x="16" y="3" rx="1" /><rect width="5" height="5" x="3" y="16" rx="1" /><path d="M21 16h-3a2 2 0 0 0-2 2v3" /><path d="M21 21v.01" /><path d="M12 7v3a2 2 0 0 1-2 2H7" /><path d="M3 12h.01" /><path d="M12 3h.01" /><path d="M12 16v.01" /><path d="M16 12h1" /><path d="M21 12v.01" /><path d="M12 21v-1" /></>),
-  refresh: I(<><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" /></>),
-  eye: I(<><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></>),
-  copy: I(<><rect width="14" height="14" x="8" y="8" rx="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></>),
-  search: I(<><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></>),
-  back: I(<><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></>),
-  route: I(<><circle cx="6" cy="19" r="3" /><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" /><circle cx="18" cy="5" r="3" /></>),
-  archive: I(<><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></>)
-};
-
-/* ═══════════════════════════════════════════════════════════════════
-   UI PRIMITIVES
-   ═══════════════════════════════════════════════════════════════════ */
-function Btn({ children, onClick, variant = 'primary', size = 'md', disabled, className, type = 'button' }) {
-  const v = {
-    primary: 'bg-brand hover:bg-brand2 text-white',
-    ghost: 'bg-ink3 hover:bg-slate-700 text-slate-200',
-    danger: 'bg-bad/90 hover:bg-bad text-white',
-    ok: 'bg-ok hover:bg-emerald-500 text-white',
-    warn: 'bg-amber hover:bg-amber-400 text-ink',
-    outline: 'border border-line hover:bg-ink3 text-slate-200'
-  }[variant];
-  const s = { sm: 'px-3 py-1.5 text-sm', md: 'px-4 py-2.5 text-sm', lg: 'px-5 py-3.5 text-base', xl: 'px-6 py-5 text-lg' }[size];
-  return (
-    <button type={type} onClick={onClick} disabled={disabled}
-      className={cx('rounded-xl font-semibold transition active:scale-[.98] disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-2', v, s, className)}>
-      {children}
-    </button>
-  );
-}
-const Field = ({ label, children, hint }) => (
-  <label className="block">
-    {label && <span className="text-xs font-medium text-slate-400 mb-1 block">{label}</span>}
-    {children}
-    {hint && <span className="text-[11px] text-slate-500 mt-1 block">{hint}</span>}
-  </label>
-);
-const inputCls = 'w-full bg-ink3/60 border border-line rounded-xl px-3 py-2.5 text-slate-100 placeholder-slate-500 outline-none focus:border-brand transition';
-const Input = (p) => <input {...p} className={cx(inputCls, p.className)} />;
-const Textarea = (p) => <textarea {...p} className={cx(inputCls, 'resize-y min-h-[80px]', p.className)} />;
-const Select = ({ children, ...p }) => <select {...p} className={cx(inputCls, p.className)}>{children}</select>;
-const Badge = ({ children, className }) => <span className={cx('px-2 py-0.5 rounded-full text-[11px] font-semibold', className)}>{children}</span>;
-const Card = ({ children, className, onClick }) => <div onClick={onClick} className={cx('bg-ink2 border border-line rounded-2xl', className)}>{children}</div>;
-
-function Modal({ open, onClose, title, children, wide }) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className={cx('bg-ink2 border border-line w-full rounded-t-3xl sm:rounded-2xl max-h-[92vh] overflow-y-auto fadein', wide ? 'sm:max-w-3xl' : 'sm:max-w-md')} onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 bg-ink2/95 backdrop-blur border-b border-line px-5 py-4 flex items-center justify-between z-10">
-          <h3 className="font-bold text-lg">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1"><Ico.x /></button>
-        </div>
-        <div className="p-5">{children}</div>
+/* SETUP */
+function SetupScreen({onDone,toast}){
+  const[f,setF]=useState({identifier:'YG-T',full_name:'',password:'',confirm:''});const[busy,setBusy]=useState(false);
+  const set=k=>e=>setF(x=>({...x,[k]:e.target.value}));
+  const submit=async e=>{
+    e.preventDefault();if(f.password!==f.confirm)return toast('Les codes ne correspondent pas','error');if(f.password.length<8)return toast('Code minimum 8 caractères','warning');
+    setBusy(true);const email=toEmail(f.identifier);
+    const{data:auth,error:e1}=await sb.auth.signUp({email,password:f.password});
+    if(e1){toast(e1.message,'error');setBusy(false);return;}
+    const uid=auth.user?.id;if(!uid){toast('Erreur création compte','error');setBusy(false);return;}
+    const{error:e2}=await sb.from('users_profiles').insert({id:uid,identifier:f.identifier,full_name:f.full_name||f.identifier,role:'admin',is_active:true});
+    if(e2){toast('Profil: '+e2.message,'error');setBusy(false);return;}
+    toast('Compte administrateur créé !','success');
+    const{data:login}=await sb.auth.signInWithPassword({email,password:f.password});
+    if(login?.session)onDone(login.session);setBusy(false);
+  };
+  return<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+    <div style={{width:'100%',maxWidth:420}}>
+      <div style={{textAlign:'center',marginBottom:32}}><div style={{fontSize:56,marginBottom:8}}>⚙️</div><h1 style={{fontSize:24,fontWeight:800,color:'white',margin:0}}>Configuration initiale</h1><p style={{color:'#94a3b8',marginTop:4,fontSize:14}}>Créez le compte administrateur</p></div>
+      <div className="card" style={{padding:32}}>
+        <form onSubmit={submit} style={{display:'flex',flexDirection:'column',gap:14}}>
+          <div><label style={{display:'block',fontSize:13,fontWeight:500,color:'#cbd5e1',marginBottom:6}}>Identifiant admin</label><input className="inp" placeholder="ex: YG-T" value={f.identifier} onChange={set('identifier')}/></div>
+          <div><label style={{display:'block',fontSize:13,fontWeight:500,color:'#cbd5e1',marginBottom:6}}>Nom complet (optionnel)</label><input className="inp" placeholder="Nom et prénom" value={f.full_name} onChange={set('full_name')}/></div>
+          <div><label style={{display:'block',fontSize:13,fontWeight:500,color:'#cbd5e1',marginBottom:6}}>Code d'accès</label><input className="inp" type="password" placeholder="Min. 8 caractères" value={f.password} onChange={set('password')}/></div>
+          <div><label style={{display:'block',fontSize:13,fontWeight:500,color:'#cbd5e1',marginBottom:6}}>Confirmer le code</label><input className="inp" type="password" placeholder="Répétez le code" value={f.confirm} onChange={set('confirm')}/></div>
+          <button type="submit" className="btn bp" style={{marginTop:4,padding:'12px 20px',fontSize:15}} disabled={busy}>{busy?<span className="spin">⏳</span>:'🚀'} Créer mon compte</button>
+        </form>
       </div>
     </div>
-  );
-}
-
-function Spinner({ label }) {
-  return <div className="flex flex-col items-center justify-center gap-3 py-12 text-slate-400">
-    <div className="w-7 h-7 border-[3px] border-line border-t-brand rounded-full spin" />
-    {label && <span className="text-sm">{label}</span>}
   </div>;
 }
-function Empty({ icon, title, sub, action }) {
-  return <div className="flex flex-col items-center justify-center gap-2 py-14 text-center px-6">
-    <div className="text-slate-600">{icon}</div>
-    <div className="font-semibold text-slate-300">{title}</div>
-    {sub && <div className="text-sm text-slate-500 max-w-xs">{sub}</div>}
-    {action && <div className="mt-3">{action}</div>}
+
+/* DASHBOARD */
+function Dashboard({profile,toast}){
+  const[summary,setSummary]=useState(null);const[asgns,setAsgns]=useState([]);const[loading,setLoading]=useState(true);
+  useEffect(()=>{load();const t=setInterval(load,30000);return()=>clearInterval(t);},[]);
+  const load=async()=>{
+    const[{data:s},{data:a}]=await Promise.all([sb.rpc('aboupro_today_summary'),sb.from('aboupro_assignments_view').select('*').eq('assigned_date',todayStr()).order('status')]);
+    setSummary(s?.[0]||{});setAsgns(a||[]);setLoading(false);
+  };
+  const SC={planifie:'#94a3b8',en_cours:'#60a5fa',termine:'#34d399',incident:'#f87171',annule:'#475569'};
+  const SL={planifie:'Planifié',en_cours:'En cours',termine:'Terminé',incident:'Incident',annule:'Annulé'};
+  if(loading)return<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:240}}><span className="spin" style={{fontSize:32}}>⏳</span></div>;
+  return<div className="fi" style={{display:'flex',flexDirection:'column',gap:24}}>
+    <div><h2 style={{fontSize:22,fontWeight:700,color:'white',margin:0}}>Tableau de bord</h2><p style={{color:'#94a3b8',marginTop:4,fontSize:14}}>{new Date().toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p></div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:12}}>
+      {[{l:'Routes actives',v:summary?.active_routes??0,ic:'🗺️',c:'#60a5fa'},{l:'Chauffeurs actifs',v:summary?.total_drivers??0,ic:'👤',c:'#a78bfa'},{l:'Tournées auj.',v:summary?.tours_today??0,ic:'🚚',c:'#fbbf24'},{l:'Progression moy.',v:`${Math.round(summary?.avg_progress??0)}%`,ic:'📊',c:'#34d399'}].map(k=><div key={k.l} className="card" style={{padding:20}}><div style={{fontSize:24,marginBottom:8}}>{k.ic}</div><div style={{fontSize:28,fontWeight:700,color:k.c}}>{k.v}</div><div style={{fontSize:12,color:'#64748b',marginTop:4}}>{k.l}</div></div>)}
+    </div>
+    <div className="card" style={{padding:20}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}><h3 style={{margin:0,fontWeight:600,color:'white'}}>📋 Tournées du jour</h3><span style={{color:'#64748b',fontSize:13}}>{asgns.length} affectation{asgns.length>1?'s':''}</span></div>
+      {asgns.length===0?<p style={{color:'#475569',textAlign:'center',padding:'32px 0',margin:0}}>Aucune tournée planifiée pour aujourd'hui</p>
+      :<div style={{display:'flex',flexDirection:'column',gap:10}}>
+        {asgns.map(a=><div key={a.id} style={{background:'#0f172a',borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',gap:12}}>
+          <span style={{fontSize:22}}>{VEH[a.vehicle_type]||'🚗'}</span>
+          <div style={{flex:1,minWidth:0}}><div style={{fontWeight:500,color:'white',fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.driver_name||a.driver_identifier}</div><div style={{color:'#64748b',fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.route_name}</div></div>
+          <div style={{textAlign:'right',flexShrink:0}}><div style={{fontSize:12,fontWeight:600,color:SC[a.status]||'#94a3b8'}}>{SL[a.status]||a.status}</div><div style={{fontSize:11,color:'#475569'}}>{a.done_stops}/{a.total_stops} arrêts</div></div>
+          {a.total_stops>0&&<div style={{width:52}}><div style={{background:'#1e293b',borderRadius:4,height:6}}><div style={{background:'#3b82f6',height:6,borderRadius:4,width:`${a.progress_pct}%`}}/></div><div style={{fontSize:10,textAlign:'center',color:'#475569',marginTop:2}}>{a.progress_pct}%</div></div>}
+        </div>)}
+      </div>}
+    </div>
   </div>;
 }
-function ToastHost() {
-  const [t, setT] = useState(null);
-  useEffect(() => { toastFn = (msg, type) => { setT({ msg, type, k: Date.now() }); setTimeout(() => setT(null), 3200); }; }, []);
-  if (!t) return null;
-  const c = { info: 'border-brand', success: 'border-ok', error: 'border-bad' }[t.type] || 'border-brand';
-  return <div key={t.k} className={cx('fixed bottom-4 left-1/2 -translate-x-1/2 z-[2000] bg-ink3 border-l-4 px-4 py-3 rounded-xl shadow-2xl text-sm fadein max-w-[90vw]', c)}>{t.msg}</div>;
-}
 
-/* ═══════════════════════════════════════════════════════════════════
-   LEAFLET MAP
-   ═══════════════════════════════════════════════════════════════════ */
-function MapView({ stops = [], polyline, drivers = [], center, height = 360, onStopClick, fit = true }) {
-  const ref = useRef(null), map = useRef(null), layers = useRef([]);
-  useEffect(() => {
-    if (map.current) return;
-    map.current = L.map(ref.current, { zoomControl: true, attributionControl: false }).setView(center || [50.85, 4.35], 11);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd' }).addTo(map.current);
-    setTimeout(() => map.current && map.current.invalidateSize(), 200);
-  }, []);
-  useEffect(() => {
-    if (!map.current) return;
-    layers.current.forEach((l) => map.current.removeLayer(l)); layers.current = [];
-    const pts = [];
-    stops.forEach((s, i) => {
-      if (s.lat == null || s.lng == null) return;
-      const color = s.color || '#3b82f6';
-      const done = s._status === 'completed', prob = s._status === 'problem';
-      const bg = done ? '#10b981' : prob ? '#ef4444' : color;
-      const m = L.marker([s.lat, s.lng], {
-        icon: L.divIcon({ className: '', html: `<div class="num-pin" style="width:28px;height:28px;background:${bg}">${i + 1}</div>`, iconSize: [28, 28], iconAnchor: [14, 14] })
-      }).addTo(map.current);
-      m.on('click', () => onStopClick && onStopClick(s, i));
-      m.bindPopup(`<b>${i + 1}. ${s.client_name || 'Stop'}</b><br>${s.address || ''}`);
-      layers.current.push(m); pts.push([s.lat, s.lng]);
-    });
-    drivers.forEach((d) => {
-      if (d.lat == null) return;
-      const m = L.marker([d.lat, d.lng], {
-        icon: L.divIcon({ className: '', html: `<div style="width:34px;height:34px;border-radius:50%;background:#f59e0b;border:3px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.6)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b1120" stroke-width="2.5"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg></div>`, iconSize: [34, 34], iconAnchor: [17, 17] })
-      }).addTo(map.current);
-      m.bindPopup(`<b>${d.name || 'Chauffeur'}</b><br>${fmtTime(d.updated_at)}`);
-      layers.current.push(m); pts.push([d.lat, d.lng]);
-    });
-    if (polyline && polyline.length) { const pl = L.polyline(polyline, { color: '#60a5fa', weight: 4, opacity: .8 }).addTo(map.current); layers.current.push(pl); }
-    if (fit && pts.length) { try { map.current.fitBounds(pts, { padding: [40, 40], maxZoom: 15 }); } catch (e) {} }
-    setTimeout(() => map.current && map.current.invalidateSize(), 100);
-  }, [JSON.stringify(stops.map((s) => [s.id, s.lat, s.lng, s._status])), JSON.stringify(polyline), JSON.stringify(drivers)]);
-  return <div ref={ref} style={{ height }} className="w-full rounded-2xl overflow-hidden border border-line" />;
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   AUTH
-   ═══════════════════════════════════════════════════════════════════ */
-const AuthCtx = createContext(null);
-const useAuth = () => useContext(AuthCtx);
-
-function AuthProvider({ children }) {
-  const [session, setSession] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  const loadProfile = useCallback(async (userId) => {
-    const { data } = await sb.from('users_profiles').select('*').eq('user_id', userId).maybeSingle();
-    setProfile(data || null);
-  }, []);
-
-  useEffect(() => {
-    sb.auth.getSession().then(async ({ data }) => {
-      setSession(data.session);
-      if (data.session) await loadProfile(data.session.user.id);
-      setLoading(false);
-    });
-    const { data: sub } = sb.auth.onAuthStateChange(async (_e, s) => {
-      setSession(s);
-      if (s) await loadProfile(s.user.id); else setProfile(null);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, []);
-
-  const signIn = async (identifier, password) => {
-    // Convertit l'identifiant court (ex: "YG-T") en email Supabase (@aboupro.app)
-    const email = identifier.trim().includes('@')
-      ? identifier.trim()
-      : identifier.trim().toLowerCase().replace(/\s+/g, '-') + '@aboupro.app';
-    const { error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+/* IMPORT PANEL */
+function ImportPanel({routeId,onDone,toast}){
+  const[tab,setTab]=useState('paste');const[text,setText]=useState('');const[preview,setPreview]=useState([]);const[busy,setBusy]=useState(false);
+  const fileRef=useRef();
+  const doPaste=()=>{const rows=parseText(text);setPreview(rows);if(!rows.length)toast('Aucune adresse détectée','warning');else toast(`${rows.length} arrêt(s) détecté(s)`,'info');};
+  const doFile=async file=>{
+    const ext=file.name.split('.').pop().toLowerCase();let rows=[];
+    if(ext==='csv'){const txt=await file.text();rows=parseRows(Papa.parse(txt,{header:true,skipEmptyLines:true}).data);}
+    else if(['xls','xlsx'].includes(ext)){const buf=await file.arrayBuffer();const wb=XLSX.read(buf);rows=parseRows(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}));}
+    setPreview(rows);if(!rows.length)toast('Aucune adresse détectée','warning');else toast(`${rows.length} arrêt(s) détecté(s)`,'info');
   };
-  const signOut = async () => { await sb.auth.signOut(); setProfile(null); };
-
-  return <AuthCtx.Provider value={{ session, profile, loading, signIn, signOut, reload: () => session && loadProfile(session.user.id) }}>{children}</AuthCtx.Provider>;
+  const doImport=async()=>{
+    if(!preview.length)return;setBusy(true);
+    const{data:existing}=await sb.from('stops').select('order_index').eq('route_id',routeId).order('order_index',{ascending:false}).limit(1);
+    let idx=existing?.[0]?.order_index!=null?existing[0].order_index+1:0;
+    const rows=preview.map((s,i)=>({route_id:routeId,client_name:s.client_name||'',address:s.address,scheduled_time:s.scheduled_time||null,notes:s.notes||null,operation_type:['livraison','collecte','service','autre'].includes(s.operation_type)?s.operation_type:'livraison',order_index:idx+i}));
+    const{error}=await sb.from('stops').insert(rows);
+    if(error){toast(error.message,'error');setBusy(false);return;}
+    await sb.from('routes').update({total_stops:idx+preview.length}).eq('id',routeId);
+    toast(`${preview.length} arrêt(s) importé(s)`,'success');onDone();setBusy(false);
+  };
+  return<div className="card" style={{padding:20,marginBottom:16}}>
+    <h3 style={{margin:'0 0 14px',fontWeight:600,color:'white',fontSize:15}}>📥 Importer des arrêts</h3>
+    <div style={{display:'flex',gap:8,marginBottom:14}}>
+      {['paste','file'].map(t=><button key={t} className="btn" onClick={()=>setTab(t)} style={{background:tab===t?'#3b82f6':'#1e293b',color:tab===t?'white':'#94a3b8',fontSize:13,padding:'6px 14px'}}>{t==='paste'?'📋 Coller du texte':'📁 Fichier CSV/Excel'}</button>)}
+    </div>
+    {tab==='paste'?<div><p style={{color:'#64748b',fontSize:12,margin:'0 0 6px'}}>Format: Client, Adresse, Heure, Notes (une ligne par arrêt)</p><textarea className="inp" style={{height:100,fontFamily:'monospace',fontSize:12,resize:'vertical'}} placeholder={"Jean Dupont, 12 rue de la Paix Paris, 09:00\nMarie Martin, 45 av Victor Hugo Lyon, 10:30"} value={text} onChange={e=>setText(e.target.value)}/><button className="btn bp" style={{marginTop:8,fontSize:13}} onClick={doPaste}>👁️ Prévisualiser</button></div>
+    :<div><input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" style={{display:'none'}} onChange={e=>e.target.files[0]&&doFile(e.target.files[0])}/><button className="btn bp" style={{fontSize:13}} onClick={()=>fileRef.current.click()}>📁 Choisir un fichier</button><p style={{color:'#475569',fontSize:12,margin:'8px 0 0'}}>Formats: CSV, XLSX, XLS</p></div>}
+    {preview.length>0&&<div style={{marginTop:14}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}><span style={{fontSize:13,color:'#cbd5e1',fontWeight:500}}>{preview.length} arrêt(s) prêt(s)</span><button className="btn bgrn" style={{fontSize:13,padding:'6px 14px'}} onClick={doImport} disabled={busy}>{busy?<span className="spin">⏳</span>:'✅'} Importer</button></div>
+      <div style={{maxHeight:180,overflowY:'auto',display:'flex',flexDirection:'column',gap:4}}>
+        {preview.map((s,i)=><div key={i} style={{background:'#0f172a',borderRadius:8,padding:'7px 10px',fontSize:12}}><span style={{color:'#60a5fa',marginRight:6}}>{i+1}.</span>{s.client_name&&<span style={{color:'white'}}>{s.client_name} — </span>}<span style={{color:'#cbd5e1'}}>{s.address}</span>{s.scheduled_time&&<span style={{color:'#64748b',marginLeft:8}}>🕐 {s.scheduled_time}</span>}</div>)}
+      </div>
+    </div>}
+  </div>;
 }
 
-function LoginScreen() {
-  const { signIn } = useAuth();
-  const [id, setId] = useState(''); const [pw, setPw] = useState('');
-  const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
-  const submit = async (e) => {
-    e.preventDefault(); setErr(''); setBusy(true);
-    try { await signIn(id, pw); }
-    catch (e) { setErr(e.message === 'Invalid login credentials' ? 'Identifiant ou mot de passe incorrect.' : e.message); }
-    setBusy(false);
+/* ROUTES */
+function RoutesManager({toast}){
+  const[routes,setRoutes]=useState([]);const[sel,setSel]=useState(null);const[stops,setStops]=useState([]);const[showAdd,setShowAdd]=useState(false);const[showImport,setShowImport]=useState(false);const[form,setForm]=useState({name:'',color:'#3b82f6',description:''});const[geocoding,setGeocoding]=useState(false);const[optimizing,setOptimizing]=useState(false);
+  useEffect(()=>{loadRoutes();},[]);
+  useEffect(()=>{if(sel)loadStops(sel.id);},[sel]);
+  const loadRoutes=async()=>{const{data}=await sb.from('routes').select('*').eq('is_archived',false).order('created_at',{ascending:false});setRoutes(data||[]);};
+  const loadStops=async id=>{const{data}=await sb.from('stops').select('*').eq('route_id',id).order('order_index');setStops(data||[]);};
+  const createRoute=async e=>{
+    e.preventDefault();if(!form.name)return;
+    const{data,error}=await sb.from('routes').insert({...form}).select().single();
+    if(error)return toast(error.message,'error');
+    toast('Route créée','success');setRoutes(r=>[data,...r]);setShowAdd(false);setForm({name:'',color:'#3b82f6',description:''});setSel(data);
   };
-  return (
-    <div className="min-h-full flex items-center justify-center p-5">
-      <div className="w-full max-w-sm fadein">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-20 h-20 rounded-3xl bg-ink2 border border-line flex items-center justify-center text-brand mb-4 shadow-lg">
-            <Ico.truck size={42} />
+  const deleteStop=async id=>{await sb.from('stops').delete().eq('id',id);setStops(s=>s.filter(x=>x.id!==id));};
+  const doGeocode=async()=>{
+    setGeocoding(true);let n=0;
+    for(const s of stops.filter(x=>!x.lat||!x.lng)){const c=await geocode(s.address);if(c){await sb.from('stops').update({lat:c.lat,lng:c.lng}).eq('id',s.id);n++;}}
+    await loadStops(sel.id);setGeocoding(false);toast(`${n} adresse(s) géocodée(s)`,'success');
+  };
+  const doOptimize=async()=>{
+    setOptimizing(true);const opt=await optimizeStops(stops);
+    for(let i=0;i<opt.length;i++)await sb.from('stops').update({order_index:i}).eq('id',opt[i].id);
+    await loadStops(sel.id);setOptimizing(false);toast('Tournée optimisée ⚡','success');
+  };
+  return<div className="fi" style={{display:'flex',flexDirection:'column',gap:20}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}><h2 style={{fontSize:22,fontWeight:700,color:'white',margin:0}}>Routes</h2><button className="btn bp" style={{fontSize:13}} onClick={()=>setShowAdd(true)}>+ Nouvelle route</button></div>
+    {showAdd&&<div className="card" style={{padding:20}}>
+      <h3 style={{margin:'0 0 14px',color:'white',fontWeight:600,fontSize:15}}>Nouvelle route</h3>
+      <form onSubmit={createRoute} style={{display:'flex',flexDirection:'column',gap:10}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:10}}>
+          <input className="inp" placeholder="Nom de la route *" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} required/>
+          <input type="color" style={{width:44,height:42,border:'1px solid #334155',borderRadius:8,background:'#0f172a',padding:2,cursor:'pointer'}} value={form.color} onChange={e=>setForm({...form,color:e.target.value})}/>
+          <input className="inp" placeholder="Description (opt.)" value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/>
+        </div>
+        <div style={{display:'flex',gap:8}}><button type="submit" className="btn bp" style={{fontSize:13}}>Créer</button><button type="button" className="btn bg2" style={{fontSize:13}} onClick={()=>setShowAdd(false)}>Annuler</button></div>
+      </form>
+    </div>}
+    <div style={{display:'grid',gridTemplateColumns:sel?'200px 1fr':'1fr',gap:20,alignItems:'start'}}>
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        {routes.map(r=><div key={r.id} className="card" onClick={()=>setSel(r)} style={{padding:'12px 14px',cursor:'pointer',borderColor:sel?.id===r.id?'#3b82f6':'#334155',transition:'border-color .2s'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:12,height:12,borderRadius:'50%',background:r.color,flexShrink:0}}/><div style={{flex:1,minWidth:0}}><div style={{fontWeight:500,color:'white',fontSize:14,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div><div style={{fontSize:11,color:'#64748b'}}>{r.total_stops} arrêts · {r.is_active?'actif':'inactif'}</div></div></div>
+        </div>)}
+        {routes.length===0&&<p style={{color:'#475569',textAlign:'center',padding:'32px 0',margin:0}}>Aucune route créée</p>}
+      </div>
+      {sel&&<div style={{display:'flex',flexDirection:'column',gap:12}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          <h3 style={{margin:0,color:'white',fontWeight:600,fontSize:16}}>{sel.name}</h3><span style={{color:'#64748b',fontSize:13}}>({stops.length} arrêts)</span>
+          <div style={{marginLeft:'auto',display:'flex',gap:6,flexWrap:'wrap'}}>
+            <button className="btn bp" style={{fontSize:12,padding:'6px 12px'}} onClick={()=>setShowImport(!showImport)}>📥 Importer</button>
+            <button className="btn" style={{fontSize:12,padding:'6px 12px',background:'#0891b2',color:'white'}} onClick={doGeocode} disabled={geocoding}>{geocoding?<span className="spin">⏳</span>:'📍'} Géocoder</button>
+            <button className="btn" style={{fontSize:12,padding:'6px 12px',background:'#7c3aed',color:'white'}} onClick={doOptimize} disabled={optimizing}>{optimizing?<span className="spin">⏳</span>:'⚡'} Optimiser</button>
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight">ABOU PRO</h1>
-          <p className="text-sm text-slate-500 mt-1">Gestion de tournées logistiques</p>
         </div>
-        <Card className="p-6 shadow-2xl">
-          <form onSubmit={submit} className="space-y-4">
-            <Field label="Identifiant">
-              <Input
-                type="text"
-                value={id}
-                onChange={(e) => setId(e.target.value)}
-                placeholder="Ex : YG-T"
-                autoComplete="username"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-                required
-              />
-            </Field>
-            <Field label="Mot de passe">
-              <Input
-                type="password"
-                value={pw}
-                onChange={(e) => setPw(e.target.value)}
-                placeholder="••••••••"
-                autoComplete="current-password"
-                required
-              />
-            </Field>
-            {err && (
-              <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2 flex items-center gap-2">
-                <Ico.alert size={16} className="flex-shrink-0" />{err}
-              </div>
-            )}
-            <Btn type="submit" size="lg" className="w-full mt-2" disabled={busy}>
-              {busy
-                ? <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full spin" />
-                : <><Ico.right size={18} /> Se connecter</>}
-            </Btn>
-          </form>
-        </Card>
-        <p className="text-center text-xs text-slate-600 mt-5">Accès réservé — comptes créés par l'administrateur.</p>
-      </div>
+        {showImport&&<ImportPanel routeId={sel.id} onDone={()=>{setShowImport(false);loadStops(sel.id);loadRoutes();}} toast={toast}/>}
+        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          {stops.map((s,i)=><div key={s.id} className="card" style={{padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
+            <div style={{width:24,height:24,background:'#334155',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:'#94a3b8',flexShrink:0}}>{i+1}</div>
+            <div style={{flex:1,minWidth:0}}><div style={{fontWeight:500,color:'white',fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.client_name||'—'}</div><div style={{fontSize:12,color:'#64748b',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.address}</div>{s.scheduled_time&&<div style={{fontSize:11,color:'#475569'}}>🕐 {s.scheduled_time}</div>}</div>
+            <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>{s.lat?<span style={{color:'#34d399',fontSize:11}}>📍</span>:<span style={{color:'#f87171',fontSize:11}}>⬜</span>}{s.requires_photo&&<span style={{fontSize:12}}>📷</span>}{s.requires_scan&&<span style={{fontSize:12}}>📲</span>}<button style={{background:'none',border:'none',cursor:'pointer',color:'#f87171',fontSize:14,padding:'2px 4px'}} onClick={()=>deleteStop(s.id)}>🗑️</button></div>
+          </div>)}
+          {stops.length===0&&!showImport&&<div style={{textAlign:'center',padding:'40px 0',color:'#475569'}}><div style={{fontSize:32,marginBottom:8}}>📍</div><p style={{margin:0}}>Aucun arrêt. Importez une feuille de route.</p></div>}
+        </div>
+      </div>}
     </div>
-  );
+  </div>;
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   ADMIN — shell + navigation
-   ═══════════════════════════════════════════════════════════════════ */
-function AdminApp() {
-  const { profile, signOut } = useAuth();
-  const [tab, setTab] = useState('dash');
-  const tabs = [
-    { id: 'dash', label: 'Tableau de bord', icon: <Ico.home /> },
-    { id: 'routes', label: 'Tournées', icon: <Ico.route /> },
-    { id: 'assign', label: 'Assignations', icon: <Ico.cal /> },
-    { id: 'drivers', label: 'Chauffeurs', icon: <Ico.users /> },
-    { id: 'history', label: 'Historique', icon: <Ico.chart /> }
-  ];
-  return (
-    <div className="min-h-full flex flex-col">
-      <header className="sticky top-0 z-40 bg-ink/95 backdrop-blur border-b border-line px-4 h-14 flex items-center gap-3">
-        <div className="flex items-center gap-2 font-extrabold"><span className="text-brand"><Ico.truck size={22} /></span> ABOU PRO</div>
-        <Badge className="bg-brand/15 text-brand2">ADMIN</Badge>
-        <div className="ml-auto flex items-center gap-3">
-          <span className="text-sm text-slate-400 hidden sm:block">{profile?.name}</span>
-          <button onClick={signOut} className="text-slate-400 hover:text-white p-2" title="Déconnexion"><Ico.logout /></button>
+/* ASSIGNMENTS */
+function AssignmentsManager({toast}){
+  const[date,setDate]=useState(todayStr());const[asgns,setAsgns]=useState([]);const[routes,setRoutes]=useState([]);const[drivers,setDrivers]=useState([]);const[showCreate,setShowCreate]=useState(false);const[form,setForm]=useState({route_id:'',driver_id:'',vehicle_type:'voiture',start_time:'',notes:''});
+  useEffect(()=>{loadAll();},[date]);
+  const loadAll=async()=>{
+    const[{data:a},{data:r},{data:d}]=await Promise.all([sb.from('aboupro_assignments_view').select('*').eq('assigned_date',date).order('created_at'),sb.from('routes').select('id,name,color').eq('is_active',true).eq('is_archived',false),sb.from('users_profiles').select('id,identifier,full_name').eq('role','driver').eq('is_active',true)]);
+    setAsgns(a||[]);setRoutes(r||[]);setDrivers(d||[]);
+  };
+  const createAsgn=async e=>{
+    e.preventDefault();if(!form.route_id||!form.driver_id)return toast('Sélectionnez une route et un chauffeur','warning');
+    const{data:stops}=await sb.from('stops').select('id,order_index').eq('route_id',form.route_id).eq('is_active',true).order('order_index');
+    const{data:asgn,error}=await sb.from('assignments').insert({route_id:form.route_id,driver_id:form.driver_id,assigned_date:date,vehicle_type:form.vehicle_type,start_time:form.start_time||null,notes:form.notes||null,total_stops:stops?.length||0}).select().single();
+    if(error)return toast(error.message,'error');
+    if(stops?.length)await sb.from('assignment_stops').insert(stops.map((s,i)=>({assignment_id:asgn.id,stop_id:s.id,order_index:i})));
+    toast('Affectation créée','success');setShowCreate(false);loadAll();
+  };
+  const deleteAsgn=async id=>{if(!confirm('Supprimer cette affectation ?'))return;await sb.from('assignments').delete().eq('id',id);setAsgns(a=>a.filter(x=>x.id!==id));};
+  const weekDays=()=>{const d=new Date(date);const day=d.getDay()||7;const mon=new Date(d);mon.setDate(d.getDate()-day+1);return Array.from({length:7},(_,i)=>{const dd=new Date(mon);dd.setDate(mon.getDate()+i);return dd.toISOString().slice(0,10);});};
+  const DN=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+  const SS={planifie:{bg:'#1e293b',c:'#94a3b8'},en_cours:{bg:'#1e3a8a',c:'#93c5fd'},termine:{bg:'#064e3b',c:'#6ee7b7'},incident:{bg:'#7f1d1d',c:'#fca5a5'},annule:{bg:'#1e293b',c:'#475569'}};
+  const SL={planifie:'Planifié',en_cours:'En cours',termine:'Terminé',incident:'Incident',annule:'Annulé'};
+  return<div className="fi" style={{display:'flex',flexDirection:'column',gap:20}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}><h2 style={{fontSize:22,fontWeight:700,color:'white',margin:0}}>Affectations</h2><div style={{display:'flex',gap:8}}><input type="date" className="inp" style={{width:'auto'}} value={date} onChange={e=>setDate(e.target.value)}/><button className="btn bp" style={{fontSize:13}} onClick={()=>setShowCreate(true)}>+ Affecter</button></div></div>
+    <div style={{display:'flex',gap:4,overflowX:'auto',paddingBottom:4}}>
+      {weekDays().map(d=>{const dd=new Date(d+'T12:00');return<button key={d} onClick={()=>setDate(d)} style={{flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',padding:'8px 12px',borderRadius:10,border:'none',cursor:'pointer',background:d===date?'#3b82f6':'#1e293b',color:d===date?'white':'#94a3b8',minWidth:52}}><span style={{fontSize:11}}>{DN[dd.getDay()]}</span><span style={{fontSize:20,fontWeight:700}}>{dd.getDate()}</span></button>;})}
+    </div>
+    {showCreate&&<div className="card" style={{padding:20}}>
+      <h3 style={{margin:'0 0 14px',color:'white',fontWeight:600,fontSize:15}}>Nouvelle affectation — {fmtDate(date)}</h3>
+      <form onSubmit={createAsgn} style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <select className="inp" value={form.route_id} onChange={e=>setForm({...form,route_id:e.target.value})} required><option value="">— Route —</option>{routes.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select>
+        <select className="inp" value={form.driver_id} onChange={e=>setForm({...form,driver_id:e.target.value})} required><option value="">— Chauffeur —</option>{drivers.map(d=><option key={d.id} value={d.id}>{d.identifier} — {d.full_name||d.identifier}</option>)}</select>
+        <select className="inp" value={form.vehicle_type} onChange={e=>setForm({...form,vehicle_type:e.target.value})}>{Object.entries(VEH).map(([v,ic])=><option key={v} value={v}>{ic} {v.charAt(0).toUpperCase()+v.slice(1)}</option>)}</select>
+        <input type="time" className="inp" value={form.start_time} onChange={e=>setForm({...form,start_time:e.target.value})}/>
+        <textarea className="inp" style={{gridColumn:'1/-1',height:60,resize:'vertical',fontSize:13}} placeholder="Notes (optionnel)" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/>
+        <div style={{gridColumn:'1/-1',display:'flex',gap:8}}><button type="submit" className="btn bp" style={{fontSize:13}}>Créer</button><button type="button" className="btn bg2" style={{fontSize:13}} onClick={()=>setShowCreate(false)}>Annuler</button></div>
+      </form>
+    </div>}
+    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+      {asgns.map(a=>{const s=SS[a.status]||SS.planifie;return<div key={a.id} className="card" style={{padding:'14px 16px'}}>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:24}}>{VEH[a.vehicle_type]||'🚗'}</span><div><div style={{fontWeight:600,color:'white',fontSize:14}}>{a.driver_name||a.driver_identifier}</div><div style={{fontSize:12,color:'#64748b',display:'flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,borderRadius:'50%',background:a.route_color,display:'inline-block'}}/>{a.route_name}{a.start_time&&` · ${a.start_time}`}</div></div></div>
+          <div style={{display:'flex',alignItems:'center',gap:8}}><span style={{background:s.bg,color:s.c,borderRadius:20,padding:'3px 10px',fontSize:12,fontWeight:500}}>{SL[a.status]||a.status}</span><button style={{background:'none',border:'none',cursor:'pointer',color:'#f87171',fontSize:14}} onClick={()=>deleteAsgn(a.id)}>🗑️</button></div>
         </div>
+        {a.total_stops>0&&<div style={{marginTop:10}}><div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#64748b',marginBottom:4}}><span>{a.done_stops}/{a.total_stops} arrêts · {a.problem_stops} problème(s)</span><span>{a.progress_pct}%</span></div><div style={{background:'#0f172a',borderRadius:4,height:6}}><div style={{background:'#3b82f6',height:6,borderRadius:4,transition:'width .4s',width:`${a.progress_pct}%`}}/></div></div>}
+      </div>;})}
+      {asgns.length===0&&<div style={{textAlign:'center',padding:'48px 0',color:'#475569'}}><div style={{fontSize:36,marginBottom:8}}>📋</div><p style={{margin:0}}>Aucune affectation pour cette date</p></div>}
+    </div>
+  </div>;
+}
+
+/* DRIVERS */
+function DriversManager({toast}){
+  const[drivers,setDrivers]=useState([]);const[showCreate,setShowCreate]=useState(false);const[form,setForm]=useState({identifier:'',full_name:'',phone:'',password:''});const[busy,setBusy]=useState(false);
+  useEffect(()=>{load();},[]);
+  const load=async()=>{const{data}=await sb.from('aboupro_driver_kpis').select('*');setDrivers(data||[]);};
+  const set=k=>e=>setForm(x=>({...x,[k]:e.target.value}));
+  const create=async e=>{
+    e.preventDefault();if(!form.identifier||!form.password)return toast('Identifiant et code requis','warning');if(form.password.length<8)return toast('Code minimum 8 caractères','warning');
+    setBusy(true);const{data:auth,error:e1}=await sb.auth.signUp({email:toEmail(form.identifier),password:form.password});
+    if(e1){toast(e1.message,'error');setBusy(false);return;}
+    const uid=auth.user?.id;if(!uid){toast('Erreur','error');setBusy(false);return;}
+    const{error:e2}=await sb.from('users_profiles').insert({id:uid,identifier:form.identifier,full_name:form.full_name||form.identifier,phone:form.phone||null,role:'driver',is_active:true});
+    if(e2){toast('Profil: '+e2.message,'error');setBusy(false);return;}
+    toast(`Chauffeur ${form.identifier} créé`,'success');setShowCreate(false);setForm({identifier:'',full_name:'',phone:'',password:''});load();setBusy(false);
+  };
+  const toggle=async d=>{await sb.from('users_profiles').update({is_active:!d.is_active}).eq('id',d.driver_id);load();};
+  return<div className="fi" style={{display:'flex',flexDirection:'column',gap:20}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}><h2 style={{fontSize:22,fontWeight:700,color:'white',margin:0}}>Chauffeurs</h2><button className="btn bp" style={{fontSize:13}} onClick={()=>setShowCreate(true)}>+ Nouveau</button></div>
+    {showCreate&&<div className="card" style={{padding:20}}>
+      <h3 style={{margin:'0 0 14px',color:'white',fontWeight:600,fontSize:15}}>Nouveau chauffeur</h3>
+      <form onSubmit={create} style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <input className="inp" placeholder="Identifiant * (ex: YG-A)" value={form.identifier} onChange={set('identifier')} required/>
+        <input className="inp" placeholder="Nom complet" value={form.full_name} onChange={set('full_name')}/>
+        <input className="inp" placeholder="Téléphone" value={form.phone} onChange={set('phone')}/>
+        <input type="password" className="inp" placeholder="Code d'accès (min. 8) *" value={form.password} onChange={set('password')} required/>
+        <div style={{gridColumn:'1/-1',display:'flex',gap:8}}><button type="submit" className="btn bp" style={{fontSize:13}} disabled={busy}>{busy?<span className="spin">⏳</span>:'👤'} Créer</button><button type="button" className="btn bg2" style={{fontSize:13}} onClick={()=>setShowCreate(false)}>Annuler</button></div>
+      </form>
+    </div>}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:14}}>
+      {drivers.map(d=><div key={d.driver_id} className="card" style={{padding:18}}>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:44,height:44,borderRadius:'50%',background:d.is_active?'#1d4ed8':'#374151',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:14}}>{d.driver_identifier?.slice(0,2)}</div><div><div style={{fontWeight:600,color:'white',fontSize:14}}>{d.driver_name||d.driver_identifier}</div><div style={{fontSize:12,color:'#64748b'}}>{d.driver_identifier}</div></div></div>
+          <button onClick={()=>toggle(d)} style={{background:d.is_active?'#064e3b':'#374151',color:d.is_active?'#6ee7b7':'#94a3b8',border:'none',borderRadius:16,padding:'4px 10px',fontSize:11,cursor:'pointer',fontWeight:500}}>{d.is_active?'✓ Actif':'✗ Inactif'}</button>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,textAlign:'center'}}>
+          {[{v:d.total_assignments||0,l:'Tournées',c:'#60a5fa'},{v:`${d.success_rate_pct||0}%`,l:'Réussite',c:'#34d399'},{v:d.total_stops_done||0,l:'Livraisons',c:'#fbbf24'}].map(k=><div key={k.l} style={{background:'#0f172a',borderRadius:8,padding:'8px 4px'}}><div style={{fontSize:18,fontWeight:700,color:k.c}}>{k.v}</div><div style={{fontSize:10,color:'#475569'}}>{k.l}</div></div>)}
+        </div>
+        {d.last_position_at&&<div style={{marginTop:10,fontSize:11,color:'#475569'}}>📍 {fmtTime(d.last_position_at)}</div>}
+      </div>)}
+      {drivers.length===0&&<p style={{color:'#475569',textAlign:'center',padding:'32px 0',gridColumn:'1/-1',margin:0}}>Aucun chauffeur enregistré</p>}
+    </div>
+  </div>;
+}
+
+/* LIVE MAP */
+function LiveMap(){
+  const mapRef=useRef(null);const leafRef=useRef(null);const mkrsRef=useRef({});const[drivers,setDrivers]=useState([]);
+  useEffect(()=>{
+    if(!mapRef.current||leafRef.current)return;
+    leafRef.current=L.map(mapRef.current,{zoomControl:true}).setView([48.8566,2.3522],11);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© OSM © CARTO',maxZoom:19}).addTo(leafRef.current);
+    loadPos();const t=setInterval(loadPos,15000);
+    return()=>{clearInterval(t);leafRef.current?.remove();leafRef.current=null;};
+  },[]);
+  const loadPos=async()=>{
+    const{data}=await sb.from('aboupro_driver_kpis').select('*').not('last_lat','is',null);
+    if(!data)return;setDrivers(data);
+    data.forEach(d=>{
+      if(!d.last_lat||!d.last_lng)return;
+      const ic=L.divIcon({html:`<div style="background:#3b82f6;color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,.5)">${d.driver_identifier?.slice(0,3)||'?'}</div>`,className:'',iconSize:[32,32],iconAnchor:[16,16]});
+      if(mkrsRef.current[d.driver_id])mkrsRef.current[d.driver_id].setLatLng([d.last_lat,d.last_lng]);
+      else mkrsRef.current[d.driver_id]=L.marker([d.last_lat,d.last_lng],{icon:ic}).addTo(leafRef.current).bindPopup(`<b>${d.driver_name||d.driver_identifier}</b><br>${fmtTime(d.last_position_at)}`);
+    });
+  };
+  return<div className="fi" style={{display:'flex',flexDirection:'column',gap:16}}>
+    <div style={{display:'flex',alignItems:'center',gap:10}}><h2 style={{fontSize:22,fontWeight:700,color:'white',margin:0}}>📍 Suivi en temps réel</h2><span style={{width:8,height:8,borderRadius:'50%',background:'#22c55e',display:'inline-block'}}/></div>
+    <div className="card" style={{overflow:'hidden',height:460}}><div ref={mapRef} style={{width:'100%',height:'100%'}}/></div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
+      {drivers.map(d=><div key={d.driver_id} className="card" style={{padding:'12px 14px',display:'flex',alignItems:'center',gap:10}}>
+        <div style={{width:36,height:36,borderRadius:'50%',background:'#1d4ed8',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:700,fontSize:12,flexShrink:0}}>{d.driver_identifier?.slice(0,2)}</div>
+        <div style={{flex:1,minWidth:0}}><div style={{fontWeight:500,color:'white',fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.driver_name||d.driver_identifier}</div>{d.last_position_at&&<div style={{fontSize:11,color:'#64748b'}}>{fmtTime(d.last_position_at)}</div>}</div>
+      </div>)}
+      {drivers.length===0&&<p style={{color:'#475569',margin:0,gridColumn:'1/-1',textAlign:'center',padding:16}}>Aucun chauffeur localisé</p>}
+    </div>
+  </div>;
+}
+
+/* HISTORY */
+function History(){
+  const[from,setFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return d.toISOString().slice(0,10);});
+  const[to,setTo]=useState(todayStr());const[data,setData]=useState([]);
+  useEffect(()=>{load();},[from,to]);
+  const load=async()=>{const{data}=await sb.from('aboupro_assignments_view').select('*').gte('assigned_date',from).lte('assigned_date',to).order('assigned_date',{ascending:false});setData(data||[]);};
+  const stats=useMemo(()=>({total:data.length,done:data.filter(a=>a.status==='termine').length,incident:data.filter(a=>a.status==='incident').length,stops:data.reduce((s,a)=>s+(a.done_stops||0),0),km:data.reduce((s,a)=>s+(parseFloat(a.total_km)||0),0).toFixed(1)}),[data]);
+  const SS={planifie:{bg:'#1e293b',c:'#94a3b8'},en_cours:{bg:'#1e3a8a',c:'#93c5fd'},termine:{bg:'#064e3b',c:'#6ee7b7'},incident:{bg:'#7f1d1d',c:'#fca5a5'},annule:{bg:'#1e293b',c:'#475569'}};
+  return<div className="fi" style={{display:'flex',flexDirection:'column',gap:20}}>
+    <h2 style={{fontSize:22,fontWeight:700,color:'white',margin:0}}>Historique & Analyses</h2>
+    <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}><input type="date" className="inp" style={{width:'auto'}} value={from} onChange={e=>setFrom(e.target.value)}/><span style={{color:'#94a3b8'}}>→</span><input type="date" className="inp" style={{width:'auto'}} value={to} onChange={e=>setTo(e.target.value)}/></div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:10}}>
+      {[{l:'Tournées',v:stats.total,c:'#60a5fa'},{l:'Terminées',v:stats.done,c:'#34d399'},{l:'Incidents',v:stats.incident,c:'#f87171'},{l:'Livraisons',v:stats.stops,c:'#fbbf24'},{l:'Km parcourus',v:stats.km,c:'#a78bfa'}].map(s=><div key={s.l} className="card" style={{padding:'14px 10px',textAlign:'center'}}><div style={{fontSize:22,fontWeight:700,color:s.c}}>{s.v}</div><div style={{fontSize:11,color:'#64748b',marginTop:2}}>{s.l}</div></div>)}
+    </div>
+    <div className="card" style={{padding:0,overflow:'auto'}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+        <thead><tr style={{borderBottom:'1px solid #334155'}}>{['Date','Chauffeur','Route','Statut','Progrès','Km'].map(h=><th key={h} style={{padding:'12px 14px',textAlign:'left',color:'#64748b',fontWeight:500,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
+        <tbody>
+          {data.map(a=>{const s=SS[a.status]||SS.planifie;return<tr key={a.id} style={{borderBottom:'1px solid #1e293b'}}>
+            <td style={{padding:'10px 14px',color:'#94a3b8',whiteSpace:'nowrap'}}>{fmtDate(a.assigned_date)}</td>
+            <td style={{padding:'10px 14px',color:'#e2e8f0'}}>{a.driver_identifier}</td>
+            <td style={{padding:'10px 14px',color:'#e2e8f0',maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.route_name}</td>
+            <td style={{padding:'10px 14px'}}><span style={{background:s.bg,color:s.c,borderRadius:16,padding:'3px 8px',fontSize:11}}>{a.status}</span></td>
+            <td style={{padding:'10px 14px',color:'#94a3b8'}}>{a.done_stops}/{a.total_stops}</td>
+            <td style={{padding:'10px 14px',color:'#94a3b8'}}>{a.total_km?`${a.total_km}km`:'—'}</td>
+          </tr>;})}
+        </tbody>
+      </table>
+      {data.length===0&&<p style={{textAlign:'center',color:'#475569',padding:'32px 0',margin:0}}>Aucune donnée pour cette période</p>}
+    </div>
+  </div>;
+}
+
+/* ADMIN LAYOUT */
+function AdminLayout({profile,session,onLogout,toast}){
+  const[page,setPage]=useState('dashboard');const[menuOpen,setMenuOpen]=useState(false);
+  const nav=[{id:'dashboard',icon:'📊',label:'Tableau de bord'},{id:'routes',icon:'🗺️',label:'Routes'},{id:'assignments',icon:'📋',label:'Affectations'},{id:'drivers',icon:'👥',label:'Chauffeurs'},{id:'livemap',icon:'📍',label:'Carte live'},{id:'history',icon:'📈',label:'Historique'}];
+  const Page=()=>{switch(page){case'dashboard':return<Dashboard profile={profile} toast={toast}/>;case'routes':return<RoutesManager toast={toast}/>;case'assignments':return<AssignmentsManager toast={toast}/>;case'drivers':return<DriversManager toast={toast}/>;case'livemap':return<LiveMap/>;case'history':return<History/>;default:return<Dashboard profile={profile} toast={toast}/>;}};
+  return<div style={{display:'flex',height:'100vh',overflow:'hidden'}}>
+    <aside className="aside-desktop" style={{width:216,background:'#0f172a',borderRight:'1px solid #1e293b',display:'flex',flexDirection:'column',padding:'20px 12px',flexShrink:0}}>
+      <div style={{padding:'4px 8px 20px'}}><div style={{fontSize:18,fontWeight:800,color:'white'}}>🚚 ABOU PRO</div><div style={{fontSize:12,color:'#475569',marginTop:2}}>{profile.identifier}</div></div>
+      <nav style={{flex:1,display:'flex',flexDirection:'column',gap:2}}>{nav.map(n=><button key={n.id} onClick={()=>setPage(n.id)} className={`nav-item${page===n.id?' active':''}`}><span>{n.icon}</span>{n.label}</button>)}</nav>
+      <button onClick={onLogout} className="nav-item" style={{color:'#f87171',marginTop:8}}>🚪 Déconnexion</button>
+    </aside>
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <header className="header-mobile" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',background:'#0f172a',borderBottom:'1px solid #1e293b',flexShrink:0}}>
+        <div style={{fontWeight:700,color:'white',fontSize:15}}>🚚 {nav.find(n=>n.id===page)?.label||'ABOU PRO'}</div>
+        <button onClick={()=>setMenuOpen(!menuOpen)} style={{background:'none',border:'none',cursor:'pointer',color:'white',fontSize:22,padding:4}}>☰</button>
       </header>
-      <nav className="sticky top-14 z-30 bg-ink/95 backdrop-blur border-b border-line px-2 flex gap-1 overflow-x-auto">
-        {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={cx('flex items-center gap-2 px-3 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition', tab === t.id ? 'border-brand text-white' : 'border-transparent text-slate-500 hover:text-slate-300')}>
-            {t.icon}{t.label}
-          </button>
-        ))}
-      </nav>
-      <main className="flex-1 p-4 max-w-6xl w-full mx-auto">
-        {tab === 'dash' && <DashboardView go={setTab} />}
-        {tab === 'routes' && <RoutesView />}
-        {tab === 'assign' && <AssignmentsView />}
-        {tab === 'drivers' && <DriversView />}
-        {tab === 'history' && <HistoryView />}
-      </main>
+      {menuOpen&&<div style={{position:'fixed',inset:0,zIndex:100,background:'#0f172a',padding:'16px 12px',overflow:'auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:24}}><div style={{fontSize:20,fontWeight:800,color:'white'}}>🚚 ABOU PRO</div><button onClick={()=>setMenuOpen(false)} style={{background:'none',border:'none',cursor:'pointer',color:'white',fontSize:24}}>✕</button></div>
+        <nav style={{display:'flex',flexDirection:'column',gap:4}}>{nav.map(n=><button key={n.id} onClick={()=>{setPage(n.id);setMenuOpen(false);}} className={`nav-item${page===n.id?' active':''}`} style={{fontSize:15,padding:'12px 14px'}}><span>{n.icon}</span>{n.label}</button>)}</nav>
+        <button onClick={onLogout} className="nav-item" style={{color:'#f87171',marginTop:16,fontSize:15,padding:'12px 14px'}}>🚪 Déconnexion</button>
+      </div>}
+      <main style={{flex:1,overflowY:'auto',padding:'20px 16px'}}><Page/></main>
     </div>
-  );
+    <style>{`@media(min-width:768px){.header-mobile{display:none!important}} @media(max-width:767px){.aside-desktop{display:none!important}}`}</style>
+  </div>;
 }
 
-/* ── Dashboard ───────────────────────────────────────────────────── */
-function DashboardView({ go }) {
-  const [stats, setStats] = useState(null);
-  const [today, setToday] = useState([]);
-  const [drivers, setDrivers] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    const [r1, r2, r3, r4] = await Promise.all([
-      sb.from('routes').select('id', { count: 'exact', head: true }).eq('active', true),
-      sb.from('users_profiles').select('id', { count: 'exact', head: true }).eq('role', 'chauffeur').eq('active', true),
-      sb.from('aboupro_assignments_view').select('*').eq('date', todayISO()).order('start_time'),
-      sb.from('driver_positions').select('*')
-    ]);
-    const ta = r3.data || [];
-    const done = ta.filter((a) => a.status === 'termine').length;
-    const totalStops = ta.reduce((s, a) => s + (a.total_stops || 0), 0);
-    const compStops = ta.reduce((s, a) => s + (a.completed_stops || 0), 0);
-    setStats({ routes: r1.count || 0, drivers: r2.count || 0, todayCount: ta.length, done, rate: totalStops ? Math.round(100 * compStops / totalStops) : 0 });
-    setToday(ta);
-    // joindre noms chauffeurs aux positions
-    const pos = r4.data || [];
-    if (pos.length) {
-      const ids = pos.map((p) => p.driver_id);
-      const { data: profs } = await sb.from('users_profiles').select('user_id,name').in('user_id', ids);
-      const map = Object.fromEntries((profs || []).map((p) => [p.user_id, p.name]));
-      setDrivers(pos.map((p) => ({ ...p, name: map[p.driver_id] })));
-    } else setDrivers([]);
+/* DRIVER APP */
+function DriverApp({profile,session,onLogout,toast}){
+  const[asgn,setAsgn]=useState(null);const[stops,setStops]=useState([]);const[view,setView]=useState('tour');const[sel,setSel]=useState(null);const[loading,setLoading]=useState(true);const[pos,setPos]=useState(null);
+  const watchRef=useRef(null);const mapRef=useRef(null);const leafRef=useRef(null);
+  useEffect(()=>{loadAsgn();startGPS();return()=>{if(watchRef.current)navigator.geolocation.clearWatch(watchRef.current);};},[]);
+  useEffect(()=>{if(view==='map'&&mapRef.current&&!leafRef.current&&asgn)initMap();},[view,asgn]);
+  const startGPS=()=>{if(!navigator.geolocation)return;watchRef.current=navigator.geolocation.watchPosition(p=>{const{latitude:lat,longitude:lng,accuracy}=p.coords;setPos({lat,lng,accuracy});},null,{enableHighAccuracy:true,maximumAge:10000,timeout:15000});};
+  useEffect(()=>{
+    if(pos&&asgn&&asgn.status==='en_cours'){
+      const t=setTimeout(async()=>{try{await sb.from('driver_positions').upsert({driver_id:profile.id,assignment_id:asgn.id,lat:pos.lat,lng:pos.lng,accuracy_m:Math.round(pos.accuracy||0),recorded_at:new Date().toISOString()},{onConflict:'driver_id,recorded_at'});}catch{}},500);
+      return()=>clearTimeout(t);
+    }
+  },[pos,asgn?.id,asgn?.status]);
+  const loadAsgn=async()=>{
+    const{data}=await sb.from('assignments').select('*,routes(id,name,color)').eq('driver_id',profile.id).eq('assigned_date',todayStr()).neq('status','annule').order('created_at').limit(1).maybeSingle();
+    if(data){setAsgn(data);const{data:s}=await sb.from('assignment_stops').select('*,stops(id,client_name,address,lat,lng,scheduled_time,notes,access_code,parking_info,requires_photo,requires_scan,operation_type)').eq('assignment_id',data.id).order('order_index');setStops(s||[]);}
     setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    load();
-    const ch = sb.channel('dash-pos').on('postgres_changes', { event: '*', schema: 'public', table: 'driver_positions' }, load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tour_logs' }, load).subscribe();
-    const iv = setInterval(load, 30000);
-    return () => { sb.removeChannel(ch); clearInterval(iv); };
-  }, [load]);
-
-  if (loading) return <Spinner label="Chargement du tableau de bord…" />;
-  const kpis = [
-    { label: 'Tournées actives', value: stats.routes, icon: <Ico.route />, c: 'text-brand2' },
-    { label: 'Chauffeurs', value: stats.drivers, icon: <Ico.users />, c: 'text-amber' },
-    { label: "Tournées aujourd'hui", value: stats.todayCount, icon: <Ico.cal />, c: 'text-emerald-400' },
-    { label: 'Avancement du jour', value: stats.rate + '%', icon: <Ico.zap />, c: 'text-brand2' }
-  ];
-  return (
-    <div className="space-y-5 fadein">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {kpis.map((k, i) => (
-          <Card key={i} className="p-4">
-            <div className={cx('flex items-center gap-2 mb-2', k.c)}>{k.icon}<span className="text-xs text-slate-400 font-medium">{k.label}</span></div>
-            <div className="text-3xl font-extrabold">{k.value}</div>
-          </Card>
-        ))}
+  };
+  const initMap=()=>{
+    if(!mapRef.current||leafRef.current)return;
+    const center=pos?[pos.lat,pos.lng]:[48.8566,2.3522];
+    leafRef.current=L.map(mapRef.current).setView(center,13);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(leafRef.current);
+    stops.forEach((s,i)=>{if(!s.stops?.lat)return;const c=s.status==='done'?'#22c55e':s.status==='problem'?'#ef4444':'#3b82f6';L.marker([s.stops.lat,s.stops.lng],{icon:L.divIcon({html:`<div style="background:${c};color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;border:2px solid white">${i+1}</div>`,className:'',iconSize:[24,24],iconAnchor:[12,12]})}).addTo(leafRef.current).bindPopup(`<b>${i+1}. ${s.stops.client_name}</b><br>${s.stops.address}`);});
+    if(pos)L.circle([pos.lat,pos.lng],{radius:pos.accuracy,color:'#3b82f6',fillOpacity:.15}).addTo(leafRef.current);
+  };
+  const startTour=async()=>{
+    if(asgn.status!=='planifie')return;
+    await sb.from('assignments').update({status:'en_cours',started_at:new Date().toISOString()}).eq('id',asgn.id);
+    await sb.from('tour_logs').insert({assignment_id:asgn.id,driver_id:profile.id,event_type:'tour_started',lat:pos?.lat,lng:pos?.lng});
+    setAsgn(a=>({...a,status:'en_cours'}));toast('Tournée démarrée 🚀','success');
+  };
+  const completeTour=async()=>{
+    const pending=stops.filter(s=>s.status==='pending').length;
+    if(pending>0&&!confirm(`${pending} arrêt(s) en attente. Terminer quand même ?`))return;
+    await sb.from('assignments').update({status:'termine',completed_at:new Date().toISOString()}).eq('id',asgn.id);
+    await sb.from('tour_logs').insert({assignment_id:asgn.id,driver_id:profile.id,event_type:'tour_completed',lat:pos?.lat,lng:pos?.lng});
+    setAsgn(a=>({...a,status:'termine'}));toast('Tournée terminée ! 🎉','success');
+  };
+  const markDone=async astop=>{
+    const stop=astop.stops;
+    if(!pos)return toast('GPS requis','warning');
+    if(stop.lat&&stop.lng){const d=haversine(pos.lat,pos.lng,stop.lat,stop.lng);if(d>250)return toast(`Vous êtes à ${Math.round(d)}m (max 250m)`,'warning');}
+    const now=new Date().toISOString();
+    await sb.from('assignment_stops').update({status:'done',arrived_at:now,completed_at:now,lat_arrived:pos.lat,lng_arrived:pos.lng,distance_m:stop.lat?Math.round(haversine(pos.lat,pos.lng,stop.lat,stop.lng)):null}).eq('id',astop.id);
+    await sb.from('tour_logs').insert({assignment_id:asgn.id,driver_id:profile.id,event_type:'stop_done',stop_id:stop.id,lat:pos.lat,lng:pos.lng});
+    setStops(s=>s.map(x=>x.id===astop.id?{...x,status:'done'}:x));
+    toast('Livraison validée ✓','success');setSel(null);setView('tour');
+  };
+  const markProblem=async(astop,type,notes)=>{
+    const now=new Date().toISOString();
+    await sb.from('assignment_stops').update({status:'problem',arrived_at:now,problem_type:type,problem_notes:notes,lat_arrived:pos?.lat,lng_arrived:pos?.lng}).eq('id',astop.id);
+    await sb.from('tour_logs').insert({assignment_id:asgn.id,driver_id:profile.id,event_type:'stop_problem',stop_id:astop.stops?.id,payload:{type,notes},lat:pos?.lat,lng:pos?.lng});
+    setStops(s=>s.map(x=>x.id===astop.id?{...x,status:'problem'}:x));
+    toast('Problème signalé','warning');setSel(null);setView('tour');
+  };
+  if(loading)return<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}><span className="spin" style={{fontSize:36}}>⏳</span></div>;
+  if(!asgn)return<div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,textAlign:'center'}}>
+    <div style={{fontSize:48,marginBottom:12}}>📭</div><h2 style={{color:'white',margin:'0 0 8px'}}>Aucune tournée aujourd'hui</h2>
+    <p style={{color:'#64748b',margin:'0 0 24px'}}>Pas d'affectation pour le {fmtDate(todayStr())}</p>
+    <button className="btn bg2" onClick={onLogout}>Se déconnecter</button>
+  </div>;
+  const done=stops.filter(s=>s.status==='done').length;const probs=stops.filter(s=>s.status==='problem').length;const pct=stops.length>0?Math.round(done/stops.length*100):0;
+  if(view==='stop'&&sel)return<StopDetail astop={sel} asgn={asgn} profile={profile} pos={pos} toast={toast} onDone={()=>markDone(sel)} onProblem={(t,n)=>markProblem(sel,t,n)} onBack={()=>{setSel(null);setView('tour');}}/>;
+  return<div style={{minHeight:'100vh',display:'flex',flexDirection:'column',background:'#0b1120'}}>
+    <div style={{background:'#0f172a',borderBottom:'1px solid #1e293b',padding:'12px 16px',flexShrink:0}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div><div style={{fontWeight:700,color:'white',fontSize:15}}>{asgn.routes?.name||'Tournée'}</div><div style={{fontSize:11,color:'#475569'}}>{profile.identifier} · {fmtDate(todayStr())}</div></div>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>{pos&&<span style={{fontSize:11,color:'#34d399'}}>📍 GPS</span>}<button onClick={onLogout} style={{background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:12}}>Quitter</button></div>
       </div>
-
-      <Card className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold flex items-center gap-2"><Ico.pin size={18} /> Position des chauffeurs (live)</h2>
-          <Btn variant="ghost" size="sm" onClick={load}><Ico.refresh size={16} /> Actualiser</Btn>
-        </div>
-        <MapView drivers={drivers} stops={[]} height={300} />
-        {drivers.length === 0 && <p className="text-sm text-slate-500 mt-3">Aucun chauffeur ne partage sa position pour le moment.</p>}
-      </Card>
-
-      <Card className="p-4">
-        <h2 className="font-bold mb-3 flex items-center gap-2"><Ico.cal size={18} /> Tournées du jour</h2>
-        {today.length === 0 ? <Empty icon={<Ico.cal size={40} />} title="Aucune tournée planifiée aujourd'hui" action={<Btn size="sm" onClick={() => go('assign')}><Ico.plus size={16} /> Assigner une tournée</Btn>} />
-          : <div className="space-y-2">{today.map((a) => <AssignmentRow key={a.id} a={a} />)}</div>}
-      </Card>
+      <div style={{marginTop:10}}><div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'#475569',marginBottom:4}}><span>{done}/{stops.length} · {probs} problème(s)</span><span>{pct}%</span></div><div style={{background:'#1e293b',borderRadius:4,height:6}}><div style={{background:'#3b82f6',height:6,borderRadius:4,transition:'width .4s',width:`${pct}%`}}/></div></div>
     </div>
-  );
-}
-
-function AssignmentRow({ a, onClick }) {
-  const sm = STATUS_META[a.status] || STATUS_META.planifie;
-  const pct = a.total_stops ? Math.round(100 * (a.completed_stops || 0) / a.total_stops) : 0;
-  return (
-    <div onClick={onClick} className={cx('flex items-center gap-3 bg-ink3/50 rounded-xl p-3', onClick && 'cursor-pointer hover:bg-ink3')}>
-      <span className="w-2.5 h-10 rounded-full" style={{ background: a.route_color }} />
-      <div className="flex-1 min-w-0">
-        <div className="font-semibold truncate">{a.route_name}</div>
-        <div className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
-          <span className="flex items-center gap-1"><Ico.user size={12} /> {a.driver_name}</span>
-          {a.start_time && <span className="flex items-center gap-1"><Ico.clock size={12} /> {fmtTime(a.start_time)}</span>}
-          <span>{a.completed_stops || 0}/{a.total_stops || 0} stops</span>
-          {a.problem_stops > 0 && <span className="text-red-400">{a.problem_stops} pb</span>}
-        </div>
-        <div className="h-1.5 bg-ink rounded-full mt-2 overflow-hidden"><div className="h-full bg-brand rounded-full transition-all" style={{ width: pct + '%' }} /></div>
-      </div>
-      <Badge className={sm.c}>{sm.label}</Badge>
+    <div style={{display:'flex',borderBottom:'1px solid #1e293b',flexShrink:0}}>
+      {[['tour','📋 Arrêts'],['map','🗺️ Carte']].map(([k,l])=><button key={k} onClick={()=>setView(k)} style={{flex:1,padding:'10px 0',fontSize:13,fontWeight:500,border:'none',cursor:'pointer',background:'transparent',borderBottom:view===k?'2px solid #3b82f6':'2px solid transparent',color:view===k?'#60a5fa':'#64748b'}}>{l}</button>)}
     </div>
-  );
-}
-
-/* ── Chauffeurs ──────────────────────────────────────────────────── */
-function DriversView() {
-  const [list, setList] = useState(null);
-  const [modal, setModal] = useState(false);
-
-  const load = useCallback(async () => {
-    const { data } = await sb.from('users_profiles').select('*').eq('role', 'chauffeur').order('created_at', { ascending: false });
-    setList(data || []);
-  }, []);
-  useEffect(() => { load(); }, [load]);
-
-  const toggleActive = async (d) => { await sb.from('users_profiles').update({ active: !d.active }).eq('id', d.id); load(); };
-
-  if (!list) return <Spinner />;
-  return (
-    <div className="space-y-4 fadein">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Chauffeurs <span className="text-slate-500 text-base">({list.length})</span></h2>
-        <Btn onClick={() => setModal(true)}><Ico.plus size={18} /> Nouveau chauffeur</Btn>
-      </div>
-      {list.length === 0 ? <Empty icon={<Ico.users size={44} />} title="Aucun chauffeur" sub="Crée le premier compte chauffeur pour commencer à assigner des tournées." />
-        : <div className="grid sm:grid-cols-2 gap-3">{list.map((d) => (
-          <Card key={d.id} className="p-4 flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full bg-ink3 flex items-center justify-center text-slate-300"><Ico.user /></div>
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold truncate">{d.name || '—'}</div>
-              <div className="text-xs text-slate-400 flex items-center gap-2">{d.phone && <span className="flex items-center gap-1"><Ico.phone size={11} />{d.phone}</span>}</div>
-            </div>
-            <Badge className={d.active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700/40 text-slate-400'}>{d.active ? 'Actif' : 'Inactif'}</Badge>
-            <button onClick={() => toggleActive(d)} className="text-slate-500 hover:text-white p-1" title={d.active ? 'Désactiver' : 'Activer'}>{d.active ? <Ico.x size={18} /> : <Ico.check size={18} />}</button>
-          </Card>))}
-        </div>}
-      <NewDriverModal open={modal} onClose={() => setModal(false)} onCreated={load} />
+    <div style={{flex:1,overflowY:'auto'}}>
+      {view==='tour'&&<div style={{padding:12,display:'flex',flexDirection:'column',gap:8}}>
+        {asgn.status==='planifie'&&<div className="card" style={{padding:16,textAlign:'center'}}><p style={{color:'#94a3b8',margin:'0 0 12px',fontSize:14}}>Tournée prête à démarrer</p><button className="btn bp" style={{width:'100%',padding:'14px 0',fontSize:16}} onClick={startTour}>🚀 Démarrer la tournée</button></div>}
+        {asgn.status==='en_cours'&&stops.filter(s=>s.status==='pending').length===0&&<button className="btn bgrn" style={{width:'100%',padding:'14px 0',fontSize:16}} onClick={completeTour}>✅ Terminer la tournée</button>}
+        {asgn.status==='termine'&&<div className="card" style={{padding:16,textAlign:'center',background:'#064e3b',borderColor:'#065f46'}}><div style={{fontSize:32,marginBottom:6}}>🎉</div><p style={{color:'#6ee7b7',fontWeight:600,margin:0}}>Tournée terminée !</p></div>}
+        {stops.map((astop,i)=><DriverStopCard key={astop.id} astop={astop} idx={i} asgnStatus={asgn.status} onClick={()=>{if(asgn.status==='en_cours'){setSel(astop);setView('stop');}}}/>)}
+      </div>}
+      {view==='map'&&<div ref={mapRef} style={{width:'100%',height:'calc(100vh - 140px)'}}/>}
     </div>
-  );
+  </div>;
 }
 
-function NewDriverModal({ open, onClose, onCreated }) {
-  const [f, setF] = useState({ name: '', email: '', phone: '', password: '' });
-  const [busy, setBusy] = useState(false); const [done, setDone] = useState(null); const [err, setErr] = useState('');
-  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
-  const genPw = () => setF((p) => ({ ...p, password: 'AP' + Math.random().toString(36).slice(2, 8) + '!' }));
-  useEffect(() => { if (open) { setF({ name: '', email: '', phone: '', password: '' }); setDone(null); setErr(''); genPw(); } }, [open]);
-
-  const create = async () => {
-    setErr('');
-    if (!f.email || !f.password || f.password.length < 6) { setErr('Identifiant et mot de passe (min. 6 caractères) requis.'); return; }
-    setBusy(true);
-    // Convertit l'identifiant court en email (@aboupro.app) comme pour la connexion
-    const emailAddr = f.email.trim().includes('@')
-      ? f.email.trim()
-      : f.email.trim().toLowerCase().replace(/\s+/g, '-') + '@aboupro.app';
-    try {
-      const tmp = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false, storageKey: 'aboupro_tmp_' + Date.now() } });
-      const { data, error } = await tmp.auth.signUp({ email: emailAddr, password: f.password });
-      if (error) throw error;
-      const userId = data.user && data.user.id;
-      if (!userId) throw new Error("Inscription impossible (l'email existe peut-être déjà).");
-      // Le profil est inséré via le client admin (passe la RLS)
-      const { error: e2 } = await sb.from('users_profiles').insert({ user_id: userId, name: f.name, phone: f.phone, role: 'chauffeur', active: true });
-      try { await tmp.auth.signOut(); } catch (e) {}
-      if (e2) throw e2;
-      setDone({ email: f.email.trim(), password: f.password });
-      toast('Chauffeur créé ✓', 'success'); onCreated && onCreated();
-    } catch (e) { setErr(e.message || String(e)); }
-    setBusy(false);
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title="Nouveau chauffeur">
-      {done ? (
-        <div className="space-y-4">
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
-            <div className="flex items-center gap-2 text-emerald-300 font-semibold mb-3"><Ico.check /> Compte créé</div>
-            <p className="text-sm text-slate-400 mb-3">Transmets ces accès au chauffeur :</p>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between bg-ink3 rounded-lg px-3 py-2"><span className="text-slate-400">Identifiant</span><span className="font-mono font-bold">{done.email}</span></div>
-              <div className="flex items-center justify-between bg-ink3 rounded-lg px-3 py-2"><span className="text-slate-400">Mot de passe</span><span className="font-mono">{done.password}</span></div>
-            </div>
-            <Btn variant="ghost" size="sm" className="w-full mt-3" onClick={() => { navigator.clipboard.writeText(`ABOU PRO\nIdentifiant: ${done.email}\nMot de passe: ${done.password}`); toast('Copié ✓', 'success'); }}><Ico.copy size={16} /> Copier les accès</Btn>
-          </div>
-          <Btn className="w-full" onClick={onClose}>Terminé</Btn>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <Field label="Nom complet"><Input value={f.name} onChange={set('name')} placeholder="Jean Dupont" /></Field>
-          <Field label="Identifiant" hint="Court et sans espaces — ex: JEAN-D, CHAUFFEUR1">
-            <Input type="text" value={f.email} onChange={set('email')} placeholder="Ex : JEAN-D" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
-          </Field>
-          <Field label="Téléphone"><Input value={f.phone} onChange={set('phone')} placeholder="+32 …" /></Field>
-          <Field label="Mot de passe temporaire">
-            <div className="flex gap-2"><Input value={f.password} onChange={set('password')} /><Btn variant="ghost" size="sm" onClick={genPw}><Ico.refresh size={16} /></Btn></div>
-          </Field>
-          {err && <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{err}</div>}
-          <p className="text-[11px] text-slate-500">Astuce : dans Supabase → Authentication → Providers → Email, désactive « Confirm email » pour que le chauffeur puisse se connecter immédiatement.</p>
-          <Btn className="w-full" size="lg" onClick={create} disabled={busy}>{busy ? <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full spin" /> : 'Créer le compte'}</Btn>
-        </div>
-      )}
-    </Modal>
-  );
-}
-
-/* ── Tournées (routes + stops) ───────────────────────────────────── */
-const COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#a855f7', '#ec4899', '#06b6d4', '#84cc16'];
-
-function RoutesView() {
-  const [routes, setRoutes] = useState(null);
-  const [sel, setSel] = useState(null);
-  const [modal, setModal] = useState(false);
-
-  const load = useCallback(async () => {
-    const { data } = await sb.from('routes').select('*').order('created_at', { ascending: false });
-    // compter les stops
-    const withCounts = await Promise.all((data || []).map(async (r) => {
-      const { count } = await sb.from('stops').select('id', { count: 'exact', head: true }).eq('route_id', r.id);
-      return { ...r, stopCount: count || 0 };
-    }));
-    setRoutes(withCounts);
-  }, []);
-  useEffect(() => { load(); }, [load]);
-
-  if (sel) return <RouteEditor routeId={sel} onBack={() => { setSel(null); load(); }} />;
-  if (!routes) return <Spinner />;
-  return (
-    <div className="space-y-4 fadein">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Tournées <span className="text-slate-500 text-base">({routes.length})</span></h2>
-        <Btn onClick={() => setModal(true)}><Ico.plus size={18} /> Nouvelle tournée</Btn>
+function DriverStopCard({astop,idx,asgnStatus,onClick}){
+  const s=astop.stops;
+  const BC={pending:'#334155',done:'#065f46',problem:'#7f1d1d',skipped:'#92400e'}[astop.status]||'#334155';
+  const BG={done:'rgba(6,95,70,.15)',problem:'rgba(127,29,29,.15)',skipped:'rgba(146,64,14,.15)'}[astop.status]||'#1e293b';
+  const IC={pending:'⏳',done:'✅',problem:'❌',skipped:'⏭️'}[astop.status]||'⏳';
+  if(asgnStatus==='planifie')return null;
+  return<div onClick={onClick} style={{background:BG,border:`1px solid ${BC}`,borderRadius:10,padding:'12px 14px',cursor:asgnStatus==='en_cours'?'pointer':'default'}}>
+    <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+      <div style={{width:24,height:24,background:'#334155',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:'#94a3b8',flexShrink:0}}>{idx+1}</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}><span style={{fontWeight:500,color:'white',fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{s?.client_name||'Client'}</span><span style={{fontSize:18,marginLeft:8}}>{IC}</span></div>
+        <p style={{color:'#64748b',fontSize:12,margin:'2px 0 0',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s?.address}</p>
+        <div style={{display:'flex',gap:10,marginTop:4,fontSize:11,color:'#475569'}}>{s?.scheduled_time&&<span>🕐 {s.scheduled_time}</span>}{s?.access_code&&<span>🔑 {s.access_code}</span>}{s?.requires_photo&&<span>📷</span>}{s?.requires_scan&&<span>📲</span>}</div>
       </div>
-      {routes.length === 0 ? <Empty icon={<Ico.route size={44} />} title="Aucune tournée" sub="Crée ta première tournée, puis ajoute ou importe des stops." />
-        : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{routes.map((r) => (
-          <Card key={r.id} className="p-4 cursor-pointer hover:border-brand/50 transition" onClick={() => setSel(r.id)}>
-            <div className="flex items-start gap-3">
-              <span className="w-3 h-3 rounded-full mt-1.5 flex-shrink-0" style={{ background: r.color }} />
-              <div className="flex-1 min-w-0">
-                <div className="font-bold truncate">{r.name}</div>
-                <div className="text-xs text-slate-400 mt-0.5">{r.stopCount} stop{r.stopCount > 1 ? 's' : ''}{!r.active && ' · archivée'}</div>
-                {r.description && <div className="text-xs text-slate-500 mt-1 line-clamp-2">{r.description}</div>}
-              </div>
-              <Ico.right className="text-slate-600" />
-            </div>
-          </Card>))}
-        </div>}
-      <RouteModal open={modal} onClose={() => setModal(false)} onSaved={load} />
     </div>
-  );
+  </div>;
 }
 
-function RouteModal({ open, onClose, onSaved, route }) {
-  const [f, setF] = useState({ name: '', color: COLORS[0], description: '' });
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { if (open) setF(route ? { name: route.name, color: route.color, description: route.description || '' } : { name: '', color: COLORS[0], description: '' }); }, [open, route]);
-  const save = async () => {
-    if (!f.name.trim()) { toast('Nom requis', 'error'); return; }
-    setBusy(true);
-    const { data: u } = await sb.auth.getUser();
-    if (route) await sb.from('routes').update(f).eq('id', route.id);
-    else await sb.from('routes').insert({ ...f, created_by: u.user.id });
-    setBusy(false); onSaved && onSaved(); onClose();
-    toast(route ? 'Tournée mise à jour ✓' : 'Tournée créée ✓', 'success');
+function StopDetail({astop,asgn,profile,pos,toast,onDone,onProblem,onBack}){
+  const stop=astop.stops;const[showProb,setShowProb]=useState(false);const[probType,setProbType]=useState('absent');const[probNotes,setProbNotes]=useState('');const[uploading,setUploading]=useState(false);const[photoOk,setPhotoOk]=useState(astop.photo_taken);
+  const photoRef=useRef();
+  const dist=pos&&stop?.lat&&stop?.lng?Math.round(haversine(pos.lat,pos.lng,stop.lat,stop.lng)):null;
+  const uploadPhoto=async file=>{
+    setUploading(true);const path=`${profile.id}/${asgn.id}/${astop.id}_${Date.now()}.jpg`;
+    const{error}=await sb.storage.from('abou-pro-photos').upload(path,file,{contentType:'image/jpeg'});
+    if(!error){await sb.from('photos').insert({assignment_id:asgn.id,stop_id:stop?.id,driver_id:profile.id,storage_path:path,photo_type:'delivery'});await sb.from('assignment_stops').update({photo_taken:true}).eq('id',astop.id);setPhotoOk(true);toast('Photo uploadée ✓','success');}
+    else toast(error.message,'error');setUploading(false);
   };
-  return (
-    <Modal open={open} onClose={onClose} title={route ? 'Modifier la tournée' : 'Nouvelle tournée'}>
-      <div className="space-y-4">
-        <Field label="Nom de la tournée"><Input value={f.name} onChange={(e) => setF((p) => ({ ...p, name: e.target.value }))} placeholder="Ex. Centre-ville matin" /></Field>
-        <Field label="Couleur">
-          <div className="flex gap-2 flex-wrap">{COLORS.map((c) => <button key={c} onClick={() => setF((p) => ({ ...p, color: c }))} className={cx('w-9 h-9 rounded-xl border-2 transition', f.color === c ? 'border-white scale-110' : 'border-transparent')} style={{ background: c }} />)}</div>
-        </Field>
-        <Field label="Description (optionnel)"><Textarea value={f.description} onChange={(e) => setF((p) => ({ ...p, description: e.target.value }))} placeholder="Notes internes…" /></Field>
-        <Btn className="w-full" size="lg" onClick={save} disabled={busy}>{busy ? '…' : (route ? 'Enregistrer' : 'Créer')}</Btn>
-      </div>
-    </Modal>
-  );
-}
-
-function RouteEditor({ routeId, onBack }) {
-  const [route, setRoute] = useState(null);
-  const [stops, setStops] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [view, setView] = useState('list');
-  const [stopModal, setStopModal] = useState(false);
-  const [editStop, setEditStop] = useState(null);
-  const [importModal, setImportModal] = useState(false);
-  const [editRoute, setEditRoute] = useState(false);
-  const [polyline, setPolyline] = useState(null);
-  const [optInfo, setOptInfo] = useState(null);
-  const [optBusy, setOptBusy] = useState(false);
-  const [geoBusy, setGeoBusy] = useState(false);
-  const dragIdx = useRef(null);
-
-  const load = useCallback(async () => {
-    const [r, s] = await Promise.all([
-      sb.from('routes').select('*').eq('id', routeId).single(),
-      sb.from('stops').select('*').eq('route_id', routeId).order('order_index')
-    ]);
-    setRoute(r.data); setStops(s.data || []); setLoading(false);
-  }, [routeId]);
-  useEffect(() => { load(); }, [load]);
-
-  const persistOrder = async (arr) => {
-    setStops(arr);
-    await Promise.all(arr.map((s, i) => sb.from('stops').update({ order_index: i }).eq('id', s.id)));
-  };
-  const onDrop = (i) => { const from = dragIdx.current; if (from == null || from === i) return; const a = [...stops]; const [m] = a.splice(from, 1); a.splice(i, 0, m); dragIdx.current = null; persistOrder(a); };
-  const move = (i, dir) => { const j = i + dir; if (j < 0 || j >= stops.length) return; const a = [...stops]; [a[i], a[j]] = [a[j], a[i]]; persistOrder(a); };
-
-  const delStop = async (s) => { if (!confirm('Supprimer ce stop ?')) return; await sb.from('stops').delete().eq('id', s.id); load(); };
-
-  const geocodeMissing = async () => {
-    const todo = stops.filter((s) => (s.lat == null || s.lng == null) && s.address);
-    if (!todo.length) { toast('Tous les stops sont déjà géocodés', 'info'); return; }
-    setGeoBusy(true); let ok = 0;
-    for (const s of todo) {
-      const g = await orsGeocode(s.address + (s.client_name ? '' : ''));
-      if (g) { await sb.from('stops').update({ lat: g.lat, lng: g.lng, geocoded: true }).eq('id', s.id); ok++; }
-      await new Promise((r) => setTimeout(r, 350)); // rythme l'API
-    }
-    setGeoBusy(false); toast(`${ok}/${todo.length} adresses géocodées`, ok ? 'success' : 'error'); load();
-  };
-
-  const optimize = async () => {
-    const geo = stops.filter((s) => s.lat != null && s.lng != null);
-    if (geo.length < 2) { toast('Géocode au moins 2 stops d\'abord', 'error'); return; }
-    setOptBusy(true);
-    const profile = 'driving-car';
-    const before = geo.length;
-    const res = await orsOptimize(geo, profile);
-    const reordered = res.order.map((i) => geo[i]);
-    const ungeo = stops.filter((s) => s.lat == null || s.lng == null);
-    const final = [...reordered, ...ungeo];
-    await persistOrder(final);
-    // tracé
-    const rt = await orsRoute(reordered.map((s) => [s.lng, s.lat]), profile);
-    if (rt) { setPolyline(rt.line); setOptInfo({ distance: rt.distance, duration: rt.duration, fallback: res.fallback }); }
-    setView('map'); setOptBusy(false);
-    toast(res.fallback ? 'Optimisé (mode hors-ligne)' : `Optimisé : ${before} stops`, 'success');
-  };
-
-  const gmapsUrl = useMemo(() => {
-    const g = stops.filter((s) => s.lat != null);
-    if (!g.length) return null;
-    const pts = g.map((s) => `${s.lat},${s.lng}`);
-    return 'https://www.google.com/maps/dir/' + pts.join('/');
-  }, [stops]);
-
-  if (loading) return <Spinner />;
-  const geoCount = stops.filter((s) => s.lat != null).length;
-
-  return (
-    <div className="space-y-4 fadein">
-      <button onClick={onBack} className="text-slate-400 hover:text-white flex items-center gap-2 text-sm font-medium"><Ico.back size={18} /> Toutes les tournées</button>
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
-          <span className="w-4 h-4 rounded-full" style={{ background: route.color }} />
-          <div>
-            <h2 className="text-xl font-bold">{route.name}</h2>
-            <div className="text-xs text-slate-400">{stops.length} stops · {geoCount} géocodés</div>
-          </div>
-          <button onClick={() => setEditRoute(true)} className="text-slate-500 hover:text-white p-1"><Ico.edit size={16} /></button>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Btn variant="ghost" size="sm" onClick={() => setImportModal(true)}><Ico.upload size={16} /> Importer</Btn>
-          <Btn variant="ghost" size="sm" onClick={geocodeMissing} disabled={geoBusy}>{geoBusy ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full spin" /> : <Ico.pin size={16} />} Géocoder</Btn>
-          <Btn size="sm" onClick={optimize} disabled={optBusy}>{optBusy ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full spin" /> : <Ico.zap size={16} />} Optimiser</Btn>
-        </div>
-      </div>
-
-      <div className="flex gap-1 bg-ink2 border border-line rounded-xl p-1 w-fit">
-        {[['list', 'Liste', <Ico.list size={16} />], ['map', 'Carte', <Ico.map size={16} />]].map(([id, lbl, ic]) => (
-          <button key={id} onClick={() => setView(id)} className={cx('px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5', view === id ? 'bg-brand text-white' : 'text-slate-400')}>{ic}{lbl}</button>
-        ))}
-      </div>
-
-      {optInfo && view === 'map' && (
-        <Card className="p-3 flex items-center gap-4 text-sm">
-          <span className="flex items-center gap-1.5 text-brand2"><Ico.route size={16} /> {fmtKm(optInfo.distance)}</span>
-          <span className="flex items-center gap-1.5 text-amber"><Ico.clock size={16} /> {fmtDur(optInfo.duration)}</span>
-          {optInfo.fallback && <span className="text-slate-500 text-xs">estimation hors-ligne</span>}
-        </Card>
-      )}
-
-      {view === 'map' ? (
-        <div className="space-y-3">
-          <MapView stops={stops.map((s) => ({ ...s, color: route.color }))} polyline={polyline} height={420} onStopClick={(s) => { setEditStop(s); setStopModal(true); }} />
-          {gmapsUrl && <div className="flex gap-2"><a href={gmapsUrl} target="_blank" rel="noreferrer" className="flex-1"><Btn variant="ghost" className="w-full"><Ico.nav size={16} /> Google Maps</Btn></a></div>}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <Btn variant="outline" className="w-full" onClick={() => { setEditStop(null); setStopModal(true); }}><Ico.plus size={16} /> Ajouter un stop</Btn>
-          {stops.length === 0 ? <Empty icon={<Ico.pin size={40} />} title="Aucun stop" sub="Ajoute des stops manuellement ou importe une liste collée." />
-            : stops.map((s, i) => (
-              <div key={s.id} draggable onDragStart={() => (dragIdx.current = i)} onDragOver={(e) => e.preventDefault()} onDrop={() => onDrop(i)}
-                className="flex items-center gap-3 bg-ink2 border border-line rounded-xl p-3 group">
-                <div className="flex flex-col gap-0.5">
-                  <button onClick={() => move(i, -1)} className="text-slate-600 hover:text-white"><Ico.left className="rotate-90" size={14} /></button>
-                  <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: route.color }}>{i + 1}</span>
-                  <button onClick={() => move(i, 1)} className="text-slate-600 hover:text-white"><Ico.right className="rotate-90" size={14} /></button>
-                </div>
-                <div className="flex-1 min-w-0" onClick={() => { setEditStop(s); setStopModal(true); }}>
-                  <div className="font-semibold truncate flex items-center gap-2">{s.client_name || 'Sans nom'}
-                    {s.lat == null && <span className="text-[10px] text-amber bg-amber/10 px-1.5 rounded">non géocodé</span>}
-                  </div>
-                  <div className="text-xs text-slate-400 truncate">{s.address || '—'}</div>
-                  <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
-                    {s.scheduled_time && <span className="flex items-center gap-0.5"><Ico.clock size={11} />{fmtTime(s.scheduled_time)}</span>}
-                    {s.requires_photo && <span className="flex items-center gap-0.5 text-brand2"><Ico.cam size={11} />photo</span>}
-                    {s.requires_scan && <span className="flex items-center gap-0.5 text-amber"><Ico.qr size={11} />scan</span>}
-                    {(s.days_active || []).length > 0 && <span>{(s.days_active || []).join(' ')}</span>}
-                  </div>
-                </div>
-                <button onClick={() => delStop(s)} className="text-slate-600 hover:text-red-400 p-1 opacity-0 group-hover:opacity-100 transition"><Ico.trash size={16} /></button>
-              </div>
-            ))}
-        </div>
-      )}
-
-      <StopModal open={stopModal} onClose={() => setStopModal(false)} routeId={routeId} stop={editStop} nextOrder={stops.length} onSaved={load} />
-      <ImportModal open={importModal} onClose={() => setImportModal(false)} routeId={routeId} startOrder={stops.length} onDone={load} />
-      <RouteModal open={editRoute} onClose={() => setEditRoute(false)} route={route} onSaved={load} />
+  if(astop.status!=='pending')return<div style={{minHeight:'100vh',display:'flex',flexDirection:'column',background:'#0b1120'}}>
+    <div style={{padding:'12px 16px',borderBottom:'1px solid #1e293b',display:'flex',alignItems:'center',gap:10}}><button onClick={onBack} style={{background:'none',border:'none',cursor:'pointer',color:'#60a5fa',fontSize:16}}>← Retour</button><span style={{fontWeight:600,color:'white'}}>{stop?.client_name}</span></div>
+    <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,textAlign:'center'}}><div style={{fontSize:56,marginBottom:12}}>{astop.status==='done'?'✅':'❌'}</div><p style={{color:'white',fontSize:18,fontWeight:600,margin:'0 0 8px'}}>{astop.status==='done'?'Livré':'Problème signalé'}</p>{astop.arrived_at&&<p style={{color:'#64748b',fontSize:13,margin:0}}>À {fmtTime(astop.arrived_at)}</p>}{astop.problem_notes&&<p style={{color:'#fca5a5',fontSize:13,marginTop:8}}>{astop.problem_notes}</p>}</div>
+  </div>;
+  return<div style={{minHeight:'100vh',display:'flex',flexDirection:'column',background:'#0b1120'}}>
+    <div style={{padding:'12px 16px',borderBottom:'1px solid #1e293b',display:'flex',alignItems:'flex-start',gap:10,flexShrink:0}}>
+      <button onClick={onBack} style={{background:'none',border:'none',cursor:'pointer',color:'#60a5fa',fontSize:16,marginTop:2}}>←</button>
+      <div style={{flex:1}}><div style={{fontWeight:700,color:'white',fontSize:15}}>{stop?.client_name}</div><div style={{fontSize:12,color:'#64748b'}}>{stop?.address}</div></div>
     </div>
-  );
-}
-
-function StopModal({ open, onClose, routeId, stop, nextOrder, onSaved }) {
-  const blank = { client_name: '', address: '', scheduled_time: '', operation_type: '', notes: '', access_code: '', parking_info: '', days_active: [], requires_photo: false, requires_scan: false };
-  const [f, setF] = useState(blank);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (open) setF(stop ? { ...blank, ...stop, scheduled_time: stop.scheduled_time ? stop.scheduled_time.slice(0, 5) : '', days_active: stop.days_active || [] } : blank);
-  }, [open, stop]);
-  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  const toggleDay = (d) => setF((p) => ({ ...p, days_active: p.days_active.includes(d) ? p.days_active.filter((x) => x !== d) : [...p.days_active, d] }));
-  const save = async () => {
-    if (!f.client_name && !f.address) { toast('Nom ou adresse requis', 'error'); return; }
-    setBusy(true);
-    const payload = {
-      route_id: routeId, client_name: f.client_name, address: f.address,
-      scheduled_time: f.scheduled_time || null, operation_type: f.operation_type, notes: f.notes,
-      access_code: f.access_code, parking_info: f.parking_info, days_active: f.days_active,
-      requires_photo: f.requires_photo, requires_scan: f.requires_scan
-    };
-    let stopId = stop && stop.id;
-    if (stop) await sb.from('stops').update(payload).eq('id', stop.id);
-    else { const { data } = await sb.from('stops').insert({ ...payload, order_index: nextOrder }).select().single(); stopId = data && data.id; }
-    // géocode si adresse changée / nouvelle
-    if (f.address && (!stop || stop.address !== f.address)) {
-      const g = await orsGeocode(f.address);
-      if (g && stopId) await sb.from('stops').update({ lat: g.lat, lng: g.lng, geocoded: true }).eq('id', stopId);
-    }
-    setBusy(false); onSaved && onSaved(); onClose();
-    toast(stop ? 'Stop mis à jour ✓' : 'Stop ajouté ✓', 'success');
-  };
-  return (
-    <Modal open={open} onClose={onClose} title={stop ? 'Modifier le stop' : 'Nouveau stop'} wide>
-      <div className="grid sm:grid-cols-2 gap-4">
-        <Field label="Nom du client"><Input value={f.client_name} onChange={(e) => set('client_name', e.target.value)} placeholder="Boulangerie Martin" /></Field>
-        <Field label="Heure souhaitée"><Input type="time" value={f.scheduled_time} onChange={(e) => set('scheduled_time', e.target.value)} /></Field>
-        <div className="sm:col-span-2"><Field label="Adresse complète" hint="Géocodée automatiquement à l'enregistrement"><Input value={f.address} onChange={(e) => set('address', e.target.value)} placeholder="Rue de la Loi 16, 1000 Bruxelles" /></Field></div>
-        <Field label="Type d'opération"><Input value={f.operation_type} onChange={(e) => set('operation_type', e.target.value)} placeholder="Livraison / Collecte…" /></Field>
-        <Field label="Code d'accès"><Input value={f.access_code} onChange={(e) => set('access_code', e.target.value)} placeholder="Digicode B1234" /></Field>
-        <div className="sm:col-span-2"><Field label="Info parking"><Input value={f.parking_info} onChange={(e) => set('parking_info', e.target.value)} placeholder="Stationnement livraison devant" /></Field></div>
-        <div className="sm:col-span-2"><Field label="Notes / instructions"><Textarea value={f.notes} onChange={(e) => set('notes', e.target.value)} /></Field></div>
-        <div className="sm:col-span-2">
-          <span className="text-xs font-medium text-slate-400 mb-1.5 block">Jours actifs</span>
-          <div className="flex gap-1.5 flex-wrap">{DAYS.map((d) => <button key={d} onClick={() => toggleDay(d)} className={cx('px-3 py-1.5 rounded-lg text-sm font-semibold border transition', f.days_active.includes(d) ? 'bg-brand border-brand text-white' : 'border-line text-slate-400')}>{d}</button>)}</div>
-        </div>
-        <label className="flex items-center gap-3 bg-ink3/50 rounded-xl px-3 py-2.5 cursor-pointer"><input type="checkbox" checked={f.requires_photo} onChange={(e) => set('requires_photo', e.target.checked)} className="w-5 h-5 accent-brand" /><span className="text-sm flex items-center gap-1.5"><Ico.cam size={16} /> Photo obligatoire</span></label>
-        <label className="flex items-center gap-3 bg-ink3/50 rounded-xl px-3 py-2.5 cursor-pointer"><input type="checkbox" checked={f.requires_scan} onChange={(e) => set('requires_scan', e.target.checked)} className="w-5 h-5 accent-brand" /><span className="text-sm flex items-center gap-1.5"><Ico.qr size={16} /> Scan obligatoire</span></label>
+    <div style={{flex:1,overflowY:'auto',padding:14,display:'flex',flexDirection:'column',gap:12}}>
+      <div className="card" style={{padding:14,display:'flex',flexDirection:'column',gap:6}}>
+        {stop?.scheduled_time&&<div style={{fontSize:13,color:'#cbd5e1'}}>🕐 Heure prévue : {stop.scheduled_time}</div>}
+        {stop?.access_code&&<div style={{fontSize:13,color:'#fbbf24'}}>🔑 Code accès : <strong>{stop.access_code}</strong></div>}
+        {stop?.parking_info&&<div style={{fontSize:13,color:'#cbd5e1'}}>🅿️ Parking : {stop.parking_info}</div>}
+        {stop?.notes&&<div style={{fontSize:13,color:'#93c5fd'}}>📝 {stop.notes}</div>}
+        {dist!==null&&<div style={{fontSize:13,fontWeight:600,color:dist<=250?'#34d399':'#f87171'}}>📍 Distance : {dist}m {dist<=250?'✓ OK':'⚠️ Trop loin'}</div>}
       </div>
-      <Btn className="w-full mt-5" size="lg" onClick={save} disabled={busy}>{busy ? 'Enregistrement…' : (stop ? 'Enregistrer' : 'Ajouter le stop')}</Btn>
-    </Modal>
-  );
-}
-
-function ImportModal({ open, onClose, routeId, startOrder, onDone }) {
-  const [text, setText] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [preview, setPreview] = useState([]);
-
-  // Parse intelligent : 1 ligne = 1 stop. Sépare par tab / ; / ,
-  const parse = (raw) => {
-    const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
-    return lines.map((line) => {
-      const parts = line.split(/\t|;|,(?=\s*\d{4})|,/).map((p) => p.trim()).filter(Boolean);
-      // heuristiques : 1er = nom, suivant contenant des chiffres = adresse, heure type HH:MM
-      let name = '', addr = '', time = '', notes = '';
-      const timeMatch = line.match(/\b([01]?\d|2[0-3])[:hH]([0-5]\d)\b/);
-      if (timeMatch) time = timeMatch[1].padStart(2, '0') + ':' + timeMatch[2];
-      if (parts.length === 1) { addr = parts[0]; }
-      else {
-        name = parts[0];
-        const addrPart = parts.slice(1).find((p) => /\d/.test(p));
-        addr = addrPart || parts[1] || '';
-        notes = parts.slice(1).filter((p) => p !== addr && !/^[\d:hH]+$/.test(p)).join(' · ');
-      }
-      return { client_name: name, address: addr, scheduled_time: time, notes };
-    });
-  };
-  useEffect(() => { setPreview(text.trim() ? parse(text) : []); }, [text]);
-
-  const run = async () => {
-    if (!preview.length) return;
-    setBusy(true);
-    // dédup par adresse normalisée
-    const seen = new Set(); const rows = [];
-    preview.forEach((p, i) => {
-      const key = (p.address || p.client_name).toLowerCase().replace(/\s+/g, ' ').trim();
-      if (key && seen.has(key)) return; seen.add(key);
-      rows.push({ route_id: routeId, client_name: p.client_name, address: p.address, scheduled_time: p.scheduled_time || null, notes: p.notes || '', order_index: startOrder + rows.length });
-    });
-    const { data, error } = await sb.from('stops').insert(rows).select();
-    if (error) { toast(error.message, 'error'); setBusy(false); return; }
-    toast(`${rows.length} stops importés · géocodage…`, 'success');
-    onDone && onDone(); onClose(); setText('');
-    // géocode en arrière-plan
-    for (const s of (data || [])) {
-      if (!s.address) continue;
-      const g = await orsGeocode(s.address);
-      if (g) await sb.from('stops').update({ lat: g.lat, lng: g.lng, geocoded: true }).eq('id', s.id);
-      await new Promise((r) => setTimeout(r, 350));
-    }
-    onDone && onDone();
-    setBusy(false);
-  };
-  return (
-    <Modal open={open} onClose={onClose} title="Importer des stops" wide>
-      <div className="space-y-4">
-        <p className="text-sm text-slate-400">Colle ta liste (Excel, CSV ou texte). Une ligne = un stop. Format conseillé : <span className="text-slate-300">Nom ; Adresse ; Heure ; Notes</span></p>
-        <Textarea value={text} onChange={(e) => setText(e.target.value)} className="min-h-[160px] font-mono text-sm" placeholder={"Boulangerie Martin; Rue de la Loi 16, 1000 Bruxelles; 08:30; sonner 2x\nPharmacie Centrale; Av. Louise 200, 1050; 09:15"} />
-        {preview.length > 0 && (
-          <div className="bg-ink3/40 rounded-xl p-3 max-h-52 overflow-y-auto">
-            <div className="text-xs text-slate-400 mb-2">{preview.length} stop(s) détecté(s) :</div>
-            {preview.slice(0, 50).map((p, i) => (
-              <div key={i} className="text-sm py-1.5 border-b border-line/50 last:border-0">
-                <span className="font-semibold">{p.client_name || '(sans nom)'}</span>
-                <span className="text-slate-400"> — {p.address || '?'}</span>
-                {p.scheduled_time && <span className="text-amber text-xs ml-2">{p.scheduled_time}</span>}
-              </div>
-            ))}
-          </div>
-        )}
-        <Btn className="w-full" size="lg" onClick={run} disabled={busy || !preview.length}>{busy ? <span className="flex items-center gap-2"><span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full spin" /> Import & géocodage…</span> : `Importer ${preview.length} stop(s)`}</Btn>
+      {stop?.lat&&stop?.lng&&<a href={`https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}`} target="_blank" rel="noreferrer" style={{background:'#1d4ed8',color:'white',borderRadius:10,padding:'12px 16px',textAlign:'center',textDecoration:'none',fontWeight:600,fontSize:14,display:'block'}}>🗺️ Naviguer vers cette adresse</a>}
+      <div className="card" style={{padding:14}}>
+        <div style={{fontSize:13,fontWeight:500,color:'#cbd5e1',marginBottom:8}}>📷 Photo de preuve {photoOk&&'✓'}</div>
+        <input ref={photoRef} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={e=>e.target.files[0]&&uploadPhoto(e.target.files[0])}/>
+        <button className="btn bp" style={{width:'100%',fontSize:13,padding:'10px 0'}} onClick={()=>photoRef.current.click()} disabled={uploading}>{uploading?<span className="spin">⏳</span>:'📷'} {photoOk?'Reprendre une photo':'Prendre une photo'}</button>
       </div>
-    </Modal>
-  );
-}
-
-/* ── Assignations ────────────────────────────────────────────────── */
-function AssignmentsView() {
-  const [date, setDate] = useState(todayISO());
-  const [list, setList] = useState(null);
-  const [modal, setModal] = useState(false);
-
-  const load = useCallback(async () => {
-    const { data } = await sb.from('aboupro_assignments_view').select('*').eq('date', date).order('start_time', { nullsFirst: true });
-    setList(data || []);
-  }, [date]);
-  useEffect(() => { load(); }, [load]);
-
-  const del = async (a) => { if (!confirm('Supprimer cette assignation ?')) return; await sb.from('assignments').delete().eq('id', a.id); load(); };
-
-  return (
-    <div className="space-y-4 fadein">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="text-xl font-bold">Assignations</h2>
-        <div className="flex items-center gap-2">
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-auto" />
-          <Btn onClick={() => setModal(true)}><Ico.plus size={18} /> Assigner</Btn>
-        </div>
-      </div>
-      {!list ? <Spinner /> : list.length === 0 ?
-        <Empty icon={<Ico.cal size={44} />} title="Aucune assignation ce jour" sub="Assigne une tournée à un chauffeur pour cette date." action={<Btn size="sm" onClick={() => setModal(true)}><Ico.plus size={16} /> Assigner</Btn>} />
-        : <div className="space-y-2">{list.map((a) => (
-          <div key={a.id} className="relative group">
-            <AssignmentRow a={a} />
-            <button onClick={() => del(a)} className="absolute top-2 right-2 text-slate-600 hover:text-red-400 p-1 opacity-0 group-hover:opacity-100"><Ico.trash size={15} /></button>
-          </div>))}
-        </div>}
-      <AssignModal open={modal} onClose={() => setModal(false)} date={date} onSaved={load} />
+      {!showProb?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+        <button className="btn bgrn" style={{padding:'18px 0',fontSize:18,borderRadius:14}} onClick={onDone}>✅ LIVRÉ</button>
+        <button className="btn bred" style={{padding:'18px 0',fontSize:18,borderRadius:14}} onClick={()=>setShowProb(true)}>❌ PROBLÈME</button>
+      </div>:<div className="card" style={{padding:14,display:'flex',flexDirection:'column',gap:10}}>
+        <div style={{fontWeight:600,color:'white',fontSize:14}}>Signaler un problème</div>
+        <select className="inp" value={probType} onChange={e=>setProbType(e.target.value)}>
+          <option value="absent">Client absent</option><option value="adresse_incorrecte">Adresse incorrecte</option><option value="acces_impossible">Accès impossible</option><option value="colis_endommage">Colis endommagé</option><option value="refuse">Refus de livraison</option><option value="autre">Autre</option>
+        </select>
+        <textarea className="inp" style={{height:70,resize:'none',fontSize:13}} placeholder="Notes (optionnel)" value={probNotes} onChange={e=>setProbNotes(e.target.value)}/>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}><button className="btn bred" style={{padding:'12px 0'}} onClick={()=>onProblem(probType,probNotes)}>Confirmer</button><button className="btn bg2" style={{padding:'12px 0'}} onClick={()=>setShowProb(false)}>Annuler</button></div>
+      </div>}
     </div>
-  );
+  </div>;
 }
 
-function AssignModal({ open, onClose, date, onSaved }) {
-  const [routes, setRoutes] = useState([]); const [drivers, setDrivers] = useState([]); const [stops, setStops] = useState([]);
-  const [f, setF] = useState({ route_id: '', driver_id: '', vehicle_type: 'voiture', start_time: '08:00', end_time_max: '', notes: '' });
-  const [mode, setMode] = useState('all'); const [picked, setPicked] = useState({});
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    setF({ route_id: '', driver_id: '', vehicle_type: 'voiture', start_time: '08:00', end_time_max: '', notes: '' }); setMode('all'); setPicked({});
-    Promise.all([
-      sb.from('routes').select('id,name,color').eq('active', true).order('name'),
-      sb.from('users_profiles').select('user_id,name').eq('role', 'chauffeur').eq('active', true).order('name')
-    ]).then(([r, d]) => { setRoutes(r.data || []); setDrivers(d.data || []); });
-  }, [open]);
-  useEffect(() => {
-    if (f.route_id) sb.from('stops').select('*').eq('route_id', f.route_id).order('order_index').then(({ data }) => { setStops(data || []); setPicked(Object.fromEntries((data || []).map((s) => [s.id, true]))); });
-    else setStops([]);
-  }, [f.route_id]);
-
-  const save = async () => {
-    if (!f.route_id || !f.driver_id) { toast('Tournée et chauffeur requis', 'error'); return; }
-    setBusy(true);
-    const { data: u } = await sb.auth.getUser();
-    const { data: a, error } = await sb.from('assignments').insert({
-      route_id: f.route_id, driver_id: f.driver_id, date, vehicle_type: f.vehicle_type,
-      start_time: f.start_time || null, end_time_max: f.end_time_max || null, notes: f.notes, assigned_by: u.user.id, status: 'planifie'
-    }).select().single();
-    if (error) { toast(error.message, 'error'); setBusy(false); return; }
-    const chosen = mode === 'all' ? stops : stops.filter((s) => picked[s.id]);
-    if (chosen.length) {
-      await sb.from('assignment_stops').insert(chosen.map((s, i) => ({ assignment_id: a.id, stop_id: s.id, order_index: i })));
-    }
-    setBusy(false); onSaved && onSaved(); onClose();
-    toast('Tournée assignée ✓', 'success');
-  };
-  const pickedCount = Object.values(picked).filter(Boolean).length;
-  return (
-    <Modal open={open} onClose={onClose} title="Assigner une tournée" wide>
-      <div className="space-y-4">
-        <div className="grid sm:grid-cols-2 gap-4">
-          <Field label="Tournée"><Select value={f.route_id} onChange={(e) => setF((p) => ({ ...p, route_id: e.target.value }))}><option value="">Choisir…</option>{routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</Select></Field>
-          <Field label="Chauffeur"><Select value={f.driver_id} onChange={(e) => setF((p) => ({ ...p, driver_id: e.target.value }))}><option value="">Choisir…</option>{drivers.map((d) => <option key={d.user_id} value={d.user_id}>{d.name}</option>)}</Select></Field>
-          <Field label="Véhicule"><Select value={f.vehicle_type} onChange={(e) => setF((p) => ({ ...p, vehicle_type: e.target.value }))}>{VEHICLES.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}</Select></Field>
-          <Field label="Date"><Input value={fmtDate(date)} disabled /></Field>
-          <Field label="Heure de départ"><Input type="time" value={f.start_time} onChange={(e) => setF((p) => ({ ...p, start_time: e.target.value }))} /></Field>
-          <Field label="Heure de fin max"><Input type="time" value={f.end_time_max} onChange={(e) => setF((p) => ({ ...p, end_time_max: e.target.value }))} /></Field>
-        </div>
-        {stops.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <button onClick={() => setMode('all')} className={cx('px-3 py-1.5 rounded-lg text-sm font-semibold', mode === 'all' ? 'bg-brand text-white' : 'bg-ink3 text-slate-400')}>Tous les stops ({stops.length})</button>
-              <button onClick={() => setMode('some')} className={cx('px-3 py-1.5 rounded-lg text-sm font-semibold', mode === 'some' ? 'bg-brand text-white' : 'bg-ink3 text-slate-400')}>Sélection ({pickedCount})</button>
-            </div>
-            {mode === 'some' && <div className="bg-ink3/40 rounded-xl p-2 max-h-48 overflow-y-auto space-y-1">{stops.map((s, i) => (
-              <label key={s.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-ink3 cursor-pointer text-sm">
-                <input type="checkbox" checked={!!picked[s.id]} onChange={(e) => setPicked((p) => ({ ...p, [s.id]: e.target.checked }))} className="w-4 h-4 accent-brand" />
-                <span className="text-slate-500">{i + 1}.</span><span className="font-medium">{s.client_name || s.address}</span>
-              </label>))}</div>}
-          </div>
-        )}
-        <Field label="Note (optionnel)"><Input value={f.notes} onChange={(e) => setF((p) => ({ ...p, notes: e.target.value }))} /></Field>
-        <Btn className="w-full" size="lg" onClick={save} disabled={busy}>{busy ? '…' : 'Assigner la tournée'}</Btn>
-      </div>
-    </Modal>
-  );
-}
-
-/* ── Historique & analytics ──────────────────────────────────────── */
-function HistoryView() {
-  const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10); });
-  const [to, setTo] = useState(todayISO());
-  const [rows, setRows] = useState(null);
-  const [kpis, setKpis] = useState([]);
-
-  const load = useCallback(async () => {
-    const [r, k] = await Promise.all([
-      sb.from('aboupro_assignments_view').select('*').gte('date', from).lte('date', to).order('date', { ascending: false }),
-      sb.from('aboupro_driver_kpis').select('*')
-    ]);
-    setRows(r.data || []); setKpis(k.data || []);
-  }, [from, to]);
-  useEffect(() => { load(); }, [load]);
-
-  const totals = useMemo(() => {
-    const r = rows || [];
-    return {
-      tours: r.length,
-      done: r.filter((a) => a.status === 'termine').length,
-      stops: r.reduce((s, a) => s + (a.completed_stops || 0), 0),
-      problems: r.reduce((s, a) => s + (a.problem_stops || 0), 0),
-      km: r.reduce((s, a) => s + (Number(a.total_km) || 0), 0)
-    };
-  }, [rows]);
-
-  return (
-    <div className="space-y-4 fadein">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="text-xl font-bold">Historique & analytics</h2>
-        <div className="flex items-center gap-2 text-sm">
-          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-auto" />
-          <span className="text-slate-500">→</span>
-          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-auto" />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        {[['Tournées', totals.tours], ['Terminées', totals.done], ['Stops livrés', totals.stops], ['Problèmes', totals.problems], ['Distance', fmtKm(totals.km * 1000)]].map(([l, v], i) => (
-          <Card key={i} className="p-4"><div className="text-xs text-slate-400 mb-1">{l}</div><div className="text-2xl font-extrabold">{v}</div></Card>
-        ))}
-      </div>
-
-      <Card className="p-4">
-        <h3 className="font-bold mb-3 flex items-center gap-2"><Ico.users size={18} /> Performance chauffeurs</h3>
-        {kpis.length === 0 ? <p className="text-sm text-slate-500">Pas encore de données.</p> :
-          <div className="space-y-3">{kpis.map((k) => (
-            <div key={k.user_id} className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-ink3 flex items-center justify-center"><Ico.user size={16} /></div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between"><span className="font-semibold text-sm">{k.driver_name}</span><span className="text-xs text-slate-400">{k.successful_stops}/{k.total_stops_done} stops · {k.success_rate || 0}%</span></div>
-                <div className="h-2 bg-ink rounded-full mt-1 overflow-hidden"><div className="h-full bg-emerald-500 rounded-full" style={{ width: (k.success_rate || 0) + '%' }} /></div>
-              </div>
-            </div>))}
-          </div>}
-      </Card>
-
-      <Card className="p-4">
-        <h3 className="font-bold mb-3 flex items-center gap-2"><Ico.chart size={18} /> Détail des tournées</h3>
-        {!rows ? <Spinner /> : rows.length === 0 ? <p className="text-sm text-slate-500">Aucune tournée sur la période.</p> :
-          <div className="space-y-2">{rows.map((a) => (
-            <div key={a.id} className="flex items-center gap-3 bg-ink3/40 rounded-xl p-3 text-sm">
-              <span className="w-2 h-8 rounded-full" style={{ background: a.route_color }} />
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold truncate">{a.route_name} <span className="text-slate-500 font-normal">· {a.driver_name}</span></div>
-                <div className="text-xs text-slate-400">{fmtDate(a.date)} · {a.completed_stops || 0}/{a.total_stops || 0} stops{a.problem_stops > 0 && ` · ${a.problem_stops} pb`}{a.total_km ? ` · ${a.total_km} km` : ''}</div>
-              </div>
-              <Badge className={(STATUS_META[a.status] || STATUS_META.planifie).c}>{(STATUS_META[a.status] || STATUS_META.planifie).label}</Badge>
-            </div>))}
-          </div>}
-      </Card>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   CHAUFFEUR — interface mobile
-   ═══════════════════════════════════════════════════════════════════ */
-function DriverApp() {
-  const { profile, signOut } = useAuth();
-  const [assignments, setAssignments] = useState(null);
-  const [active, setActive] = useState(null);
-
-  const load = useCallback(async () => {
-    const { data } = await sb.from('aboupro_assignments_view').select('*').eq('driver_user_id', profile.user_id).eq('date', todayISO()).order('start_time', { nullsFirst: true });
-    setAssignments(data || []);
-  }, [profile]);
-  useEffect(() => { load(); }, [load]);
-
-  // Géoloc temps réel (opt-in via bouton démarrer tournée)
-  if (active) return <DriverRun assignment={active} onBack={() => { setActive(null); load(); }} profile={profile} />;
-
-  return (
-    <div className="min-h-full flex flex-col max-w-lg mx-auto w-full">
-      <header className="sticky top-0 z-40 bg-ink/95 backdrop-blur border-b border-line px-4 h-16 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-ink3 flex items-center justify-center text-brand"><Ico.truck /></div>
-        <div className="flex-1"><div className="font-bold leading-tight">{profile.name || 'Chauffeur'}</div><div className="text-xs text-slate-500">{fmtDate(todayISO())}</div></div>
-        <button onClick={signOut} className="text-slate-400 hover:text-white p-2"><Ico.logout /></button>
-      </header>
-      <main className="flex-1 p-4 space-y-3">
-        <h2 className="text-lg font-bold px-1">Mes tournées du jour</h2>
-        {!assignments ? <Spinner /> : assignments.length === 0 ?
-          <Empty icon={<Ico.cal size={48} />} title="Aucune tournée aujourd'hui" sub="Tes tournées assignées apparaîtront ici." />
-          : assignments.map((a) => <DriverAssignmentCard key={a.id} a={a} onOpen={() => setActive(a)} />)}
-        <Btn variant="ghost" className="w-full mt-2" onClick={load}><Ico.refresh size={16} /> Actualiser</Btn>
-      </main>
-    </div>
-  );
-}
-
-function DriverAssignmentCard({ a, onOpen }) {
-  const sm = STATUS_META[a.status] || STATUS_META.planifie;
-  const pct = a.total_stops ? Math.round(100 * (a.completed_stops || 0) / a.total_stops) : 0;
-  return (
-    <Card className="p-4 active:scale-[.99] transition cursor-pointer" onClick={onOpen}>
-      <div className="flex items-center gap-3">
-        <span className="w-3 h-12 rounded-full" style={{ background: a.route_color }} />
-        <div className="flex-1 min-w-0">
-          <div className="font-bold text-lg truncate">{a.route_name}</div>
-          <div className="text-sm text-slate-400 flex items-center gap-3">
-            {a.start_time && <span className="flex items-center gap-1"><Ico.clock size={13} />{fmtTime(a.start_time)}</span>}
-            <span className="flex items-center gap-1"><Ico.pkg size={13} />{a.total_stops} stops</span>
-          </div>
-        </div>
-        <Badge className={sm.c}>{sm.label}</Badge>
-      </div>
-      <div className="mt-3 flex items-center gap-3">
-        <div className="flex-1 h-2 bg-ink rounded-full overflow-hidden"><div className="h-full bg-brand rounded-full" style={{ width: pct + '%' }} /></div>
-        <span className="text-xs text-slate-400">{a.completed_stops || 0}/{a.total_stops || 0}</span>
-        <Ico.right className="text-slate-500" />
-      </div>
-    </Card>
-  );
-}
-
-function DriverRun({ assignment, onBack, profile }) {
-  const [stops, setStops] = useState(null);
-  const [logs, setLogs] = useState({});
-  const [idx, setIdx] = useState(0);
-  const [status, setStatus] = useState(assignment.status);
-  const watchId = useRef(null);
-
-  const load = useCallback(async () => {
-    const { data: aps } = await sb.from('assignment_stops').select('stop_id,order_index,stops(*)').eq('assignment_id', assignment.id).order('order_index');
-    let list = (aps || []).map((r) => r.stops).filter(Boolean);
-    if (!list.length) { const { data } = await sb.from('stops').select('*').eq('route_id', assignment.route_id).order('order_index'); list = data || []; }
-    const { data: tl } = await sb.from('tour_logs').select('*').eq('assignment_id', assignment.id);
-    const lmap = Object.fromEntries((tl || []).map((l) => [l.stop_id, l]));
-    setLogs(lmap); setStops(list);
-    const firstPending = list.findIndex((s) => !lmap[s.id] || lmap[s.id].status === 'pending' || lmap[s.id].status === 'arrived');
-    setIdx(firstPending >= 0 ? firstPending : 0);
-  }, [assignment]);
-  useEffect(() => { load(); }, [load]);
-
-  // Tracking GPS pendant la tournée
-  useEffect(() => {
-    if (status !== 'en_cours' || !navigator.geolocation) return;
-    watchId.current = navigator.geolocation.watchPosition(async (pos) => {
-      const { latitude, longitude, accuracy, speed, heading } = pos.coords;
-      await sb.from('driver_positions').upsert({
-        driver_id: profile.user_id, lat: latitude, lng: longitude, accuracy,
-        speed: speed != null ? speed * 3.6 : null, heading, assignment_id: assignment.id, updated_at: new Date().toISOString()
-      }, { onConflict: 'driver_id' });
-    }, () => {}, { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 });
-    return () => { if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current); };
-  }, [status]);
-
-  const start = async () => { await sb.from('assignments').update({ status: 'en_cours', started_at: new Date().toISOString() }).eq('id', assignment.id); setStatus('en_cours'); toast('Tournée démarrée 🚀', 'success'); };
-  const finish = async () => {
-    const problems = Object.values(logs).filter((l) => l.status === 'problem').length;
-    await sb.from('assignments').update({ status: problems ? 'incident' : 'termine', finished_at: new Date().toISOString() }).eq('id', assignment.id);
-    if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current);
-    toast('Tournée terminée ✓', 'success'); onBack();
-  };
-
-  if (!stops) return <Spinner label="Chargement de la tournée…" />;
-  const done = stops.filter((s) => logs[s.id] && (logs[s.id].status === 'completed' || logs[s.id].status === 'problem')).length;
-  const allDone = done === stops.length && stops.length > 0;
-  const stop = stops[idx];
-
-  return (
-    <div className="min-h-full flex flex-col max-w-lg mx-auto w-full">
-      <header className="sticky top-0 z-40 bg-ink/95 backdrop-blur border-b border-line px-3 h-14 flex items-center gap-2">
-        <button onClick={onBack} className="text-slate-400 hover:text-white p-2"><Ico.back /></button>
-        <div className="flex-1 min-w-0"><div className="font-bold truncate flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{ background: assignment.route_color }} />{assignment.route_name}</div></div>
-        <span className="text-sm font-semibold text-slate-300">{done}/{stops.length}</span>
-      </header>
-      <div className="h-1.5 bg-ink"><div className="h-full bg-brand transition-all" style={{ width: (stops.length ? 100 * done / stops.length : 0) + '%' }} /></div>
-
-      {status === 'planifie' ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center">
-          <div className="w-20 h-20 rounded-3xl bg-ink2 border border-line flex items-center justify-center text-brand"><Ico.play size={40} /></div>
-          <div><div className="text-xl font-bold">Prêt à démarrer</div><div className="text-slate-400 text-sm mt-1">{stops.length} stops · {VEHICLES.find((v) => v.id === assignment.vehicle_type)?.label}</div></div>
-          <Btn size="xl" className="w-full" onClick={start}><Ico.play size={22} /> Démarrer la tournée</Btn>
-          <p className="text-xs text-slate-500">La position GPS sera partagée pendant la tournée.</p>
-        </div>
-      ) : allDone ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center">
-          <div className="w-20 h-20 rounded-full bg-emerald-500/15 flex items-center justify-center text-emerald-400"><Ico.check size={44} /></div>
-          <div><div className="text-xl font-bold">Tous les stops traités !</div><div className="text-slate-400 text-sm mt-1">{done} stops · {Object.values(logs).filter((l) => l.status === 'problem').length} problème(s)</div></div>
-          <Btn size="xl" variant="ok" className="w-full" onClick={finish}><Ico.flag size={22} /> Clôturer la tournée</Btn>
-        </div>
-      ) : (
-        <DriverStop key={stop.id} stop={stop} idx={idx} total={stops.length} log={logs[stop.id]} assignment={assignment} profile={profile}
-          onPrev={() => setIdx((i) => Math.max(0, i - 1))} onNext={() => setIdx((i) => Math.min(stops.length - 1, i + 1))}
-          onSaved={(l) => { setLogs((p) => ({ ...p, [stop.id]: l })); setTimeout(() => setIdx((i) => Math.min(stops.length - 1, i + (i < stops.length - 1 ? 1 : 0))), 600); }} />
-      )}
-    </div>
-  );
-}
-
-function DriverStop({ stop, idx, total, log, assignment, profile, onPrev, onNext, onSaved }) {
-  const [busy, setBusy] = useState(false);
-  const [photoModal, setPhotoModal] = useState(false);
-  const [problemModal, setProblemModal] = useState(false);
-  const [scanModal, setScanModal] = useState(false);
-  const [photoBlob, setPhotoBlob] = useState(null);
-  const [scanCode, setScanCode] = useState(log?.scan_code || '');
-  const completed = log && (log.status === 'completed' || log.status === 'problem');
-
-  const navUrl = stop.lat != null ? `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stop.address)}`;
-  const wazeUrl = stop.lat != null ? `https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes` : `https://waze.com/ul?q=${encodeURIComponent(stop.address)}`;
-
-  const upsertLog = async (patch) => {
-    const base = { assignment_id: assignment.id, stop_id: stop.id, driver_id: profile.user_id };
-    const { data, error } = await sb.from('tour_logs').upsert({ ...base, ...patch }, { onConflict: 'assignment_id,stop_id' }).select().single();
-    if (error) { toast(error.message, 'error'); throw error; }
-    return data;
-  };
-
-  const checkGeo = () => new Promise((resolve) => {
-    if (!navigator.geolocation || stop.lat == null) return resolve({ ok: true });
-    navigator.geolocation.getCurrentPosition(
-      (pos) => { const d = haversine({ lat: pos.coords.latitude, lng: pos.coords.longitude }, { lat: stop.lat, lng: stop.lng }); resolve({ ok: d <= CONFIG.ARRIVAL_RADIUS_M, dist: d, lat: pos.coords.latitude, lng: pos.coords.longitude }); },
-      () => resolve({ ok: true, denied: true }), { enableHighAccuracy: true, timeout: 10000 }
-    );
-  });
-
-  const doArrive = async () => {
-    setBusy(true);
-    try {
-      const geo = await checkGeo();
-      if (!geo.ok && !geo.denied) { if (!confirm(`Tu sembles à ${Math.round(geo.dist)} m du point (>${CONFIG.ARRIVAL_RADIUS_M} m). Valider quand même l'arrivée ?`)) { setBusy(false); return; } }
-      if (stop.requires_photo && !photoBlob) { setBusy(false); setPhotoModal(true); return; }
-      if (stop.requires_scan && !scanCode) { setBusy(false); setScanModal(true); return; }
-      const now = new Date().toISOString();
-      const l = await upsertLog({ status: 'completed', arrived_at: now, departed_at: now, lat_arrival: geo.lat, lng_arrival: geo.lng, distance_to_stop: geo.dist != null ? Math.round(geo.dist) : null, scan_code: scanCode || '' });
-      if (photoBlob) await uploadPhoto(photoBlob, l.id, 'livraison');
-      toast('Stop validé ✓', 'success'); onSaved(l);
-    } catch (e) {} setBusy(false);
-  };
-
-  const uploadPhoto = async (blob, tourLogId, type) => {
-    const path = `${profile.user_id}/${assignment.date}/${assignment.id}/${stop.id}/${uid()}.jpg`;
-    const { error } = await sb.storage.from(CONFIG.PHOTO_BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: true });
-    if (error) { toast('Photo : ' + error.message, 'error'); return; }
-    await sb.from('photos').insert({ tour_log_id: tourLogId, assignment_id: assignment.id, stop_id: stop.id, driver_id: profile.user_id, storage_path: path, file_size: blob.size, photo_type: type });
-  };
-
-  const submitProblem = async (issue) => {
-    setBusy(true);
-    try {
-      const l = await upsertLog({ status: 'problem', arrived_at: new Date().toISOString(), issue_type: issue.type, issue_notes: issue.notes || '' });
-      if (issue.blob) await uploadPhoto(issue.blob, l.id, 'probleme');
-      toast('Problème signalé', 'success'); onSaved(l);
-    } catch (e) {} setBusy(false); setProblemModal(false);
-  };
-
-  return (
-    <div className="flex-1 flex flex-col">
-      <div className="flex-1 p-4 space-y-4 overflow-y-auto pb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-slate-400"><button onClick={onPrev} disabled={idx === 0} className="p-2 disabled:opacity-30"><Ico.left /></button>Stop {idx + 1} / {total}<button onClick={onNext} disabled={idx === total - 1} className="p-2 disabled:opacity-30"><Ico.right /></button></div>
-          {completed && <Badge className={log.status === 'problem' ? 'bg-red-500/15 text-red-300' : 'bg-emerald-500/15 text-emerald-300'}>{log.status === 'problem' ? 'Problème' : 'Livré'}</Badge>}
-        </div>
-
-        <Card className="p-5">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-extrabold text-white flex-shrink-0" style={{ background: assignment.route_color }}>{idx + 1}</div>
-            <div className="flex-1 min-w-0">
-              {stop.scheduled_time && <div className="text-amber font-bold text-lg flex items-center gap-1.5"><Ico.clock size={18} />{fmtTime(stop.scheduled_time)}</div>}
-              <div className="text-2xl font-extrabold leading-tight mt-0.5">{stop.client_name || 'Stop'}</div>
-              <div className="text-slate-300 mt-1">{stop.address}</div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 mt-4">
-            <a href={navUrl} target="_blank" rel="noreferrer"><Btn className="w-full" size="lg"><Ico.nav size={18} /> Google Maps</Btn></a>
-            <a href={wazeUrl} target="_blank" rel="noreferrer"><Btn variant="ghost" className="w-full" size="lg"><Ico.nav size={18} /> Waze</Btn></a>
-          </div>
-        </Card>
-
-        {(stop.notes || stop.access_code || stop.parking_info || stop.operation_type) && (
-          <Card className="p-4 space-y-2.5">
-            {stop.operation_type && <Info icon={<Ico.pkg size={16} />} label="Opération" value={stop.operation_type} />}
-            {stop.access_code && <Info icon={<Ico.cog size={16} />} label="Code d'accès" value={stop.access_code} accent />}
-            {stop.parking_info && <Info icon={<Ico.truck size={16} />} label="Parking" value={stop.parking_info} />}
-            {stop.notes && <Info icon={<Ico.list size={16} />} label="Notes" value={stop.notes} />}
-          </Card>
-        )}
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {stop.requires_photo && <Badge className={cx('flex items-center gap-1', photoBlob || (log && log.status === 'completed') ? 'bg-emerald-500/15 text-emerald-300' : 'bg-brand/15 text-brand2')}><Ico.cam size={12} /> Photo {photoBlob ? '✓' : 'requise'}</Badge>}
-          {stop.requires_scan && <Badge className={cx('flex items-center gap-1', scanCode ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber/15 text-amber')}><Ico.qr size={12} /> Scan {scanCode ? '✓' : 'requis'}</Badge>}
-        </div>
-
-        {stop.requires_photo && !completed && <Btn variant="outline" className="w-full" onClick={() => setPhotoModal(true)}><Ico.cam size={18} /> {photoBlob ? 'Reprendre la photo' : 'Prendre une photo'}</Btn>}
-        {stop.requires_scan && !completed && <Btn variant="outline" className="w-full" onClick={() => setScanModal(true)}><Ico.qr size={18} /> {scanCode ? `Scanné : ${scanCode}` : 'Scanner l\'étiquette'}</Btn>}
-      </div>
-
-      {!completed ? (
-        <div className="sticky bottom-0 bg-ink/95 backdrop-blur border-t border-line p-3 grid grid-cols-3 gap-2">
-          <Btn variant="danger" size="lg" onClick={() => setProblemModal(true)} disabled={busy}><Ico.alert size={20} /> Problème</Btn>
-          <Btn variant="ok" size="lg" className="col-span-2" onClick={doArrive} disabled={busy}>{busy ? <span className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full spin" /> : <><Ico.check size={22} /> ARRIVÉ</>}</Btn>
-        </div>
-      ) : (
-        <div className="sticky bottom-0 bg-ink/95 backdrop-blur border-t border-line p-3">
-          <Btn className="w-full" size="lg" onClick={onNext} disabled={idx === total - 1}><Ico.right size={20} /> Stop suivant</Btn>
-        </div>
-      )}
-
-      <PhotoModal open={photoModal} onClose={() => setPhotoModal(false)} onCapture={(b) => { setPhotoBlob(b); setPhotoModal(false); toast('Photo prête ✓', 'success'); }} />
-      <ScanModal open={scanModal} onClose={() => setScanModal(false)} onScan={(c) => { setScanCode(c); setScanModal(false); toast('Scan : ' + c, 'success'); }} />
-      <ProblemModal open={problemModal} onClose={() => setProblemModal(false)} onSubmit={submitProblem} busy={busy} />
-    </div>
-  );
-}
-
-const Info = ({ icon, label, value, accent }) => (
-  <div className="flex items-start gap-2.5">
-    <span className={cx('mt-0.5', accent ? 'text-amber' : 'text-slate-500')}>{icon}</span>
-    <div className="min-w-0"><div className="text-[11px] text-slate-500 uppercase tracking-wide">{label}</div><div className={cx('text-sm', accent ? 'text-amber font-bold text-base' : 'text-slate-200')}>{value}</div></div>
-  </div>
-);
-
-/* Compression + capture photo */
-function compressImage(file, maxDim = 1280, quality = 0.7) {
-  return new Promise((resolve) => {
-    const img = new Image(); const url = URL.createObjectURL(file);
-    img.onload = () => {
-      let { width, height } = img;
-      if (width > height && width > maxDim) { height = height * maxDim / width; width = maxDim; }
-      else if (height > maxDim) { width = width * maxDim / height; height = maxDim; }
-      const c = document.createElement('canvas'); c.width = width; c.height = height;
-      c.getContext('2d').drawImage(img, 0, 0, width, height);
-      c.toBlob((b) => { URL.revokeObjectURL(url); resolve(b); }, 'image/jpeg', quality);
-    };
-    img.onerror = () => resolve(file);
-    img.src = url;
-  });
-}
-
-function PhotoModal({ open, onClose, onCapture }) {
-  const [preview, setPreview] = useState(null); const [busy, setBusy] = useState(false); const fileRef = useRef(null);
-  useEffect(() => { if (open) { setPreview(null); setTimeout(() => fileRef.current && fileRef.current.click(), 100); } }, [open]);
-  const onFile = async (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    setBusy(true); const blob = await compressImage(file);
-    setPreview({ url: URL.createObjectURL(blob), blob }); setBusy(false);
-  };
-  return (
-    <Modal open={open} onClose={onClose} title="Photo de preuve">
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onFile} className="hidden" />
-      {busy ? <Spinner label="Traitement…" /> : preview ? (
-        <div className="space-y-3">
-          <img src={preview.url} className="w-full rounded-xl" />
-          <div className="grid grid-cols-2 gap-2">
-            <Btn variant="ghost" onClick={() => fileRef.current && fileRef.current.click()}><Ico.cam size={18} /> Reprendre</Btn>
-            <Btn variant="ok" onClick={() => onCapture(preview.blob)}><Ico.check size={18} /> Valider</Btn>
-          </div>
-        </div>
-      ) : <Btn className="w-full" size="lg" onClick={() => fileRef.current && fileRef.current.click()}><Ico.cam size={20} /> Ouvrir la caméra</Btn>}
-    </Modal>
-  );
-}
-
-function ScanModal({ open, onClose, onScan }) {
-  const videoRef = useRef(null); const [manual, setManual] = useState(''); const [err, setErr] = useState(''); const streamRef = useRef(null); const raf = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    let detector, stopped = false;
-    (async () => {
-      if (!('BarcodeDetector' in window)) { setErr('Scanner auto non supporté — saisis le code manuellement.'); return; }
-      try {
-        detector = new window.BarcodeDetector();
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        streamRef.current = stream; if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
-        const tick = async () => {
-          if (stopped) return;
-          try { const codes = await detector.detect(videoRef.current); if (codes && codes.length) { cleanup(); onScan(codes[0].rawValue); return; } } catch (e) {}
-          raf.current = requestAnimationFrame(tick);
-        };
-        tick();
-      } catch (e) { setErr('Caméra indisponible — saisis le code manuellement.'); }
+/* ROOT */
+function App(){
+  const{list,toast}=useToast();const[auth,setAuth]=useState(null);const[firstRun,setFirstRun]=useState(false);
+  useEffect(()=>{
+    (async()=>{
+      const{data:{session}}=await sb.auth.getSession();
+      if(session)await loadProfile(session);
+      else{try{const{data}=await sb.rpc('aboupro_has_admin');if(!data)setFirstRun(true);}catch{}setAuth(false);}
     })();
-    const cleanup = () => { stopped = true; if (raf.current) cancelAnimationFrame(raf.current); if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop()); };
-    return cleanup;
-  }, [open]);
-  return (
-    <Modal open={open} onClose={onClose} title="Scanner l'étiquette">
-      <div className="space-y-3">
-        {!err && <div className="relative rounded-xl overflow-hidden bg-black aspect-square"><video ref={videoRef} className="w-full h-full object-cover" muted playsInline /><div className="absolute inset-8 border-2 border-brand2 rounded-xl pointer-events-none" /></div>}
-        {err && <div className="text-sm text-amber bg-amber/10 border border-amber/20 rounded-xl px-3 py-2">{err}</div>}
-        <Field label="Saisie manuelle"><div className="flex gap-2"><Input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="Code-barres / QR" /><Btn onClick={() => manual && onScan(manual)}><Ico.check size={18} /></Btn></div></Field>
-      </div>
-    </Modal>
-  );
+    const{data:{subscription}}=sb.auth.onAuthStateChange(async(event,session)=>{if(event==='SIGNED_OUT')setAuth(false);if(event==='SIGNED_IN'&&session)await loadProfile(session);});
+    return()=>subscription.unsubscribe();
+  },[]);
+  const loadProfile=async session=>{
+    const{data:profile,error}=await sb.from('users_profiles').select('*').eq('id',session.user.id).maybeSingle();
+    if(error||!profile){toast('Profil introuvable. Contactez l\'administrateur.','error');await sb.auth.signOut();setAuth(false);return;}
+    setAuth({session,user:session.user,profile});setFirstRun(false);
+  };
+  const handleLogin=async session=>await loadProfile(session);
+  const handleLogout=async()=>{await sb.auth.signOut();setAuth(false);toast('Déconnecté','info');};
+  useEffect(()=>{if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});},[]);
+  if(auth===null)return<div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}><div style={{fontSize:52,marginBottom:12}} className="spin">🚚</div><p style={{color:'#475569',fontSize:14}}>Chargement…</p><Toasts list={list}/></div>;
+  if(firstRun)return<><SetupScreen onDone={handleLogin} toast={toast}/><Toasts list={list}/></>;
+  if(!auth)return<><LoginScreen onLogin={handleLogin} toast={toast}/><Toasts list={list}/></>;
+  const{session,profile}=auth;
+  if(profile.role==='admin')return<><AdminLayout profile={profile} session={session} onLogout={handleLogout} toast={toast}/><Toasts list={list}/></>;
+  return<><DriverApp profile={profile} session={session} onLogout={handleLogout} toast={toast}/><Toasts list={list}/></>;
 }
 
-function ProblemModal({ open, onClose, onSubmit, busy }) {
-  const [type, setType] = useState(''); const [notes, setNotes] = useState(''); const [blob, setBlob] = useState(null); const fileRef = useRef(null);
-  useEffect(() => { if (open) { setType(''); setNotes(''); setBlob(null); } }, [open]);
-  const onFile = async (e) => { const f = e.target.files[0]; if (f) setBlob(await compressImage(f)); };
-  return (
-    <Modal open={open} onClose={onClose} title="Signaler un problème">
-      <div className="space-y-3">
-        <div className="grid grid-cols-1 gap-2">
-          {ISSUES.map((it) => (
-            <button key={it.id} onClick={() => setType(it.id)} className={cx('text-left px-4 py-3 rounded-xl font-semibold border transition flex items-center justify-between', type === it.id ? 'bg-bad/15 border-bad text-red-200' : 'bg-ink3/50 border-line text-slate-300')}>
-              {it.label}{type === it.id && <Ico.check size={18} />}
-            </button>
-          ))}
-        </div>
-        {(type === 'autre' || type) && <Field label="Précisions (optionnel)"><Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Décris le problème…" /></Field>}
-        <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onFile} className="hidden" />
-        <Btn variant="ghost" className="w-full" onClick={() => fileRef.current && fileRef.current.click()}><Ico.cam size={18} /> {blob ? 'Photo ajoutée ✓' : 'Ajouter une photo'}</Btn>
-        <Btn variant="danger" size="lg" className="w-full" disabled={!type || busy} onClick={() => onSubmit({ type, notes, blob })}>{busy ? '…' : 'Confirmer le problème'}</Btn>
-      </div>
-    </Modal>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   ROOT
-   ═══════════════════════════════════════════════════════════════════ */
-function Root() {
-  const { session, profile, loading } = useAuth();
-  if (loading) return <Spinner label="Connexion…" />;
-  if (!session) return <LoginScreen />;
-  if (!profile) return (
-    <div className="min-h-full flex items-center justify-center p-6 text-center">
-      <div className="max-w-sm space-y-3">
-        <div className="text-amber"><Ico.alert size={40} className="mx-auto" /></div>
-        <h2 className="font-bold text-lg">Profil non configuré</h2>
-        <p className="text-sm text-slate-400">Ton compte existe mais aucun profil n'est associé. L'administrateur doit créer ta fiche dans <span className="font-mono text-xs">users_profiles</span>.</p>
-        <Btn variant="ghost" onClick={() => sb.auth.signOut()}>Se déconnecter</Btn>
-      </div>
-    </div>
-  );
-  return profile.role === 'admin' ? <AdminApp /> : <DriverApp />;
-}
-
-function App() {
-  return <AuthProvider><ToastHost /><Root /></AuthProvider>;
-}
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-
-/* PWA — service worker */
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(() => {}); });
-}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>

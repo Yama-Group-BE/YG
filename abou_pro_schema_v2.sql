@@ -1,6 +1,6 @@
 -- ============================================================
 -- ABOU PRO LOGISTICS — Supabase Schema v2
--- Idempotent: safe to run multiple times
+-- Idempotent: safe to run multiple times (relançable sans risque)
 -- ============================================================
 
 -- ============================================================
@@ -10,7 +10,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
 -- ============================================================
--- 1. UTILITY FUNCTION: set_updated_at (no dependencies)
+-- 1. UTILITY FUNCTION: aboupro_set_updated_at (no dependencies)
 -- ============================================================
 CREATE OR REPLACE FUNCTION aboupro_set_updated_at()
 RETURNS trigger
@@ -93,8 +93,8 @@ CREATE TABLE IF NOT EXISTS stops (
   id              uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   route_id        uuid NOT NULL REFERENCES routes(id) ON DELETE CASCADE,
   order_index     integer NOT NULL DEFAULT 0,
-  client_name     text NOT NULL,
-  address         text NOT NULL,
+  client_name     text NOT NULL DEFAULT '',
+  address         text NOT NULL DEFAULT '',
   lat             numeric(10,7),
   lng             numeric(10,7),
   scheduled_time  time,
@@ -224,7 +224,6 @@ DECLARE
   ];
 BEGIN
   FOREACH tbl IN ARRAY tbl_list LOOP
-    -- Drop existing trigger (if any) then recreate
     EXECUTE format(
       'DROP TRIGGER IF EXISTS trg_%s_updated_at ON %I',
       tbl, tbl
@@ -245,6 +244,7 @@ $$;
 -- users_profiles
 CREATE INDEX IF NOT EXISTS idx_users_profiles_role       ON users_profiles(role);
 CREATE INDEX IF NOT EXISTS idx_users_profiles_identifier ON users_profiles(identifier);
+CREATE INDEX IF NOT EXISTS idx_users_profiles_is_active  ON users_profiles(is_active);
 
 -- routes
 CREATE INDEX IF NOT EXISTS idx_routes_is_active    ON routes(is_active);
@@ -254,6 +254,7 @@ CREATE INDEX IF NOT EXISTS idx_routes_is_archived  ON routes(is_archived);
 CREATE INDEX IF NOT EXISTS idx_stops_route_id     ON stops(route_id);
 CREATE INDEX IF NOT EXISTS idx_stops_order_index  ON stops(route_id, order_index);
 CREATE INDEX IF NOT EXISTS idx_stops_address_trgm ON stops USING gin(address gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_stops_is_active    ON stops(is_active);
 
 -- assignments
 CREATE INDEX IF NOT EXISTS idx_assignments_driver_id      ON assignments(driver_id);
@@ -327,7 +328,7 @@ CREATE POLICY "admin_all_profiles" ON users_profiles
   USING (aboupro_is_admin())
   WITH CHECK (aboupro_is_admin());
 
-CREATE POLICY "driver_own_profile" ON users_profiles
+CREATE POLICY "driver_own_profile_select" ON users_profiles
   FOR SELECT TO authenticated
   USING (id = auth.uid());
 
@@ -336,7 +337,7 @@ CREATE POLICY "driver_update_own_profile" ON users_profiles
   USING (id = auth.uid())
   WITH CHECK (id = auth.uid());
 
--- Allow insert so new users can create their own profile row
+-- Allow insert so new users can create their own profile row at signup
 CREATE POLICY "user_insert_own_profile" ON users_profiles
   FOR INSERT TO authenticated
   WITH CHECK (id = auth.uid());
@@ -371,7 +372,7 @@ CREATE POLICY "admin_all_assignments" ON assignments
   USING (aboupro_is_admin())
   WITH CHECK (aboupro_is_admin());
 
-CREATE POLICY "driver_own_assignments" ON assignments
+CREATE POLICY "driver_own_assignments_select" ON assignments
   FOR SELECT TO authenticated
   USING (driver_id = auth.uid());
 
@@ -521,7 +522,7 @@ SELECT
   d.identifier   AS driver_identifier,
   d.full_name    AS driver_name,
   d.phone        AS driver_phone,
-  -- Progress
+  -- Progress percentage
   CASE WHEN a.total_stops > 0
     THEN round((a.done_stops::numeric / a.total_stops::numeric) * 100, 1)
     ELSE 0
@@ -535,6 +536,7 @@ SELECT
   d.id              AS driver_id,
   d.identifier      AS driver_identifier,
   d.full_name       AS driver_name,
+  d.is_active,
   COUNT(a.id)                                                  AS total_assignments,
   COUNT(a.id) FILTER (WHERE a.status = 'termine')              AS completed_assignments,
   COUNT(a.id) FILTER (WHERE a.status = 'incident')             AS incident_assignments,
@@ -559,7 +561,7 @@ SELECT
 FROM users_profiles d
 LEFT JOIN assignments a ON a.driver_id = d.id
 WHERE d.role = 'driver'
-GROUP BY d.id, d.identifier, d.full_name;
+GROUP BY d.id, d.identifier, d.full_name, d.is_active;
 
 -- ============================================================
 -- 16. STORAGE BUCKET (abou-pro-photos)
@@ -579,18 +581,36 @@ EXCEPTION WHEN others THEN NULL;
 END;
 $$;
 
--- Storage RLS
+-- Storage RLS policies (drop old, recreate)
 DO $$
 BEGIN
-  -- Drop existing storage policies for this bucket
-  DELETE FROM storage.policies
-  WHERE bucket_id = 'abou-pro-photos';
+  DROP POLICY IF EXISTS "drivers_upload_photos" ON storage.objects;
+  DROP POLICY IF EXISTS "drivers_read_own_photos" ON storage.objects;
+  DROP POLICY IF EXISTS "admin_all_photos_storage" ON storage.objects;
 EXCEPTION WHEN others THEN NULL;
 END;
 $$;
 
+DO $$
+BEGIN
+  CREATE POLICY "drivers_upload_photos" ON storage.objects
+    FOR INSERT TO authenticated
+    WITH CHECK (bucket_id = 'abou-pro-photos' AND (storage.foldername(name))[1] = auth.uid()::text);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END;
+$$;
+
+DO $$
+BEGIN
+  CREATE POLICY "drivers_read_own_photos" ON storage.objects
+    FOR SELECT TO authenticated
+    USING (bucket_id = 'abou-pro-photos' AND (aboupro_is_admin() OR (storage.foldername(name))[1] = auth.uid()::text));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END;
+$$;
+
 -- ============================================================
--- 17. HELPER FUNCTION: update assignment progress
+-- 17. HELPER: auto-update assignment progress on stop change
 -- ============================================================
 CREATE OR REPLACE FUNCTION aboupro_update_assignment_progress(p_assignment_id uuid)
 RETURNS void
@@ -609,7 +629,6 @@ $$;
 
 GRANT EXECUTE ON FUNCTION aboupro_update_assignment_progress(uuid) TO authenticated;
 
--- Trigger to auto-update progress when an assignment_stop changes
 CREATE OR REPLACE FUNCTION aboupro_trigger_update_progress()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -618,7 +637,7 @@ BEGIN
   PERFORM aboupro_update_assignment_progress(
     COALESCE(NEW.assignment_id, OLD.assignment_id)
   );
-  RETURN NEW;
+  RETURN COALESCE(NEW, OLD);
 END;
 $$;
 
@@ -628,7 +647,7 @@ CREATE TRIGGER trg_assignment_stops_progress
   FOR EACH ROW EXECUTE FUNCTION aboupro_trigger_update_progress();
 
 -- ============================================================
--- 18. HELPER FUNCTION: get today's driver summary
+-- 18. HELPER: today's summary for dashboard KPIs
 -- ============================================================
 CREATE OR REPLACE FUNCTION aboupro_today_summary()
 RETURNS TABLE (
@@ -653,14 +672,13 @@ AS $$
         END
       )
       FROM assignments WHERE assigned_date = CURRENT_DATE
-    ), 0)
-  ;
+    ), 0);
 $$;
 
 GRANT EXECUTE ON FUNCTION aboupro_today_summary() TO authenticated;
 
 -- ============================================================
--- 19. FINAL VERIFICATION
+-- 19. FINAL VERIFICATION — all 8 tables with column counts
 -- ============================================================
 SELECT
   table_name,
@@ -680,4 +698,12 @@ ORDER BY table_name;
 
 -- ============================================================
 -- DONE — ABOU PRO schema v2 installed successfully
+-- Column naming reference:
+--   users_profiles.id         (uuid, PK = auth.users.id)
+--   users_profiles.identifier (text, short login e.g. "YG-T")
+--   users_profiles.full_name  (text)
+--   users_profiles.role       ('admin' | 'driver')
+--   users_profiles.is_active  (boolean)
+--   assignments.assigned_date (date)
+--   assignments.driver_id     (uuid → users_profiles.id)
 -- ============================================================
