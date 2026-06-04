@@ -51,10 +51,9 @@ const SUPA_URL='https://rvxgttilsqendbolbnql.supabase.co';
 const SUPA_KEY='sb_publishable_JhK2yNtRTIWPA6JWWXYu4g_508ZyZxl';
 const ORS_KEY='eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjA2NGM4ZDVhZmViYzQwNzk4MjcwOGU4YzcwM2NlOWJkIiwiaCI6Im11cm11cjY0In0=';
 const sb=supabase.createClient(SUPA_URL,SUPA_KEY,{
-  auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}
+  auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}
 });
 
-const toEmail=id=>id.includes('@')?id.trim():id.trim().toLowerCase().replace(/\s+/g,'-')+'@aboupro.app';
 const fmtDate=d=>d?new Date(d).toLocaleDateString('fr-FR'):'—';
 const fmtTime=d=>d?new Date(d).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):'—';
 const todayStr=()=>new Date().toISOString().slice(0,10);
@@ -112,19 +111,15 @@ function LoginScreen({onLogin,toast}){
     if(!id||!pw)return toast('Remplissez tous les champs','warning');
     lockRef.current=true;setBusy(true);setErrMsg('');
     try{
-      const{data,error}=await sb.auth.signInWithPassword({email:toEmail(id),password:pw});
-      if(error){
-        const msg=error.message||'';
-        let affiche='Erreur de connexion';
-        if(msg.includes('Invalid')||msg.includes('invalid')||msg.includes('credentials'))affiche='Identifiant ou code incorrect';
-        else if(msg.toLowerCase().includes('database')||msg.toLowerCase().includes('unexpected')||msg.toLowerCase().includes('finding'))affiche='Erreur serveur Supabase. Exécutez abou_pro_TOUT_EN_UN.sql puis réessayez.';
-        else if(msg.toLowerCase().includes('confirm')||msg.toLowerCase().includes('not confirmed'))affiche='Email non confirmé — exécutez abou_pro_TOUT_EN_UN.sql';
-        else affiche=msg;
-        setErrMsg(affiche);toast(affiche,'error');
+      const{data,error}=await sb.from('users_profiles').select('*').ilike('identifier',id.trim()).eq('is_active',true).maybeSingle();
+      if(error)throw new Error(error.message);
+      if(!data||data.password!==pw){
+        const msg='Identifiant ou code incorrect';
+        setErrMsg(msg);toast(msg,'error');
       }else{
-        setErrMsg('');onLogin(data.session);
+        setErrMsg('');onLogin(data);
       }
-    }catch(ex){setErrMsg(String(ex));toast(String(ex),'error');}
+    }catch(ex){const msg=String(ex.message||ex);setErrMsg(msg);toast(msg,'error');}
     lockRef.current=false;setBusy(false);
   };
   return<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
@@ -141,67 +136,6 @@ function LoginScreen({onLogin,toast}){
         </form>
       </div>
       <p style={{textAlign:'center',color:'#475569',fontSize:12,marginTop:16}}>ABOU PRO v2.0</p>
-    </div>
-  </div>;
-}
-
-/* SETUP */
-function SetupScreen({onDone,toast}){
-  const[f,setF]=useState({identifier:'YG-T',full_name:'',password:'',confirm:''});const[busy,setBusy]=useState(false);
-  const set=k=>e=>setF(x=>({...x,[k]:e.target.value}));
-  const submit=async e=>{
-    e.preventDefault();
-    if(f.password!==f.confirm)return toast('Les codes ne correspondent pas','error');
-    if(f.password.length<8)return toast('Code minimum 8 caractères','warning');
-    setBusy(true);
-    const email=toEmail(f.identifier);
-    let uid=null;
-    // Try signUp first
-    const{data:signUpData,error:signUpErr}=await sb.auth.signUp({email,password:f.password});
-    if(signUpErr){
-      // If user already exists, try to sign in with given password
-      if(signUpErr.message.toLowerCase().includes('already')||signUpErr.message.toLowerCase().includes('registered')){
-        const{data:si,error:siErr}=await sb.auth.signInWithPassword({email,password:f.password});
-        if(siErr){toast('Ce compte existe déjà. Utilisez l\'écran de connexion.','error');setBusy(false);return;}
-        uid=si.user?.id;
-        // If profile exists already, just go in
-        const{data:existing}=await sb.from('users_profiles').select('id').eq('id',uid).maybeSingle();
-        if(existing){onDone(si.session);setBusy(false);return;}
-      }else{
-        toast(signUpErr.message,'error');setBusy(false);return;
-      }
-    }else{
-      uid=signUpData.user?.id;
-      if(!uid){toast('Erreur: aucun identifiant utilisateur reçu','error');setBusy(false);return;}
-    }
-    // Create profile row
-    const{error:profErr}=await sb.from('users_profiles').upsert({id:uid,identifier:f.identifier,full_name:f.full_name||f.identifier,role:'admin',is_active:true},{onConflict:'id'});
-    if(profErr){toast('Profil: '+profErr.message,'error');setBusy(false);return;}
-    toast('Compte administrateur créé !','success');
-    // Sign in (may already be signed in if signUp returned a session)
-    if(signUpData?.session){onDone(signUpData.session);setBusy(false);return;}
-    const{data:login,error:loginErr}=await sb.auth.signInWithPassword({email,password:f.password});
-    if(loginErr){
-      if(loginErr.message.toLowerCase().includes('confirm')||loginErr.message.toLowerCase().includes('email')){
-        toast('⚠️ Confirmez l\'email dans Supabase: Authentication → Settings → désactivez "Confirm email"','warning');
-      }else toast(loginErr.message,'error');
-      setBusy(false);return;
-    }
-    if(login?.session)onDone(login.session);
-    setBusy(false);
-  };
-  return<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-    <div style={{width:'100%',maxWidth:420}}>
-      <div style={{textAlign:'center',marginBottom:32}}><div style={{fontSize:56,marginBottom:8}}>⚙️</div><h1 style={{fontSize:24,fontWeight:800,color:'white',margin:0}}>Configuration initiale</h1><p style={{color:'#94a3b8',marginTop:4,fontSize:14}}>Créez le compte administrateur</p></div>
-      <div className="card" style={{padding:32}}>
-        <form onSubmit={submit} style={{display:'flex',flexDirection:'column',gap:14}}>
-          <div><label style={{display:'block',fontSize:13,fontWeight:500,color:'#cbd5e1',marginBottom:6}}>Identifiant admin</label><input className="inp" placeholder="ex: YG-T" value={f.identifier} onChange={set('identifier')}/></div>
-          <div><label style={{display:'block',fontSize:13,fontWeight:500,color:'#cbd5e1',marginBottom:6}}>Nom complet (optionnel)</label><input className="inp" placeholder="Nom et prénom" value={f.full_name} onChange={set('full_name')}/></div>
-          <div><label style={{display:'block',fontSize:13,fontWeight:500,color:'#cbd5e1',marginBottom:6}}>Code d'accès</label><input className="inp" type="password" placeholder="Min. 8 caractères" value={f.password} onChange={set('password')}/></div>
-          <div><label style={{display:'block',fontSize:13,fontWeight:500,color:'#cbd5e1',marginBottom:6}}>Confirmer le code</label><input className="inp" type="password" placeholder="Répétez le code" value={f.confirm} onChange={set('confirm')}/></div>
-          <button type="submit" className="btn bp" style={{marginTop:4,padding:'12px 20px',fontSize:15}} disabled={busy}>{busy?<span className="spin">⏳</span>:'🚀'} Créer mon compte</button>
-        </form>
-      </div>
     </div>
   </div>;
 }
@@ -399,11 +333,11 @@ function DriversManager({toast}){
   const set=k=>e=>setForm(x=>({...x,[k]:e.target.value}));
   const create=async e=>{
     e.preventDefault();if(!form.identifier||!form.password)return toast('Identifiant et code requis','warning');if(form.password.length<8)return toast('Code minimum 8 caractères','warning');
-    setBusy(true);const{data:auth,error:e1}=await sb.auth.signUp({email:toEmail(form.identifier),password:form.password});
-    if(e1){toast(e1.message,'error');setBusy(false);return;}
-    const uid=auth.user?.id;if(!uid){toast('Erreur','error');setBusy(false);return;}
-    const{error:e2}=await sb.from('users_profiles').insert({id:uid,identifier:form.identifier,full_name:form.full_name||form.identifier,phone:form.phone||null,role:'driver',is_active:true});
-    if(e2){toast('Profil: '+e2.message,'error');setBusy(false);return;}
+    setBusy(true);
+    const{data:existing}=await sb.from('users_profiles').select('id').ilike('identifier',form.identifier.trim()).maybeSingle();
+    if(existing){toast('Cet identifiant existe déjà','error');setBusy(false);return;}
+    const{error}=await sb.from('users_profiles').insert({identifier:form.identifier.trim(),full_name:form.full_name||form.identifier,phone:form.phone||null,role:'driver',is_active:true,password:form.password});
+    if(error){toast(error.message,'error');setBusy(false);return;}
     toast(`Chauffeur ${form.identifier} créé`,'success');setShowCreate(false);setForm({identifier:'',full_name:'',phone:'',password:''});load();setBusy(false);
   };
   const toggle=async d=>{await sb.from('users_profiles').update({is_active:!d.is_active}).eq('id',d.driver_id);load();};
@@ -683,30 +617,27 @@ function StopDetail({astop,asgn,profile,pos,toast,onDone,onProblem,onBack}){
 
 /* ROOT */
 function App(){
-  const{list,toast}=useToast();const[auth,setAuth]=useState(null);const[firstRun,setFirstRun]=useState(false);
+  const{list,toast}=useToast();const[auth,setAuth]=useState(null);
   useEffect(()=>{
-    (async()=>{
-      const{data:{session}}=await sb.auth.getSession();
-      if(session)await loadProfile(session);
-      else{try{const{data}=await sb.rpc('aboupro_has_admin');if(!data)setFirstRun(true);}catch{}setAuth(false);}
-    })();
-    const{data:{subscription}}=sb.auth.onAuthStateChange(async(event,session)=>{if(event==='SIGNED_OUT')setAuth(false);if(event==='SIGNED_IN'&&session)await loadProfile(session);});
-    return()=>subscription.unsubscribe();
+    const saved=localStorage.getItem('aboupro_session');
+    if(saved){try{setAuth({profile:JSON.parse(saved)});}catch{localStorage.removeItem('aboupro_session');setAuth(false);}}
+    else setAuth(false);
   },[]);
-  const loadProfile=async session=>{
-    const{data:profile,error}=await sb.from('users_profiles').select('*').eq('id',session.user.id).maybeSingle();
-    if(error||!profile){toast('Profil introuvable. Contactez l\'administrateur.','error');await sb.auth.signOut();setAuth(false);return;}
-    setAuth({session,user:session.user,profile});setFirstRun(false);
+  const handleLogin=profile=>{
+    localStorage.setItem('aboupro_session',JSON.stringify(profile));
+    setAuth({profile});
   };
-  const handleLogin=async session=>await loadProfile(session);
-  const handleLogout=async()=>{await sb.auth.signOut();setAuth(false);toast('Déconnecté','info');};
+  const handleLogout=()=>{
+    localStorage.removeItem('aboupro_session');
+    setAuth(false);
+    toast('Déconnecté','info');
+  };
   useEffect(()=>{if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});},[]);
   if(auth===null)return<div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}><div style={{fontSize:52,marginBottom:12}} className="spin">🚚</div><p style={{color:'#475569',fontSize:14}}>Chargement…</p><Toasts list={list}/></div>;
-  if(firstRun)return<><SetupScreen onDone={handleLogin} toast={toast}/><Toasts list={list}/></>;
   if(!auth)return<><LoginScreen onLogin={handleLogin} toast={toast}/><Toasts list={list}/></>;
-  const{session,profile}=auth;
-  if(profile.role==='admin')return<><AdminLayout profile={profile} session={session} onLogout={handleLogout} toast={toast}/><Toasts list={list}/></>;
-  return<><DriverApp profile={profile} session={session} onLogout={handleLogout} toast={toast}/><Toasts list={list}/></>;
+  const{profile}=auth;
+  if(profile.role==='admin')return<><AdminLayout profile={profile} onLogout={handleLogout} toast={toast}/><Toasts list={list}/></>;
+  return<><DriverApp profile={profile} onLogout={handleLogout} toast={toast}/><Toasts list={list}/></>;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
