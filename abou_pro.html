@@ -104,21 +104,28 @@ function parseText(txt){
 
 /* LOGIN */
 function LoginScreen({onLogin,toast}){
-  const[id,setId]=useState('');const[pw,setPw]=useState('');const[busy,setBusy]=useState(false);const[show,setShow]=useState(false);
+  const[id,setId]=useState('');const[pw,setPw]=useState('');const[busy,setBusy]=useState(false);const[show,setShow]=useState(false);const[errMsg,setErrMsg]=useState('');
+  const lockRef=useRef(false);
   const submit=async e=>{
-    e.preventDefault();if(!id||!pw)return toast('Remplissez tous les champs','warning');
-    setBusy(true);
-    const{data,error}=await sb.auth.signInWithPassword({email:toEmail(id),password:pw});
-    if(error){
-      const msg=error.message||'';
-      if(msg.includes('Invalid')||msg.includes('invalid'))toast('Identifiant ou code incorrect','error');
-      else if(msg.toLowerCase().includes('database error')||msg.toLowerCase().includes('unexpected'))
-        toast('Erreur serveur. Relancez le SQL dans Supabase puis réessayez.','error');
-      else if(msg.toLowerCase().includes('confirm')||msg.toLowerCase().includes('email'))
-        toast('Email non confirmé — désactivez "Confirm email" dans Supabase Auth Settings','error');
-      else toast(msg,'error');
-    }else onLogin(data.session);
-    setBusy(false);
+    e.preventDefault();
+    if(lockRef.current)return;
+    if(!id||!pw)return toast('Remplissez tous les champs','warning');
+    lockRef.current=true;setBusy(true);setErrMsg('');
+    try{
+      const{data,error}=await sb.auth.signInWithPassword({email:toEmail(id),password:pw});
+      if(error){
+        const msg=error.message||'';
+        let affiche='Erreur de connexion';
+        if(msg.includes('Invalid')||msg.includes('invalid')||msg.includes('credentials'))affiche='Identifiant ou code incorrect';
+        else if(msg.toLowerCase().includes('database')||msg.toLowerCase().includes('unexpected')||msg.toLowerCase().includes('finding'))affiche='Erreur serveur Supabase. Exécutez abou_pro_TOUT_EN_UN.sql puis réessayez.';
+        else if(msg.toLowerCase().includes('confirm')||msg.toLowerCase().includes('not confirmed'))affiche='Email non confirmé — exécutez abou_pro_TOUT_EN_UN.sql';
+        else affiche=msg;
+        setErrMsg(affiche);toast(affiche,'error');
+      }else{
+        setErrMsg('');onLogin(data.session);
+      }
+    }catch(ex){setErrMsg(String(ex));toast(String(ex),'error');}
+    lockRef.current=false;setBusy(false);
   };
   return<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
     <div style={{width:'100%',maxWidth:420}}>
@@ -129,7 +136,8 @@ function LoginScreen({onLogin,toast}){
           <div><label style={{display:'block',fontSize:13,fontWeight:500,color:'#cbd5e1',marginBottom:6}}>Code d'accès</label>
             <div style={{position:'relative'}}><input className="inp" style={{paddingRight:44}} type={show?'text':'password'} placeholder="••••••••" value={pw} onChange={e=>setPw(e.target.value)} autoComplete="current-password"/>
             <button type="button" style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:16}} onClick={()=>setShow(!show)}>{show?'🙈':'👁️'}</button></div></div>
-          <button type="submit" className="btn bp" style={{marginTop:4,padding:'12px 20px',fontSize:15}} disabled={busy}>{busy?<span className="spin">⏳</span>:'🔑'} Connexion</button>
+          {errMsg&&<div style={{background:'#7f1d1d',border:'1px solid #dc2626',borderRadius:8,padding:'10px 14px',fontSize:13,color:'#fca5a5',lineHeight:1.4}}>{errMsg}</div>}
+          <button type="submit" className="btn bp" style={{padding:'12px 20px',fontSize:15}} disabled={busy}>{busy?<><span className="spin">⏳</span> Connexion en cours…</>:'🔑 Connexion'}</button>
         </form>
       </div>
       <p style={{textAlign:'center',color:'#475569',fontSize:12,marginTop:16}}>ABOU PRO v2.0</p>
