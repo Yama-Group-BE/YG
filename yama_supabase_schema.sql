@@ -43,6 +43,20 @@ create extension if not exists "pg_trgm";
 create extension if not exists "pgcrypto";
 
 -- ───────────────────────────────────────────────────────────────────────────
+-- NETTOYAGE PRÉALABLE DES VUES
+-- Doit être fait AVANT toute modification de colonnes pour éviter
+-- "cannot drop columns from view" et pour permettre ALTER/DROP COLUMN.
+-- ───────────────────────────────────────────────────────────────────────────
+drop view if exists yama_crm_pipeline_complete cascade;
+drop view if exists yama_pipeline_kpi cascade;
+drop view if exists yama_sous_traitants_workload cascade;
+drop view if exists yama_rdv_upcoming cascade;
+drop view if exists yama_factures_impayees cascade;
+drop view if exists yama_monthly_report cascade;
+drop view if exists yama_pipeline cascade;
+drop view if exists yama_crm_active cascade;
+
+-- ───────────────────────────────────────────────────────────────────────────
 -- 1. TYPES ENUM (immuables côté JS — ne pas modifier sans migration)
 -- ───────────────────────────────────────────────────────────────────────────
 do $$ begin
@@ -261,6 +275,18 @@ create table if not exists yama_sous_traitants (
 -- Le code fait supaClient.from('yama_soustraitants').insert(rows) — une VIEW
 -- ne peut pas recevoir d'INSERT. Table séparée de yama_sous_traitants.
 -- ───────────────────────────────────────────────────────────────────────────
+
+-- Si yama_soustraitants existe comme VIEW (v14 original), la convertir en TABLE
+do $$
+begin
+  if exists (
+    select 1 from information_schema.views
+    where table_schema = 'public' and table_name = 'yama_soustraitants'
+  ) then
+    drop view yama_soustraitants cascade;
+  end if;
+end $$;
+
 create table if not exists yama_soustraitants (
   id              text          not null primary key,
   data            jsonb         not null default '{}',
@@ -433,6 +459,38 @@ do $$ begin
   if not exists (select 1 from information_schema.columns
     where table_name='yama_sous_traitants' and column_name='source') then
     alter table yama_sous_traitants add column source text not null default 'crm'; end if;
+end $$;
+
+-- yama_history : supprime les expressions GENERATED si la table vient du v14 original
+-- (ALTER COLUMN ... DROP EXPRESSION disponible depuis PostgreSQL 12)
+do $$ begin
+  if exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='doc_type'
+    and is_generated = 'ALWAYS') then
+    alter table yama_history alter column doc_type drop expression;
+  end if;
+  if exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='total_ttc'
+    and is_generated = 'ALWAYS') then
+    alter table yama_history alter column total_ttc drop expression;
+  end if;
+  if exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='pdf_stored'
+    and is_generated = 'ALWAYS') then
+    alter table yama_history alter column pdf_stored drop expression;
+  end if;
+  if exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='deleted_at'
+    and is_generated = 'ALWAYS') then
+    alter table yama_history alter column deleted_at drop expression;
+  end if;
+  if exists (select 1 from information_schema.columns
+    where table_name='yama_history' and column_name='deleted'
+    and is_generated = 'ALWAYS') then
+    -- DROP COLUMN pour pouvoir recréer avec la bonne expression (deleted_at is not null)
+    -- Les vues ont été droppées au début du script — pas de dépendance
+    alter table yama_history drop column deleted;
+  end if;
 end $$;
 
 -- yama_history : colonnes writables ajoutées (si table pré-v14 sans ces colonnes)
@@ -640,6 +698,7 @@ $$;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- VUES MÉTIER
+-- (les vues existantes ont été droppées en début de script)
 -- ═══════════════════════════════════════════════════════════════════════════
 
 create or replace view yama_crm_active as
