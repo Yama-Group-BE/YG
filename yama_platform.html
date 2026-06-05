@@ -7066,6 +7066,13 @@ async function syncPullSoustraitants() {
       const { data, error } = await supaClient.from('yama_soustraitants').select('*');
       if (error) throw error;
       const cloudList = (data || []).filter(r => r.id !== '__never__').map(r => r.data);
+      // GUARD : cloud vide mais local a des données → repush (évite d'écraser les données locales
+      // quand la table était une VIEW et que les INSERT avaient silencieusement échoué)
+      const localList = JSON.parse(localStorage.getItem(LS_ST) || '[]');
+      if (cloudList.length === 0 && localList.length > 0) {
+        await syncPushSoustraitants(localList, localTs || new Date().toISOString());
+        return localList;
+      }
       // Mettre à jour le local avec le cloud
       localStorage.setItem(LS_ST, JSON.stringify(cloudList));
       localStorage.setItem(LS_ST + '_ts', cloudTs || localTs);
@@ -31774,6 +31781,27 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     }
   }
 
+  /* ── RE-PUSH SOUS-TRAITANTS ──
+     V32 syncFullPullV32 ne synce PAS les sous-traitants (il remplace syncFullPull
+     mais oublie syncPullSoustraitants). Ce repush garantit que les STs locaux
+     atteignent le cloud si le cloud est vide ou en retard. */
+  async function repushSoustraitants(){
+    var client = getClient(); if (!client) return;
+    var localList = [];
+    try { localList = JSON.parse(localStorage.getItem('yama_soustraitants_v1') || '[]'); } catch(e){}
+    if (localList.length === 0) return;
+    try {
+      var r = await client.from('yama_soustraitants').select('id');
+      var cloudCount = ((r.data)||[]).filter(function(x){ return x.id !== '__never__'; }).length;
+      if (cloudCount >= localList.length) return; // cloud déjà à jour
+      if (typeof syncPushSoustraitants === 'function') {
+        var ts = localStorage.getItem('yama_soustraitants_v1_ts') || new Date().toISOString();
+        await syncPushSoustraitants(localList, ts);
+        console.info('[YAMA Parité] repush sous-traitants:', localList.length, 'STs → cloud');
+      }
+    } catch(e){ console.warn('[YAMA Parité] repush ST:', e.message||e); }
+  }
+
   /* ── RE-PUSH COMPLET DE L'HISTORIQUE ──
      Pousse CHAQUE entrée locale (les deux clés) vers le cloud, pour qu'une
      facture/devis générée localement atteigne toujours le cloud — même si
@@ -31804,6 +31832,7 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
       var orig = window.forceSyncAll;
       window.forceSyncAll = async function(){
         try { await repushAllHistory(); } catch(e){}
+        try { await repushSoustraitants(); } catch(e){}
         try { await pushProfilePhoto(); } catch(e){}
         var res;
         try { res = await orig.apply(this, arguments); } catch(e){ console.error('[YAMA Parity] force:', e); }
@@ -31814,14 +31843,25 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     }
   }
 
-  /* 2. Sync auto (pull périodique) : tire aussi la photo */
+  /* 2. Sync auto (pull périodique) : tire aussi la photo + STs
+     V32 remplace syncFullPull par syncFullPullV32 qui ne synce PAS les STs.
+     Ce wrapper ajoute la sync ST à chaque cycle automatique. */
   function wrapFullPull(){
     if (typeof window.syncFullPull === 'function' && !window.syncFullPull.__parity){
       var orig = window.syncFullPull;
       window.syncFullPull = async function(){
         var res;
         try { res = await orig.apply(this, arguments); } catch(e){ throw e; }
-        finally { try { await pullProfilePhoto(); } catch(e){} }
+        finally {
+          try { await pullProfilePhoto(); } catch(e){}
+          /* Sync sous-traitants (absent de V32) */
+          try {
+            if (typeof syncPullSoustraitants === 'function') {
+              await syncPullSoustraitants();
+              try { if (typeof renderSTTab === 'function') renderSTTab(); } catch(e){}
+            }
+          } catch(e){}
+        }
         return res;
       };
       window.syncFullPull.__parity = true;
@@ -31835,10 +31875,16 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     wrapFullPull();
     var local = localStorage.getItem(PHOTO_KEY);
     if (local) reapplyPhoto(local);
-    /* Après connexion cloud probable, synchronise photo + historique une fois */
+    /* Après connexion cloud probable, synchronise photo + historique + STs une fois */
     setTimeout(function(){
       pullProfilePhoto();
-      if (!repushedThisSession){ repushedThisSession = true; repushAllHistory(); }
+      if (!repushedThisSession){
+        repushedThisSession = true;
+        repushAllHistory();
+        repushSoustraitants().then(function(){
+          try { if (typeof renderSTTab === 'function') renderSTTab(); } catch(e){}
+        });
+      }
     }, 3500);
   }
 
@@ -31872,7 +31918,7 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     s.textContent = CSS;
   })();
 
-  console.info('[YAMA PARITÉ 2026] Photo + historique synchronisés inter-appareils, parité mobile active.');
+  console.info('[YAMA PARITÉ 2026] Photo + historique + sous-traitants synchronisés inter-appareils, parité mobile active.');
 })();
 </script>
 </body>
