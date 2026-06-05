@@ -12667,11 +12667,9 @@ order by table_name;</textarea>
 
     const streetBeforeNumber = new RegExp("\\b((?:" + STREET_TYPES + ")\\s+(?:d[eu]s?\\s+|de\\s+la\\s+|de\\s+l[‘’]|d[‘’]|l[‘’]|la\\s+|le\\s+|les\\s+)?[A-Za-zÀ-ÿ0-9’’ .-]{2,80}?\\s+\\d{1,4}\\s*(?:[A-Za-z]|/[A-Za-z0-9]+)?)\\b", "i");
     const numberBeforeStreet = new RegExp("\\b(\\d{1,4}\\s*(?:[A-Za-z])?\\s*,?\\s*(?:" + STREET_TYPES + ")\\s+[A-Za-zÀ-ÿ0-9’’ .-]{2,80})\\b", "i");
-    // "rue de Géraniums, numéro 1" — numéro/n°/no label before the house number
-    const streetNumeroLabel = new RegExp("\\b((?:" + STREET_TYPES + ")\\s+(?:d[eu]s?\\s+|de\\s+la\\s+|de\\s+l[‘’]|d[‘’]|l[‘’]|la\\s+|le\\s+|les\\s+)?[A-Za-zÀ-ÿ0-9’’ .-]{2,80}?)\\s*,?\\s*(?:num[eé]ro|n[°o]\\.?|nr\\.?|#)\\s*(\\d{1,4}(?:\\s*[A-Za-z]|/[A-Za-z0-9]+)?)", "i");
 
     let candidates = [];
-    const kw = text.match(/(?:\b(?:mon|ma|notre|votre)\s+)?(?:adresse|domicile|chantier)\s*(?:c[‘’]est|est|:|=|se\s+trouve\s+(?:à|a)|au|à|a)?\s*([^\n\r;]{4,140})/i);
+    const kw = text.match(/(?:\b(?:mon|ma|notre|votre)\s+)?(?:adresse|domicile|chantier)\s*(?:c[’']est|est|:|=|se\s+trouve\s+(?:à|a)|au|à|a)?\s*([^\n\r;]{4,140})/i);
     if (kw) candidates.push(kw[1]);
     candidates.push(text);
 
@@ -12679,22 +12677,12 @@ order by table_name;</textarea>
       const m = String(block).match(streetBeforeNumber) || String(block).match(numberBeforeStreet);
       if (m) {
         let adr = cleanLabelValue(m[1])
-          .replace(/^(?:c[‘’]est|est|se\s+trouve\s+(?:à|a)|(?:à|a)\s+)\s*/i,’’)
-          .replace(/\s*,?\s*(?:à|a)\s+[A-Za-zÀ-ÿ’’ -]{2,40}\s*$/i,’’)
-          .replace(/[,.]+$/,’’);
+          .replace(/^(?:c[’']est|est|se\s+trouve\s+(?:à|a)|(?:à|a)\s+)\s*/i,'')
+          .replace(/\s*,?\s*(?:à|a)\s+[A-Za-zÀ-ÿ'’ -]{2,40}\s*$/i,'')
+          .replace(/[,.]+$/,'');
         if (!/\b\d{1,4}\w?\b/.test(adr)) continue;
         if (OWN_WORDS_RX.test(adr)) continue;
         return titleWords(adr);
-      }
-      // Handle "rue de Géraniums, numéro 1" — street name + explicit numéro label
-      const mN = String(block).match(streetNumeroLabel);
-      if (mN) {
-        const streetPart = cleanLabelValue(mN[1].trim().replace(/[,\s]+$/, ‘’));
-        const numPart = mN[2].trim();
-        if (!streetPart || !numPart) continue;
-        const combined = streetPart + ‘ ‘ + numPart;
-        if (OWN_WORDS_RX.test(combined)) continue;
-        return titleWords(combined);
       }
     }
 
@@ -31934,860 +31922,329 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 })();
 </script>
 
-<!-- ════════════════════════════════════════════════════════════════
-     YAMA CRM 2026 — Annuaire neutre + Dossiers liés + Refus non-archivant
-                     + Automatisation « devis validé → messages chantier »
-     Patch final non destructif (dernière définition = prioritaire).
-════════════════════════════════════════════════════════════════ -->
-<style id="yama-crm-neutral-css">
-  /* Annuaire neutre : aucun indicateur de statut dans le listing.
-     Belt-and-suspenders : même si un décorateur (setInterval) ré-injecte
-     une pastille, le CSS la garde invisible dans le listing. */
-  .contact-row .crm-stage-pill,
-  .contact-row .cr-badge,
-  .contact-row .crm-pipeline-bar,
-  .contact-row .crm-follow-pill,
-  .contact-row .crm-waiting-pill,
-  .contact-row .crm-finished-pill,
-  .contact-row .crm-devis-pill,
-  .contact-row .crm-rdv-pill,
-  .contact-row .crm-refused-pill,
-  .contact-row .crm-stage-dot,
-  .contact-row .crm-v5-deadline-btn,
-  .contact-row .crm-sla-badge { display:none !important; }
-  .crm-neutral-row .avatar.crm-neutral-av{
-    background:rgba(201,168,76,.12)!important; color:var(--gold,#C9A84C)!important;
-  }
-  .crm-neutral-row{ border-color:rgba(255,255,255,.07)!important; }
-  /* Dossier — section « Dossiers liés » */
-  .crm-dossier-section{ padding:14px 22px; border-top:1px solid var(--border,rgba(255,255,255,.08)); }
-  .crm-dossier-title{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#5b9cf6; font-weight:800; margin-bottom:10px; }
-  .crm-dossier-item{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid rgba(255,255,255,.08); border-radius:10px; margin-bottom:8px; background:rgba(255,255,255,.025); }
-  .crm-dossier-left{ min-width:0; }
-  .crm-dossier-num{ font-weight:800; color:var(--white,#fff); font-size:13px; }
-  .crm-dossier-meta{ font-size:11px; color:#8a8a8a; margin-top:2px; }
-  .crm-dossier-badge{ font-size:10px; font-weight:800; padding:4px 9px; border-radius:20px; white-space:nowrap; }
-  .crm-dossier-empty{ font-size:12px; color:#777; padding:6px 0; }
+<!-- ═══════════════════════════════════════════════════════════════════
+     YAMA FIX PROPRE 2026 — Corrections chirurgicales (v1)
+     1. Stacking : page visible sous une autre lors du changement d'onglet
+     2. Indicateur doré sur l'onglet actif (::after clippé → inline box-shadow)
+     3. Historique : présentation visuelle des sections et intitulés
+     ═══════════════════════════════════════════════════════════════════ -->
+<style id="yama-fix-propre-css">
+
+/* ── 1. STACKING FIX ────────────────────────────────────────────── */
+/* Force hide pour tout panel non-actif dans la plateforme */
+#app-platform .tab-content:not(.active) {
+  display: none !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+}
+#app-platform .tab-content.active {
+  display: block !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
+
+/* ── 2. INDICATOR ───────────────────────────────────────────────── */
+/* Kill l'::after sur .tabs — coupé par overflow-y:hidden + contain:paint */
+#app-platform .tabs::after,
+#app-platform .tabs .tab::after {
+  display: none !important;
+  content: none !important;
+}
+/* Baseline pour tous les onglets (JS reinforcement suit) */
+#app-platform .tabs .tab {
+  border-bottom: 3px solid transparent !important;
+  box-shadow: none !important;
+}
+
+/* ── 3. HISTORIQUE — Présentation propre ────────────────────────── */
+/* Type-badge : plus lisible, plus visible */
+.type-badge {
+  font-size: 10px !important;
+  padding: 3px 9px !important;
+  border-radius: 4px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.4px !important;
+  vertical-align: middle !important;
+  flex-shrink: 0 !important;
+}
+.type-badge.devis {
+  background: rgba(201,168,76,0.2) !important;
+  color: #C9A84C !important;
+  border: 1px solid rgba(201,168,76,0.5) !important;
+}
+.type-badge.facture {
+  background: rgba(82,199,127,0.2) !important;
+  color: #52c77f !important;
+  border: 1px solid rgba(82,199,127,0.5) !important;
+}
+/* Item : espacement et mise en page */
+.history-item {
+  padding: 14px 18px !important;
+  margin-bottom: 8px !important;
+  border-radius: 6px !important;
+  gap: 16px !important;
+}
+/* Titre : flex pour aligner badge + texte proprement */
+.history-info .hi-title {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+}
+/* Client + chantier : pas de saut de ligne brutal */
+.history-info .hi-client-chantier {
+  display: inline !important;
+  font-weight: 600 !important;
+}
+.history-info .hi-sub {
+  font-size: 11px !important;
+  margin-top: 5px !important;
+  opacity: 0.72 !important;
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+}
+.history-num {
+  font-size: 14px !important;
+  min-width: 72px !important;
+}
+.history-amount {
+  font-size: 16px !important;
+  white-space: nowrap !important;
+}
+
 </style>
-<script id="yama-crm-neutral-dossier-2026">
-(function yamaCrmNeutralDossier(){
-  if (window.__YAMA_CRM_NEUTRAL_2026__) return;
-  window.__YAMA_CRM_NEUTRAL_2026__ = true;
 
-  /* ── helpers ── */
-  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];}); }
-  function getC(){ try { return (typeof getContacts==='function')?getContacts():[]; } catch(e){ return []; } }
-  function nrm(c){ try { return (typeof normalizeContact==='function')?normalizeContact(c):c; } catch(e){ return c; } }
-  function hist(){ try { return (typeof getHistory==='function')?getHistory():[]; } catch(e){ return []; } }
-  function normName(s){ return String(s||'').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim(); }
-  function fdate(d){ try { return (typeof fmtDateFR==='function' && d)?fmtDateFR(d):''; } catch(e){ return ''; } }
-  function ftime(h){ try { return (typeof fmtTime==='function' && h)?fmtTime(h):(h||''); } catch(e){ return h||''; } }
-  function eur(n){ var v=parseFloat(n)||0; return v.toLocaleString('fr-BE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
-  function contactById(cid){ var f=getC().find(function(x){return String(x.id||x.contact_id)===String(cid);}); return f?nrm(f):null; }
-
-  /* ════════ 1. ANNUAIRE 100% NEUTRE ════════
-     Le listing est un simple répertoire de contacts. Aucune pastille de
-     statut (refusé/accepté/RDV/chantier). Tout le pipeline vit dans le dossier
-     que l'on ouvre en cliquant sur le contact. */
-  function neutralRender(containerId, filterType){
-    var searchEl = document.getElementById('search-all');
-    var search = (searchEl && searchEl.value ? searchEl.value : '').toLowerCase();
-    var list;
-    try {
-      list = (typeof filterContactsForScope==='function')
-        ? filterContactsForScope(getC(), filterType || 'all')
-        : getC().map(nrm);
-    } catch(e){ list = getC().map(nrm); }
-    if (search) list = list.filter(function(c){
-      return (c.nom||'').toLowerCase().indexOf(search)>=0
-          || (c.commune||'').toLowerCase().indexOf(search)>=0
-          || (c.tel||'').indexOf(search)>=0;
-    });
-    var el = document.getElementById(containerId); if (!el) return;
-    if (!list.length){
-      el.innerHTML = '<div class="empty"><div class="empty-emoji">👥</div><div class="empty-text">Aucun contact ici pour l’instant</div><div class="empty-sub">Cliquez sur un contact pour ouvrir son dossier complet.</div></div>';
-      return;
-    }
-    el.innerHTML = list.map(function(c){
-      var cid = c.id || c.contact_id;
-      var init = (c.nom||'?').split(' ').map(function(w){return (w||'')[0]||'';}).slice(0,2).join('').toUpperCase();
-      var dl = fdate(c.date); var hl = ftime(c.heure);
-      var dateLine = dl ? (dl + (hl?(' · '+hl):'')) : '';
-      return '<div class="contact-row crm-neutral-row" onclick="openContactDetail(\''+cid+'\')" style="cursor:pointer;">'
-        + '<div class="avatar crm-neutral-av">'+esc(init)+'</div>'
-        + '<div class="crm-neutral-id"><div class="cr-name">'+esc(c.civilite||'')+' '+esc(c.nom||'')+'</div>'
-        + '<div class="cr-meta"><span>📍 '+esc(c.commune||'—')+'</span><span>📞 '+esc(c.tel||'—')+'</span>'+(c.st?'<span>🔧 '+esc(c.st)+'</span>':'')+'</div></div>'
-        + '<div class="crm-neutral-date">'+(dateLine?('<div class="cr-date">'+esc(dateLine)+'</div>'):'')+'</div>'
-        + '<div class="cr-actions crm-neutral-actions" onclick="event.stopPropagation()">'
-        + '<button class="btn btn-outline btn-sm" title="Ouvrir le dossier" onclick="event.stopPropagation();openContactDetail(\''+cid+'\')">📂</button>'
-        + '<button class="btn btn-outline btn-sm" title="Modifier" onclick="event.stopPropagation();editContact(\''+cid+'\')">✏️</button>'
-        + '<button class="btn btn-red btn-sm" title="Supprimer" onclick="event.stopPropagation();deleteContact(\''+cid+'\')">🗑</button>'
-        + '</div></div>';
-    }).join('');
-  }
-  neutralRender.__yamaNeutral = true;
-  function installNeutral(){
-    if (window.renderContactList !== neutralRender){
-      window.renderContactList = neutralRender;
-      try { renderContactList = neutralRender; } catch(e){}
-    }
-  }
-  installNeutral();
-  setTimeout(installNeutral, 1500);
-  setTimeout(installNeutral, 4500);
-  setTimeout(function(){ try { if (typeof renderContacts==='function') renderContacts(); } catch(e){} }, 1600);
-
-  /* ════════ 2. UN DEVIS REFUSÉ N'ARCHIVE PLUS LE CONTACT ════════
-     Le refus est l'issue du DOSSIER (devis), pas la mort du CONTACT.
-     On conserve le lien devis↔contact mais le contact reste dans l'annuaire,
-     réutilisable pour un futur travail. (override global → couvre refuseDevis
-     ET crmRefuseDevisFromCRM qui appellent tous deux cette fonction.) */
-  window.linkDevisRefuseToContactCRM = function(docNum){
-    try {
-      var h = hist().find(function(e){return String(e.docNum)===String(docNum);});
-      var nomDevis = normName(h && h.clientNom);
-      var match = getC().find(function(c){
-        var n = nrm(c);
-        if (String(n.devisDocNum||'')===String(docNum)) return true;
-        if (!nomDevis || nomDevis.length<2) return false;
-        var nc = normName(n.nom);
-        return nc.length>=2 && (nomDevis.indexOf(nc)>=0 || nc.indexOf(nomDevis)>=0);
-      });
-      if (match){
-        var cid = match.id||match.contact_id;
-        var raw = (typeof findRawContact==='function')?findRawContact(cid):match;
-        if (raw){
-          var updated = Object.assign({}, raw, { devisDocNum:String(docNum) });
-          updated.devisRefused = false;                       /* ne plus marquer refusé */
-          if (updated.followUpStatus==='refused') updated.followUpStatus='';
-          if (updated.status==='refuse') updated.status='';
-          if (updated.finished===true && updated.suiviTermine!==true) updated.finished=false;
-          if (typeof upsertLocalContact==='function') upsertLocalContact(updated);
-          try { if (typeof pushContact==='function') pushContact(updated); } catch(e){}
-        }
-      }
-    } catch(e){ console.warn('[YAMA CRM] refus non-archivant:', e); }
-    try { if (typeof updateBadges==='function') updateBadges(); } catch(e){}
-    try { if (typeof renderAll==='function') renderAll(); } catch(e){}
-  };
-
-  window.refuseDevis = function(docNum){
-    if (!confirm('Marquer ce devis comme refusé ?\n\nLe devis sera classé « refusé » dans son dossier.\nLe contact RESTE dans votre annuaire pour un futur travail.')) return;
-    try { if (typeof setDevisStatus==='function') setDevisStatus(docNum,'refused',''); } catch(e){}
-    try { if (typeof renderDevisTab==='function') renderDevisTab(); } catch(e){}
-    try { window.linkDevisRefuseToContactCRM(docNum); } catch(e){}
-    try { if (typeof showToast==='function') showToast('Devis refusé — contact conservé dans l’annuaire', 'success'); } catch(e){}
-  };
-  window.refuseDevis.__ytWrapped = true;
-
-  /* ════════ 3. DOSSIER : tous les devis & factures liés au contact ════════
-     En ouvrant un contact on voit l'historique de TOUS ses devis/factures,
-     chacun avec son statut (en attente / accepté / refusé / facturé / payé). */
-  function linkedDocs(c){
-    var ddn = String(c.devisDocNum||'');
-    var cName = normName(c.nom);
-    var seen = {};
-    return hist().filter(function(e){
-      if (!e || e.deleted || e.deletedAt) return false;
-      var id = String(e.docNum||'');
-      if (!id || seen[id]) return false;
-      var hit = false;
-      if (ddn && (id===ddn || String(e.parentDevisNum||'')===ddn)) hit = true;
-      else if (cName && cName.length>=3){
-        var en = normName(e.clientNom);
-        if (en && (en.indexOf(cName)>=0 || cName.indexOf(en)>=0)) hit = true;
-      }
-      if (hit) seen[id]=true;
-      return hit;
-    }).sort(function(a,b){ return String(b.savedAt||b.dateEmission||'').localeCompare(String(a.savedAt||a.dateEmission||'')); });
-  }
-  function statusBadge(e){
-    if (e.docType==='facture'){
-      var cp = {}; try { cp = (typeof getClientPaid==='function')?getClientPaid():{}; } catch(x){}
-      return cp[e.docNum]
-        ? '<span class="crm-dossier-badge" style="background:rgba(82,199,127,.12);color:#52c77f;">🧾 Payée</span>'
-        : '<span class="crm-dossier-badge" style="background:rgba(224,82,82,.12);color:#e05252;">🧾 Impayée</span>';
-    }
-    var st = 'pending';
-    try { var ds=(typeof getDevisStatuses==='function')?getDevisStatuses():{}; st = (ds[e.docNum] && ds[e.docNum].status) || 'pending'; } catch(x){}
-    var map = {
-      pending:['⏳ En attente','rgba(232,160,32,.12)','#e8a020'],
-      accepted:['✅ Accepté','rgba(82,199,127,.12)','#52c77f'],
-      refused:['❌ Refusé','rgba(224,82,82,.12)','#e05252'],
-      done:['🔨 Travaux','rgba(91,156,246,.12)','#5b9cf6'],
-      invoiced:['🧾 Facturé','rgba(201,168,76,.14)','#C9A84C']
-    };
-    var m = map[st] || map.pending;
-    return '<span class="crm-dossier-badge" style="background:'+m[1]+';color:'+m[2]+';">'+m[0]+'</span>';
-  }
-  function injectDossier(cid){
-    var body = document.getElementById('detail-modal-body'); if (!body) return;
-    if (body.querySelector('.crm-dossier-section')) return;
-    var c = contactById(cid); if (!c) return;
-    var docs = linkedDocs(c);
-    var inner = docs.length ? docs.map(function(e){
-      var icon = e.docType==='facture' ? '🧾' : '📋';
-      var typ  = e.docType==='facture' ? 'Facture' : (e.docType==='devis-brouillon'?'Brouillon':'Devis');
-      var d = fdate(e.savedAt || e.dateEmission || '');
-      var tab = e.docType==='facture' ? 'history' : 'devis';
-      return '<div class="crm-dossier-item">'
-        + '<div class="crm-dossier-left">'
-        + '<div class="crm-dossier-num">'+icon+' '+esc(e.docNum||'')+'</div>'
-        + '<div class="crm-dossier-meta">'+esc(typ)+(d?(' · '+esc(d)):'')+' · '+eur(e.totalTTC)+'</div>'
-        + '</div>'
-        + '<div style="display:flex;align-items:center;gap:8px;">'+statusBadge(e)
-        + '<button class="btn btn-outline btn-sm" title="Voir dans la plateforme" onclick="try{if(typeof closeContactDetail===\'function\')closeContactDetail();if(typeof switchApp===\'function\')switchApp(\'platform\');setTimeout(function(){try{if(typeof switchTab===\'function\')switchTab(\''+tab+'\');}catch(_){}}, 220);}catch(_){}">Voir →</button>'
-        + '</div></div>';
-    }).join('') : '<div class="crm-dossier-empty">Aucun devis ou facture lié pour le moment.</div>';
-    var sec = document.createElement('div');
-    sec.className = 'crm-dossier-section';
-    sec.innerHTML = '<div class="crm-dossier-title">📁 Dossiers liés ('+docs.length+')</div>'+inner;
-    body.appendChild(sec);
-  }
-  var _prevOpenDetailNeutral = window.openContactDetail;
-  window.openContactDetail = function(cid){
-    var r = _prevOpenDetailNeutral ? _prevOpenDetailNeutral.apply(this, arguments) : undefined;
-    setTimeout(function(){ try { injectDossier(cid); } catch(e){} }, 60);
-    return r;
-  };
-
-  /* ════════ 4. AUTOMATISATION : DEVIS VALIDÉ → MESSAGES CHANTIER ════════
-     Quand un devis passe en « accepté », l'app prépare automatiquement les
-     2 messages de confirmation (client + sous-traitant) prêts à envoyer,
-     en réutilisant le modal v42 existant. Bouton WhatsApp ajouté. */
-  var _origV42Show = window.v42ShowChantierModal;
-  var _lastChantierModal = 0, _lastChantierContact = null;
-  function waLink(tel, text){
-    var cleaned = String(tel||'').replace(/[^\d+]/g,'');
-    var n = cleaned.charAt(0)==='0' ? '32'+cleaned.slice(1) : cleaned.replace(/^\+/,'');
-    return 'https://wa.me/'+encodeURIComponent(n)+'?text='+encodeURIComponent(text||'');
-  }
-  function stPhone(name){
-    try {
-      if (typeof getSTList!=='function' || !name) return '';
-      var st = getSTList().find(function(s){ return (s.nom||'').toLowerCase().trim()===String(name).toLowerCase().trim(); });
-      return st ? (st.tel||'') : '';
-    } catch(e){ return ''; }
-  }
-  function addWAButtons(contact){
-    var modal = document.getElementById('v42-chantier-confirm-modal'); if (!modal) return;
-    if (modal.querySelector('.v42-wa-client')) return;
-    var rows = modal.querySelectorAll('.v42-btn-row');
-    var clientTel = (contact && contact.tel) || '';
-    var sTel = stPhone(contact && (contact.st || contact.stName));
-    if (rows[0] && clientTel){
-      var b1 = document.createElement('button');
-      b1.className = 'v42-btn v42-wa-client';
-      b1.style.cssText = 'background:rgba(37,211,102,.14);color:#25D366;border:1px solid rgba(37,211,102,.4);';
-      b1.textContent = '📲 WhatsApp client';
-      b1.onclick = function(){ window.open(waLink(clientTel, (document.getElementById('v42-msg-client')||{}).textContent||''), '_blank'); };
-      rows[0].appendChild(b1);
-    }
-    if (rows[1] && sTel){
-      var b2 = document.createElement('button');
-      b2.className = 'v42-btn v42-wa-st';
-      b2.style.cssText = 'background:rgba(37,211,102,.14);color:#25D366;border:1px solid rgba(37,211,102,.4);';
-      b2.textContent = '📲 WhatsApp ST';
-      b2.onclick = function(){ window.open(waLink(sTel, (document.getElementById('v42-msg-st')||{}).textContent||''), '_blank'); };
-      rows[1].appendChild(b2);
-    }
-  }
-  if (typeof _origV42Show === 'function'){
-    window.v42ShowChantierModal = function(contact){
-      var now = Date.now();
-      if (now - _lastChantierModal < 2500) return;   /* anti double-affichage */
-      _lastChantierModal = now;
-      _lastChantierContact = contact || {};
-      var r = _origV42Show.apply(this, arguments);
-      setTimeout(function(){ try { addWAButtons(_lastChantierContact); } catch(e){} }, 30);
-      return r;
-    };
-  }
-  var _prevAccept = window.acceptDevis;
-  window.acceptDevis = function(docNum){
-    var r = _prevAccept ? _prevAccept.apply(this, arguments) : undefined;
-    setTimeout(function(){
-      try {
-        if (typeof window.v42ShowChantierModal !== 'function') return;
-        var h = hist().find(function(e){return String(e.docNum)===String(docNum);});
-        var nomDevis = normName(h && h.clientNom);
-        var match = getC().find(function(c){
-          var n = nrm(c);
-          if (String(n.devisDocNum||'')===String(docNum)) return true;
-          if (!nomDevis||nomDevis.length<2) return false;
-          var nc = normName(n.nom);
-          return nc.length>=2 && (nomDevis.indexOf(nc)>=0 || nc.indexOf(nomDevis)>=0);
-        });
-        var c = match ? nrm(match) : null;
-        if (!c && h) c = { civilite:'', nom:h.clientNom||'', tel:h.clientTel||'', adresse:h.chantierAdresse||h.clientAdresse||'', commune:h.chantierVille||h.clientVille||'', ville:h.clientVille||'', st:h.stNom||'', date:'', heure:'' };
-        if (c) window.v42ShowChantierModal(c);
-      } catch(e){ console.warn('[YAMA CRM] devis validé → chantier:', e); }
-    }, 750);
-    return r;
-  };
-  window.acceptDevis.__ytWrapped = true;
-
-  console.info('[YAMA CRM 2026] Annuaire neutre · dossiers liés · refus non-archivant · devis validé → messages chantier.');
-})();
-</script>
-
-<!-- ════════════════════════════════════════════════════════════════
-     YAMA AUTOMATISATIONS 2026
-     • Fin de chantier → message de satisfaction client
-     • Cockpit : panneau « Relances à faire » (devis sans réponse + impayés)
-     • Export comptable CSV des factures (onglet Analyse)
-     Patch additif non destructif — réutilise les modals/relances existants.
-════════════════════════════════════════════════════════════════ -->
-<style id="yama-automations-css">
-  .yama-relances-panel{ margin:0 0 18px; border:1px solid rgba(201,168,76,.22); border-radius:14px;
-    background:linear-gradient(180deg,rgba(201,168,76,.06),rgba(255,255,255,.015)); padding:16px 18px; }
-  .yama-relances-head{ display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px; }
-  .yama-relances-title{ font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--gold,#C9A84C); }
-  .yama-relances-sub{ font-size:11px;color:#8a8a8a; }
-  .yama-relances-cols{ display:grid;grid-template-columns:1fr 1fr;gap:14px; }
-  @media(max-width:780px){ .yama-relances-cols{ grid-template-columns:1fr; } }
-  .yama-relances-col h4{ margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#aab; display:flex;align-items:center;gap:7px; }
-  .yama-relances-col h4 .cnt{ background:rgba(255,255,255,.08);border-radius:20px;padding:1px 8px;font-size:11px;color:#fff; }
-  .yama-relance-item{ display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid rgba(255,255,255,.07);border-radius:9px;margin-bottom:6px;background:rgba(255,255,255,.02); }
-  .yama-relance-item .ri-id{ font-weight:700;color:#fff;font-size:12px; }
-  .yama-relance-item .ri-meta{ font-size:10.5px;color:#8a8a8a;margin-top:1px; }
-  .yama-relance-empty{ font-size:11.5px;color:#6f6f6f;padding:6px 2px; }
-  .yama-mini-relance{ background:rgba(91,156,246,.12);color:#5b9cf6;border:1px solid rgba(91,156,246,.3);border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap; }
-  .yama-mini-relance.red{ background:rgba(224,82,82,.12);color:#e05252;border-color:rgba(224,82,82,.3); }
-  /* Modal générique message (satisfaction, etc.) */
-  #yama-msg-modal{ position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:99999;padding:18px; }
-  #yama-msg-modal.open{ display:flex; }
-  #yama-msg-modal .ymm-box{ background:var(--bg2,#141414);border:1px solid rgba(201,168,76,.3);border-radius:16px;max-width:520px;width:100%;padding:22px; }
-  #yama-msg-modal .ymm-title{ font-size:16px;font-weight:800;color:#fff;margin-bottom:4px; }
-  #yama-msg-modal .ymm-sub{ font-size:12px;color:#8a8a8a;margin-bottom:14px; }
-  #yama-msg-modal .ymm-text{ background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:11px;padding:13px 15px;color:var(--text,#efefef);font-size:13px;line-height:1.7;white-space:pre-wrap;min-height:150px;max-height:46vh;overflow:auto; }
-  #yama-msg-modal .ymm-row{ display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;justify-content:flex-end; }
-  #yama-msg-modal .ymm-btn{ border-radius:9px;padding:9px 14px;font-size:12px;font-weight:800;cursor:pointer;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#ddd; }
-  #yama-msg-modal .ymm-btn.wa{ background:rgba(37,211,102,.14);color:#25D366;border-color:rgba(37,211,102,.4); }
-  #yama-msg-modal .ymm-btn.gold{ background:rgba(201,168,76,.16);color:#C9A84C;border-color:rgba(201,168,76,.4); }
-  .yama-export-bar{ display:flex;justify-content:flex-end;margin-bottom:14px; }
-  .yama-export-btn{ background:rgba(82,199,127,.12);color:#52c77f;border:1px solid rgba(82,199,127,.32);border-radius:9px;padding:9px 14px;font-size:12px;font-weight:800;cursor:pointer; }
-</style>
-<script id="yama-automations-2026">
-(function yamaAutomations(){
-  if (window.__YAMA_AUTOMATIONS_2026__) return;
-  window.__YAMA_AUTOMATIONS_2026__ = true;
-
-  /* ── helpers ── */
-  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];}); }
-  function getC(){ try { return (typeof getContacts==='function')?getContacts():[]; } catch(e){ return []; } }
-  function nrm(c){ try { return (typeof normalizeContact==='function')?normalizeContact(c):c; } catch(e){ return c; } }
-  function hist(){ try { return (typeof getHistory==='function')?getHistory():[]; } catch(e){ return []; } }
-  function clientPaid(){ try { return (typeof getClientPaid==='function')?getClientPaid():{}; } catch(e){ return {}; } }
-  function devisStatuses(){ try { return (typeof getDevisStatuses==='function')?getDevisStatuses():{}; } catch(e){ return {}; } }
-  function chantiers(){ try { if (typeof getChantiers==='function') return getChantiers(); } catch(e){} try { return JSON.parse(localStorage.getItem('yama_chantiers_v12')||'[]'); } catch(e){ return []; } }
-  function normName(s){ return String(s||'').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim(); }
-  function eur(n){ var v=parseFloat(n)||0; return v.toLocaleString('fr-BE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
-  function fdate(d){ try { return (typeof fmtDateFR==='function' && d)?fmtDateFR(d):String(d||'').slice(0,10); } catch(e){ return String(d||'').slice(0,10); } }
-  function daysSince(iso){ if(!iso) return 0; var t=new Date(iso).getTime(); if(isNaN(t)) return 0; return Math.floor((Date.now()-t)/86400000); }
-  function findCidByName(name){ var t=normName(name); if(!t||t.length<3) return null; var f=getC().find(function(c){ var nc=normName(nrm(c).nom); return nc.length>=3 && (t.indexOf(nc)>=0||nc.indexOf(t)>=0); }); return f?(f.id||f.contact_id):null; }
-  function waLink(tel,text){ var c=String(tel||'').replace(/[^\d+]/g,''); var n=c.charAt(0)==='0'?'32'+c.slice(1):c.replace(/^\+/,''); return 'https://wa.me/'+encodeURIComponent(n)+'?text='+encodeURIComponent(text||''); }
-
-  /* ════════ Modal générique message ════════ */
-  function ensureMsgModal(){
-    var m=document.getElementById('yama-msg-modal'); if(m) return m;
-    m=document.createElement('div'); m.id='yama-msg-modal';
-    m.innerHTML='<div class="ymm-box"><div class="ymm-title" id="ymm-title"></div><div class="ymm-sub" id="ymm-sub"></div>'
-      +'<div class="ymm-text" id="ymm-text" contenteditable="true"></div>'
-      +'<div class="ymm-row"><button class="ymm-btn wa" id="ymm-wa">📲 WhatsApp</button>'
-      +'<button class="ymm-btn gold" id="ymm-copy">Copier</button>'
-      +'<button class="ymm-btn" id="ymm-close">Fermer</button></div></div>';
-    document.body.appendChild(m);
-    m.addEventListener('click',function(e){ if(e.target===m) m.classList.remove('open'); });
-    m.querySelector('#ymm-close').onclick=function(){ m.classList.remove('open'); };
-    m.querySelector('#ymm-copy').onclick=function(){
-      var t=m.querySelector('#ymm-text').innerText||'';
-      try{ navigator.clipboard.writeText(t); }catch(e){}
-      var b=m.querySelector('#ymm-copy'); var p=b.textContent; b.textContent='✓ Copié'; setTimeout(function(){b.textContent=p;},1800);
-    };
-    return m;
-  }
-  function showMsgModal(title, sub, text, tel){
-    var m=ensureMsgModal();
-    m.querySelector('#ymm-title').textContent=title||'Message';
-    m.querySelector('#ymm-sub').textContent=sub||'';
-    m.querySelector('#ymm-text').innerText=text||'';
-    var wa=m.querySelector('#ymm-wa');
-    if(tel){ wa.style.display=''; wa.onclick=function(){ window.open(waLink(tel,(m.querySelector('#ymm-text').innerText||'')),'_blank'); }; }
-    else { wa.style.display='none'; }
-    m.classList.add('open');
-  }
-  window.yamaShowMsgModal = showMsgModal;
-
-  /* ════════ 1. FIN DE CHANTIER → MESSAGE DE SATISFACTION ════════ */
-  var _lastSatis = 0;
-  function satisfactionFor(name, tel){
-    var n=(name||'').trim();
-    var msg='Bonjour '+(n||'')+',\n\n'
-      +'Votre chantier est à présent terminé. J’espère que tout s’est bien passé et que le résultat correspond à vos attentes.\n\n'
-      +'N’hésitez pas à me dire s’il y a le moindre point à vérifier ou la moindre question — nous restons disponibles.\n\n'
-      +'Si vous êtes satisfait du travail réalisé, un petit avis ou une recommandation nous aiderait beaucoup.\n\n'
-      +'Bien à vous,\nYAMA GROUP\n📞 0489 33 77 00';
-    showMsgModal('🤝 Chantier terminé — satisfaction client', 'Message prêt à envoyer au client.', msg, tel);
-  }
-  function triggerSatisfaction(name, tel, cid){
-    var now=Date.now(); if(now-_lastSatis<2500) return; _lastSatis=now;
-    // si on a un contact CRM, on privilégie le modal natif (options + suivi)
-    if(cid && typeof window.openCrmFinalMessageModal==='function'){ try{ window.openCrmFinalMessageModal(cid); return; }catch(e){} }
-    satisfactionFor(name, tel);
-  }
-  // a) fiche chantier marquée terminée
-  if (typeof window.markYamaChantierDone==='function'){
-    var _origDone=window.markYamaChantierDone;
-    window.markYamaChantierDone=function(id){
-      var r=_origDone.apply(this,arguments);
-      setTimeout(function(){ try{
-        var ch=chantiers().find(function(c){return String(c.id)===String(id);});
-        if(!ch) return;
-        var nm=ch.clientName||ch.clientNom||''; var cid=findCidByName(nm);
-        var tel=''; if(cid){ var c=getC().find(function(x){return String(x.id||x.contact_id)===String(cid);}); tel=c?nrm(c).tel:''; }
-        triggerSatisfaction(nm, tel, cid);
-      }catch(e){ console.warn('[YAMA auto] satisfaction:',e); } }, 500);
-      return r;
-    };
-  }
-  // b) contact CRM en chantier marqué terminé
-  if (typeof window.markFollowUpDone==='function'){
-    var _origFU=window.markFollowUpDone;
-    window.markFollowUpDone=function(cid){
-      var wasChantier=false;
-      try{ var c=getC().find(function(x){return String(x.id||x.contact_id)===String(cid);}); var n=c?nrm(c):null; wasChantier=!!(n&&(n.followUpStatus==='chantier'||n.type==='chantier')); }catch(e){}
-      var r=_origFU.apply(this,arguments);
-      if(wasChantier) setTimeout(function(){ try{
-        var c=getC().find(function(x){return String(x.id||x.contact_id)===String(cid);}); var n=c?nrm(c):{};
-        triggerSatisfaction((n.civilite?n.civilite+' ':'')+(n.nom||''), n.tel||'', cid);
-      }catch(e){} }, 500);
-      return r;
-    };
-  }
-
-  /* ════════ 2. COCKPIT : PANNEAU « RELANCES À FAIRE » ════════ */
-  function buildRelanceItem(e, kind){
-    var nm=e.clientNom||''; var cid=findCidByName(nm);
-    var act, cls;
-    if(kind==='facture'){ cls='red'; act = cid ? "openClientRelanceModal('"+cid+"')" : "switchTab('history')"; }
-    else { cls=''; act = cid ? "openClientRelanceModal('"+cid+"')" : "switchTab('devis')"; }
-    var meta = esc(nm||'—')+' · '+eur(e.totalTTC) + (kind==='devis'?(' · '+daysSince(e.savedAt||e.dateEmission)+'j'):'');
-    return '<div class="yama-relance-item"><div style="min-width:0;"><div class="ri-id">'+esc(e.docNum||'')+'</div><div class="ri-meta">'+meta+'</div></div>'
-      +'<button class="yama-mini-relance '+cls+'" onclick="try{'+act+'}catch(e){}">Relancer</button></div>';
-  }
-  function renderCockpitRelances(){
-    var host=document.getElementById('tab-cockpit'); if(!host) return;
-    var all=hist(); var cp=clientPaid(); var ds=devisStatuses();
-    var impayes=all.filter(function(e){ return e&&e.docType==='facture'&&!e.deleted&&!e.deletedAt&&!cp[e.docNum]; })
-      .sort(function(a,b){ return String(a.savedAt||'').localeCompare(String(b.savedAt||'')); });
-    var pending=all.filter(function(e){ if(!e||e.docType!=='devis'||e.deleted||e.deletedAt) return false; var st=(ds[e.docNum]&&ds[e.docNum].status)||'pending'; return st==='pending'; })
-      .sort(function(a,b){ return String(a.savedAt||'').localeCompare(String(b.savedAt||'')); });
-    var impTot=impayes.reduce(function(s,e){return s+(parseFloat(e.totalTTC)||0);},0);
-    var panel=document.getElementById('yama-cockpit-relances');
-    if(!panel){ panel=document.createElement('div'); panel.id='yama-cockpit-relances'; panel.className='yama-relances-panel'; }
-    if(host.firstChild!==panel) host.insertBefore(panel, host.firstChild);
-    var colImp = impayes.length
-      ? impayes.slice(0,6).map(function(e){return buildRelanceItem(e,'facture');}).join('')
-      : '<div class="yama-relance-empty">Aucune facture impayée. 👌</div>';
-    var colDev = pending.length
-      ? pending.slice(0,6).map(function(e){return buildRelanceItem(e,'devis');}).join('')
-      : '<div class="yama-relance-empty">Aucun devis en attente de réponse.</div>';
-    panel.innerHTML =
-      '<div class="yama-relances-head"><div class="yama-relances-title">Relances à faire</div>'
-      +'<div class="yama-relances-sub">'+impayes.length+' impayé(s) · '+eur(impTot)+' à encaisser</div></div>'
-      +'<div class="yama-relances-cols">'
-      +'<div class="yama-relances-col"><h4>Factures impayées <span class="cnt">'+impayes.length+'</span></h4>'+colImp+'</div>'
-      +'<div class="yama-relances-col"><h4>Devis sans réponse <span class="cnt">'+pending.length+'</span></h4>'+colDev+'</div>'
-      +'</div>';
-  }
-  if (typeof window.renderCockpit==='function'){
-    var _origCockpit=window.renderCockpit;
-    window.renderCockpit=function(){
-      var r=_origCockpit.apply(this,arguments);
-      setTimeout(function(){ try{ renderCockpitRelances(); }catch(e){ console.warn('[YAMA auto] cockpit relances:',e); } }, 60);
-      return r;
-    };
-  }
-
-  /* ════════ 3. EXPORT COMPTABLE CSV DES FACTURES (onglet Analyse) ════════ */
-  function csvCell(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; }
-  function htOf(e){
-    if(e.totalHT!=null && !isNaN(parseFloat(e.totalHT))) return parseFloat(e.totalHT);
-    try{ if(Array.isArray(e.lignesClient)) return e.lignesClient.reduce(function(s,l){return s+(parseFloat(l.qte)||0)*(parseFloat(l.pu)||0);},0); }catch(x){}
-    return null;
-  }
-  window.yamaExportFacturesCSV=function(){
-    var cp=clientPaid();
-    var facts=hist().filter(function(e){return e&&e.docType==='facture'&&!e.deleted&&!e.deletedAt;})
-      .sort(function(a,b){ return String(a.savedAt||a.dateEmission||'').localeCompare(String(b.savedAt||b.dateEmission||'')); });
-    if(!facts.length){ if(typeof showToast==='function') showToast('Aucune facture à exporter','error'); return; }
-    var E=new Intl.NumberFormat('fr-BE',{minimumFractionDigits:2,maximumFractionDigits:2});
-    var head=['Mois','Date','N° Facture','Client','Ville','Montant HT','TVA','Total TTC','Sous-traitant','Statut paiement'];
-    var rows=facts.map(function(e){
-      var d=String(e.dateEmission||e.savedAt||'').slice(0,10);
-      var mois=d.slice(0,7);
-      var ht=htOf(e); var ttc=parseFloat(e.totalTTC)||0; var tva=(ht!=null)?(ttc-ht):'';
-      return [mois, d, e.docNum||'', e.clientNom||'', e.chantierVille||e.clientVille||'',
-        ht!=null?E.format(ht):'', tva!==''?E.format(tva):'', E.format(ttc), e.stNom||'',
-        cp[e.docNum]?'PAYÉE':'IMPAYÉE'].map(csvCell).join(';');
-    });
-    var blob=new Blob(['﻿'+[head.map(csvCell).join(';')].concat(rows).join('\r\n')],{type:'text/csv;charset=utf-8'});
-    var url=URL.createObjectURL(blob); var a=document.createElement('a');
-    a.href=url; a.download='YAMA_Factures_'+new Date().toISOString().slice(0,10)+'.csv';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-    if(typeof showToast==='function') showToast('Export comptable CSV généré','success');
-  };
-  function ensureExportButton(){
-    var tab=document.getElementById('tab-analyse'); if(!tab) return;
-    if(tab.querySelector('#yamaExportFacturesBtn')) return;
-    var cont=tab.querySelector('.container')||tab;
-    var bar=document.createElement('div'); bar.className='yama-export-bar';
-    bar.innerHTML='<button class="yama-export-btn" id="yamaExportFacturesBtn" onclick="yamaExportFacturesCSV()">⬇ Export comptable (CSV)</button>';
-    cont.insertBefore(bar, cont.firstChild);
-  }
-  if (typeof window.renderAnalyse==='function'){
-    var _origAnalyse=window.renderAnalyse;
-    window.renderAnalyse=function(){ var r=_origAnalyse.apply(this,arguments); setTimeout(function(){ try{ ensureExportButton(); }catch(e){} },40); return r; };
-  }
-  setTimeout(ensureExportButton, 1500);
-
-  console.info('[YAMA AUTOMATISATIONS 2026] Satisfaction fin de chantier · Cockpit relances · Export CSV factures.');
-})();
-</script>
-
-<!-- ════════════════════════════════════════════════════════════════
-     YAMA UI PRO 2026 — Navigation épurée
-     Retire les émojis des onglets (rendu plus professionnel) + finition
-     typographique légère et sûre. Ne touche pas aux couleurs de fond.
-════════════════════════════════════════════════════════════════ -->
-<style id="yama-ui-pro-css">
-  /* Onglets : finition sobre et professionnelle (léger, non destructif) */
-  .tabs .tab,
-  .crm-timeline-tabs .nav-tab,
-  .nav-tabs .nav-tab{
-    letter-spacing:.01em;
-    font-weight:600;
-  }
-  /* Badge compteur : plus discret et neutre */
-  .tab-count, .tab-badge{
-    font-weight:700 !important;
-    letter-spacing:0 !important;
-  }
-  /* App switcher : libellés plus posés */
-  .u-switcher .u-btn{ letter-spacing:.01em; }
-</style>
-<script id="yama-ui-pro-2026">
-(function yamaUiPro(){
-  if (window.__YAMA_UI_PRO_2026__) return;
-  window.__YAMA_UI_PRO_2026__ = true;
-
-  /* Retire un éventuel préfixe d'émoji/symbole en tête de libellé, en
-     conservant les nœuds enfants (compteurs/badges). On nettoie seulement
-     le premier nœud texte significatif → idempotent et sans risque. */
-  var LEAD = /^[^\p{L}\p{N}]+/u;
-  function stripLeadEmoji(el){
-    if (!el) return;
-    for (var i=0; i<el.childNodes.length; i++){
-      var nd = el.childNodes[i];
-      if (nd.nodeType===3 && nd.nodeValue && nd.nodeValue.trim()){
-        var cleaned = nd.nodeValue.replace(LEAD, '');
-        if (cleaned !== nd.nodeValue) nd.nodeValue = cleaned;
-        return;
-      }
-    }
-  }
-  var SELECTORS = [
-    '.tabs .tab',
-    '.u-switcher .u-btn',
-    '.crm-timeline-tabs .nav-tab',
-    '.nav-tabs .nav-tab',
-    '#v37-s-nav .v37-s-nav-item',
-    '.crm-overdue-tab'
-  ];
-  function deEmojiAll(){
-    try {
-      SELECTORS.forEach(function(sel){
-        document.querySelectorAll(sel).forEach(stripLeadEmoji);
-      });
-    } catch(e){ /* navigateur sans \p{L} : on ignore proprement */ }
-  }
-  // Premiers passages
-  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', deEmojiAll);
-  else deEmojiAll();
-  [200,800,1600,3200,5000].forEach(function(ms){ setTimeout(deEmojiAll, ms); });
-
-  // Re-nettoyage après navigation (les onglets injectés/redessinés peuvent réintroduire un émoji)
-  ['switchTab','showPage','switchApp','renderCockpit','renderContacts'].forEach(function(fn){
-    if (typeof window[fn]==='function' && !window[fn].__uiProWrapped){
-      var orig=window[fn];
-      window[fn]=function(){ var r=orig.apply(this,arguments); setTimeout(deEmojiAll, 50); return r; };
-      window[fn].__uiProWrapped=true;
-    }
-  });
-
-  // Observe les deux barres d'onglets pour les libellés posés dynamiquement
-  try {
-    var bars = document.querySelectorAll('.tabs, .crm-timeline-tabs, .nav-tabs');
-    var mo = new MutationObserver(function(){ deEmojiAll(); });
-    bars.forEach(function(b){ mo.observe(b, { childList:true, subtree:true, characterData:true }); });
-  } catch(e){}
-
-  console.info('[YAMA UI PRO 2026] Navigation épurée — émojis retirés des onglets.');
-})();
-</script>
-
-<!-- ════════════════════════════════════════════════════════════════
-     YAMA TAB STABILITY 2026 — couche d'autorité finale
-     Corrige : (1) empilement de pages (ancienne page qui reste sous la
-     nouvelle), (2) indicateur d'onglet actif manquant, (3) espacement
-     trop condensé. Couche additive prioritaire : neutralise les conflits
-     entre les multiples systèmes d'onglets sans casser leurs fonctions.
-════════════════════════════════════════════════════════════════ -->
-<style id="yama-tab-stability-css">
-  /* 1) UN SEUL PANNEAU VISIBLE — anti-empilement (la cause du bug « pages collées ») */
-  #app-platform .tab-content:not(.active),
-  #app-crm .tab-content:not(.active),
-  #app-crm .page:not(.active){ display:none !important; }
-  #app-platform .tab-content.active,
-  #app-crm .tab-content.active,
-  #app-crm .page.active{
-    display:block !important;
-    transform:none !important;
-    animation:none !important;
-    position:relative !important;
-  }
-  /* Neutralise les classes de glissement résiduelles qui pouvaient superposer */
-  .tab-content.yama-v23-slide-next,.tab-content.yama-v23-slide-prev,
-  .tab-content.yama-final-slide-next,.tab-content.yama-final-slide-prev{
-    transform:none !important; animation:none !important; position:relative !important;
-  }
-
-  /* 2) INDICATEUR D'ONGLET ACTIF — net, CSS pur (remplace l'indicateur mobile bogué) */
-  #app-platform .tabs::after,
-  #app-crm .crm-timeline-tabs::after,
-  #app-crm .nav-tabs::after{ display:none !important; }
-  #app-platform .tabs .tab,
-  #app-crm .crm-timeline-tabs .nav-tab,
-  #app-crm .nav-tabs .nav-tab{ position:relative; }
-  #app-platform .tabs .tab.active,
-  #app-platform .tabs .tab.yama-v23-active,
-  #app-crm .crm-timeline-tabs .nav-tab.active,
-  #app-crm .nav-tabs .nav-tab.active{ color:var(--gold,#C9A84C) !important; font-weight:700 !important; }
-  #app-platform .tabs .tab.active::after,
-  #app-platform .tabs .tab.yama-v23-active::after,
-  #app-crm .crm-timeline-tabs .nav-tab.active::after,
-  #app-crm .nav-tabs .nav-tab.active::after{
-    content:''; position:absolute; left:14px; right:14px; bottom:-1px; height:2.5px;
-    background:linear-gradient(90deg, var(--gold,#C9A84C), var(--accent2,#f5c050));
-    border-radius:3px; pointer-events:none;
-  }
-
-  /* 3) ESPACEMENT + RESPIRATION des sous-onglets */
-  #app-platform .tabs,
-  #app-crm .crm-timeline-tabs,
-  #app-crm .nav-tabs{ gap:3px !important; }
-  #app-platform .tabs .tab,
-  #app-crm .crm-timeline-tabs .nav-tab,
-  #app-crm .nav-tabs .nav-tab{ padding:11px 17px !important; }
-  /* compteur un peu détaché du libellé */
-  .tab-count, .tab-badge{ margin-left:7px !important; }
-</style>
-<script id="yama-tab-stability-2026">
-(function yamaTabStability(){
-  if (window.__YAMA_TAB_STABILITY_2026__) return;
-  window.__YAMA_TAB_STABILITY_2026__ = true;
-
-  /* Filet de sécurité : garantit qu'UN SEUL panneau porte .active par app.
-     Ne fait que RETIRER les .active en trop (jamais en ajouter) → ne peut pas
-     provoquer d'écran vide. */
-  function keepOne(nodes, preferredId){
-    if (nodes.length <= 1) return;
-    var keep = null;
-    if (preferredId) for (var i=0;i<nodes.length;i++){ if (nodes[i].id===preferredId){ keep=nodes[i]; break; } }
-    if (!keep) keep = nodes[nodes.length-1];           // sinon on garde le dernier activé
-    nodes.forEach(function(n){ if (n!==keep) n.classList.remove('active'); });
-  }
-  function enforceSingle(){
-    try {
-      var plat = document.getElementById('app-platform');
-      if (plat){
-        var pTab = plat.querySelector('.tabs .tab.active, .tabs .tab.yama-v23-active');
-        keepOne(Array.prototype.slice.call(plat.querySelectorAll('.tab-content.active')),
-                pTab ? ('tab-' + (pTab.dataset.tab||'')) : null);
-      }
-      var crm = document.getElementById('app-crm');
-      if (crm){
-        var cTab = crm.querySelector('.nav-tab.active');
-        var pageId = cTab ? ('page-' + (cTab.dataset.page||'')) : null;
-        keepOne(Array.prototype.slice.call(crm.querySelectorAll('.page.active')), pageId);
-        keepOne(Array.prototype.slice.call(crm.querySelectorAll('.tab-content.active')), null);
-      }
-    } catch(e){ /* silencieux */ }
-  }
-  window.yamaEnforceSingleTab = enforceSingle;
-
-  // Après tout clic d'onglet (phase bubbling = après les handlers capture existants)
-  document.addEventListener('click', function(e){
-    var t = e.target.closest && e.target.closest(
-      '#app-platform .tabs .tab, #app-crm .crm-timeline-tabs .nav-tab, #app-crm .nav-tabs .nav-tab');
-    if (t){ setTimeout(enforceSingle, 0); setTimeout(enforceSingle, 70); setTimeout(enforceSingle, 260); }
-  }, false);
-
-  // Au démarrage + après bascule d'application
-  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', enforceSingle);
-  else enforceSingle();
-  [400,1200,2600].forEach(function(ms){ setTimeout(enforceSingle, ms); });
-  if (typeof window.switchApp==='function' && !window.switchApp.__tabStab){
-    var _origSwitchApp = window.switchApp;
-    window.switchApp = function(){ var r=_origSwitchApp.apply(this,arguments); setTimeout(enforceSingle,40); return r; };
-    window.switchApp.__tabStab = true;
-  }
-
-  console.info('[YAMA TAB STABILITY 2026] Anti-empilement · indicateur actif · espacement.');
-})();
-</script>
-
-<!-- ════════════════════════════════════════════════════════════════
-     YAMA VIEW CONTROLLER 2026 — autorité finale d'affichage
-     Le CSS seul ne suffisait pas (trop de règles concurrentes). Ce
-     contrôleur force, en styles INLINE (qui battent toutes les feuilles
-     de style), qu'UN SEUL panneau et UNE SEULE app soient visibles.
-     Corrige définitivement : empilement cockpit/historique/analyse,
-     CRM qui transparaît, indicateur d'onglet, espacement, saut de mise
-     en page (fond qui apparaît).
-════════════════════════════════════════════════════════════════ -->
-<style id="yama-view-controller-css">
-  /* Supprime le min-height qui causait les sauts de mise en page */
-  #app-platform .tab-content.active{ min-height:0 !important; }
-  /* Annule les ::after d'onglets (remplacés par JS inline) */
-  #app-platform .tabs::after,
-  #app-platform .tabs .tab::after,
-  #app-crm .crm-timeline-tabs::after,
-  #app-crm .nav-tabs::after{ display:none !important; content:none !important; }
-  /* Espacement propre */
-  #app-platform .tabs{ gap:4px !important; }
-  #app-platform .tabs .tab{ flex:0 0 auto !important; }
-  .tab-count,.tab-badge{ margin-left:7px !important; }
-</style>
-<script id="yama-view-controller-2026">
-/* ════════════════════════════════════════════════════════════
-   YAMA VIEW FIX 2026 — correctif définitif empilement + indicateur
-   Racine du bug "ancienne page visible sous nouvelle page" :
-   applyExclusive utilisait removeProperty('display') pour le panneau
-   actif, qui gardait display:none!important inline pendant 1 frame RAF.
-   Fix : setProperty('block','important') toujours, synchrone, setInterval.
-   ════════════════════════════════════════════════════════════ */
-(function yamaViewFix(){
-  if (window.__YAMA_VIEW_FIX_2026__) return;
-  window.__YAMA_VIEW_FIX_2026__ = true;
+<script>
+(function yamaFixPropre2026(){
+  'use strict';
+  if (window.__YAMA_FIX_PROPRE_2026__) return;
+  window.__YAMA_FIX_PROPRE_2026__ = true;
 
   var GOLD = '#C9A84C';
 
-  function enforce(){
+  /* ── Enforcement principal ──────────────────────────────────────── */
+  function enforce() {
     try {
-      /* 1 ── App level : CRM vs Platform ── */
-      var app = window.currentApp || 'crm';
+      var app  = window.currentApp || 'crm';
       var crm  = document.getElementById('app-crm');
       var plat = document.getElementById('app-platform');
-      if (crm)  crm.style.setProperty('display',  app==='crm'      ? 'block' : 'none', 'important');
-      if (plat) plat.style.setProperty('display', app==='platform'  ? 'block' : 'none', 'important');
+
+      /* 1. Visibilité des sections principales */
+      if (crm)  crm.style.setProperty('display',  app === 'crm'      ? 'block' : 'none', 'important');
+      if (plat) plat.style.setProperty('display',  app === 'platform' ? 'block' : 'none', 'important');
+
       if (app !== 'platform' || !plat) return;
 
-      /* 2 ── Platform tab panels ── */
+      /* 2. Trouver l'onglet actif */
       var activeBtn = plat.querySelector('.tabs .tab.active') ||
                       plat.querySelector('.tabs .tab.yama-v23-active');
       if (!activeBtn) return;
 
       var activeTabName = activeBtn.dataset.tab || '';
-      /* Ne pas forcer 'priorites' : V44 le redirige vers cockpit à T+200ms */
+      /* V44/V45 gère la redirection priorites→cockpit, ne pas interférer */
       if (activeTabName === 'priorites') return;
 
       var targetId = 'tab-' + activeTabName;
-      var panels   = plat.querySelectorAll('.tab-content');
 
-      panels.forEach(function(p){
+      /* 3. Stacking fix : display forcé sur chaque panel */
+      plat.querySelectorAll('.tab-content').forEach(function(p) {
         var isAct = (p.id === targetId);
-        /*
-         * FIX CRITIQUE : toujours setProperty (jamais removeProperty).
-         * removeProperty laissait le panneau actif avec display:none!important
-         * résiduel pendant 1 frame → flash blanc / empilement.
-         */
-        p.style.setProperty('display', isAct ? 'block' : 'none', 'important');
-        if (isAct) p.classList.add('active');
-        else       p.classList.remove('active');
+        p.style.setProperty('display',         isAct ? 'block'   : 'none',  'important');
+        p.style.setProperty('pointer-events',  isAct ? 'auto'    : 'none',  'important');
+        p.style.setProperty('opacity',         isAct ? '1'       : '0',     'important');
+        if (isAct) { if (!p.classList.contains('active')) p.classList.add('active'); }
+        else       { p.classList.remove('active'); }
       });
 
-      /* 3 ── Indicateur doré (box-shadow inset + couleur, inline !important) ── */
-      plat.querySelectorAll('.tabs .tab').forEach(function(t){
-        var isAct = (t === activeBtn) ||
-                    t.classList.contains('active') ||
-                    t.classList.contains('yama-v23-active');
-        if (isAct){
-          t.style.setProperty('box-shadow', 'inset 0 -3px 0 0 '+GOLD, 'important');
-          t.style.setProperty('color',       GOLD,  'important');
-          t.style.setProperty('font-weight', '700', 'important');
-          t.style.setProperty('border-bottom','3px solid '+GOLD,'important');
+      /* 4. Indicateur doré via box-shadow inline — gagne sur tout CSS */
+      plat.querySelectorAll('.tabs .tab').forEach(function(t) {
+        var isAct = (t === activeBtn ||
+                     t.classList.contains('active') ||
+                     t.classList.contains('yama-v23-active'));
+        if (isAct) {
+          t.style.setProperty('box-shadow',    'inset 0 -3px 0 0 ' + GOLD,  'important');
+          t.style.setProperty('color',         GOLD,                          'important');
+          t.style.setProperty('font-weight',   '700',                         'important');
+          t.style.setProperty('border-bottom', '3px solid ' + GOLD,           'important');
         } else {
-          t.style.setProperty('box-shadow',   'none',              'important');
-          t.style.setProperty('border-bottom','3px solid transparent','important');
+          t.style.setProperty('box-shadow',    'none',                        'important');
+          t.style.setProperty('border-bottom', '3px solid transparent',       'important');
           t.style.removeProperty('color');
           t.style.removeProperty('font-weight');
         }
       });
-    } catch(e){}
+    } catch(e) { /* silencieux */ }
   }
 
   window.__yamaEnforce = enforce;
 
-  /* ── Surveillance continue (rattrape les renders async) ── */
-  setInterval(enforce, 180);
+  /* ── Enforcement permanent ──────────────────────────────────────── */
+  setInterval(enforce, 200);
 
-  /* ── Déclenchement immédiat ── */
-  enforce();
-
-  /* ── DOMContentLoaded : s'enregistre APRÈS la ligne 9366
-     → notre handler s'exécute après le display:block CRM forcé ── */
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', function(){
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
       enforce();
       setTimeout(enforce, 80);
-      setTimeout(enforce, 300);
-      setTimeout(enforce, 800);
+      setTimeout(enforce, 320);
+      setTimeout(enforce, 900);
     });
   } else {
-    setTimeout(enforce, 0);
+    enforce();
     setTimeout(enforce, 80);
-    setTimeout(enforce, 300);
+    setTimeout(enforce, 320);
   }
 
-  /* ── Clic (réaction immédiate sans attendre l'intervalle) ── */
-  document.addEventListener('click', function(e){
-    var t = e.target && e.target.closest &&
+  /* ── Trigger immédiat après chaque clic sur onglet/bouton app ── */
+  document.addEventListener('click', function(e) {
+    if (!e.target) return;
+    var t = e.target.closest &&
             e.target.closest('#app-platform .tab, #app-crm .nav-tab, .u-btn');
     if (!t) return;
     enforce();
     setTimeout(enforce, 60);
-    setTimeout(enforce, 250);
+    setTimeout(enforce, 270);
   });
 
-  /* ── Enrobage des fonctions de navigation ── */
-  var FNS = ['switchTab','switchTabSmooth','switchApp','showPage','activateCockpit',
-             'renderCockpit','renderHistory','renderAnalyse'];
-  function wrapFn(name){
-    if (typeof window[name] !== 'function' || window[name].__vFix2026) return;
+  /* ── Wrapping des fonctions critiques ───────────────────────────── */
+  var FNS = [
+    'switchTab', 'switchTabSmooth', 'switchPlatformTabStable',
+    'switchApp', 'showPage', 'activateCockpit',
+    'renderCockpit', 'renderAnalyse', 'renderDevisTab'
+  ];
+  function wrapFn(name) {
+    if (typeof window[name] !== 'function' || window[name].__yamaFP26) return;
     var orig = window[name];
-    window[name] = function(){ var r = orig.apply(this, arguments); enforce(); return r; };
-    window[name].__vFix2026 = true;
+    window[name] = function() { var r = orig.apply(this, arguments); enforce(); return r; };
+    window[name].__yamaFP26 = true;
   }
   FNS.forEach(wrapFn);
-
-  /* Ré-enrobage des fonctions injectées tardivement */
-  [250, 700, 1800, 4000].forEach(function(ms){
-    setTimeout(function(){ FNS.forEach(wrapFn); enforce(); }, ms);
+  [260, 820, 2000, 5000].forEach(function(ms) {
+    setTimeout(function() { FNS.forEach(wrapFn); enforce(); }, ms);
   });
 
-  console.info('[YAMA VIEW FIX 2026] setProperty!important · setInterval · border-bottom indicator');
+  /* ═══════════════════════════════════════════════════════════════
+     HISTORIQUE — Amélioration DOM post-render
+  ═══════════════════════════════════════════════════════════════ */
+
+  /* Améliorer les en-têtes de section FACTURES / DEVIS */
+  function upgradeHistoryHeaders() {
+    var list = document.getElementById('historyList');
+    if (!list) return;
+    Array.from(list.children).forEach(function(el) {
+      if (el.tagName !== 'DIV') return;
+      if (el.classList.contains('history-item') || el.classList.contains('history-empty')) return;
+      if (el.dataset.yamaHdrUpgraded) return;
+      el.dataset.yamaHdrUpgraded = '1';
+
+      var spans = el.querySelectorAll('span');
+      if (spans.length < 2) return;
+      var labelSpan = spans[0];
+      var countSpan = spans[1];
+      var labelText = (labelSpan.textContent || '').toUpperCase();
+      var isFacture = labelText.indexOf('FACTURE') !== -1;
+      var r = isFacture ? '82,199,127' : '201,168,76';
+
+      /* En-tête de section : plus de présence visuelle */
+      el.style.cssText = [
+        'display:flex',
+        'align-items:center',
+        'gap:12px',
+        'padding:22px 0 12px',
+        'margin-top:24px',
+        'margin-bottom:4px',
+        'border-bottom:2px solid rgba(' + r + ',0.45)'
+      ].join(';');
+
+      /* Label */
+      labelSpan.style.cssText = [
+        'font-family:Barlow Condensed,sans-serif',
+        'font-size:13px',
+        'font-weight:800',
+        'letter-spacing:2px',
+        'text-transform:uppercase',
+        'color:rgba(' + r + ',1)'
+      ].join(';');
+
+      /* Badge compteur */
+      countSpan.style.cssText = [
+        'font-size:11px',
+        'background:rgba(' + r + ',0.18)',
+        'color:rgba(' + r + ',1)',
+        'padding:3px 10px',
+        'border-radius:10px',
+        'font-weight:700',
+        'border:1px solid rgba(' + r + ',0.35)'
+      ].join(';');
+    });
+  }
+
+  /* Améliorer chaque ligne de l'historique : séparer statut du titre */
+  function upgradeHistoryItems() {
+    var list = document.getElementById('historyList');
+    if (!list) return;
+    list.querySelectorAll('.history-item:not([data-yama-item-upgraded])').forEach(function(item) {
+      item.dataset.yamaItemUpgraded = '1';
+      var hiTitle = item.querySelector('.hi-title');
+      var hiSub   = item.querySelector('.hi-sub');
+      if (!hiTitle || !hiSub) return;
+
+      /* Le statut est le dernier span sans classe dans hi-title */
+      var allSpans = Array.from(hiTitle.querySelectorAll('span'));
+      var statusSpan = null;
+      for (var i = allSpans.length - 1; i >= 0; i--) {
+        if (!allSpans[i].className) { statusSpan = allSpans[i]; break; }
+      }
+
+      if (statusSpan && statusSpan.parentNode === hiTitle) {
+        var statusText  = statusSpan.textContent || '';
+        var statusColor = statusSpan.style.color || 'inherit';
+        var statusBg    = statusSpan.style.background || 'transparent';
+        statusSpan.parentNode.removeChild(statusSpan);
+
+        /* Recréer le statut dans hi-sub, aligné et discret */
+        var pill = document.createElement('span');
+        pill.style.cssText = [
+          'display:inline-flex',
+          'align-items:center',
+          'font-size:10px',
+          'font-weight:700',
+          'color:' + statusColor,
+          'background:' + (statusBg !== 'transparent' ? statusBg : 'transparent'),
+          'padding:2px 8px',
+          'border-radius:8px'
+        ].join(';');
+        pill.textContent = statusText;
+        hiSub.appendChild(pill);
+      }
+    });
+  }
+
+  function upgradeHistory() {
+    upgradeHistoryHeaders();
+    upgradeHistoryItems();
+  }
+
+  /* Patcher renderHistory une seule fois */
+  function patchRenderHistory() {
+    if (window.__yamaFP26histPatched) return;
+    var orig = window.renderHistory;
+    if (typeof orig !== 'function') return;
+    window.renderHistory = function() {
+      var r = orig.apply(this, arguments);
+      setTimeout(upgradeHistory, 30);
+      return r;
+    };
+    window.__yamaFP26histPatched = true;
+  }
+
+  [0, 400, 1200, 3500].forEach(function(ms) {
+    setTimeout(function() { patchRenderHistory(); upgradeHistory(); }, ms);
+  });
+
 })();
 </script>
 </body>
