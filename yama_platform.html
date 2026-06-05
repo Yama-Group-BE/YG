@@ -32218,5 +32218,311 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   console.info('[YAMA CRM 2026] Annuaire neutre · dossiers liés · refus non-archivant · devis validé → messages chantier.');
 })();
 </script>
+
+<!-- ════════════════════════════════════════════════════════════════
+     YAMA AUTOMATISATIONS 2026
+     • Fin de chantier → message de satisfaction client
+     • Cockpit : panneau « Relances à faire » (devis sans réponse + impayés)
+     • Export comptable CSV des factures (onglet Analyse)
+     Patch additif non destructif — réutilise les modals/relances existants.
+════════════════════════════════════════════════════════════════ -->
+<style id="yama-automations-css">
+  .yama-relances-panel{ margin:0 0 18px; border:1px solid rgba(201,168,76,.22); border-radius:14px;
+    background:linear-gradient(180deg,rgba(201,168,76,.06),rgba(255,255,255,.015)); padding:16px 18px; }
+  .yama-relances-head{ display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px; }
+  .yama-relances-title{ font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--gold,#C9A84C); }
+  .yama-relances-sub{ font-size:11px;color:#8a8a8a; }
+  .yama-relances-cols{ display:grid;grid-template-columns:1fr 1fr;gap:14px; }
+  @media(max-width:780px){ .yama-relances-cols{ grid-template-columns:1fr; } }
+  .yama-relances-col h4{ margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#aab; display:flex;align-items:center;gap:7px; }
+  .yama-relances-col h4 .cnt{ background:rgba(255,255,255,.08);border-radius:20px;padding:1px 8px;font-size:11px;color:#fff; }
+  .yama-relance-item{ display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid rgba(255,255,255,.07);border-radius:9px;margin-bottom:6px;background:rgba(255,255,255,.02); }
+  .yama-relance-item .ri-id{ font-weight:700;color:#fff;font-size:12px; }
+  .yama-relance-item .ri-meta{ font-size:10.5px;color:#8a8a8a;margin-top:1px; }
+  .yama-relance-empty{ font-size:11.5px;color:#6f6f6f;padding:6px 2px; }
+  .yama-mini-relance{ background:rgba(91,156,246,.12);color:#5b9cf6;border:1px solid rgba(91,156,246,.3);border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap; }
+  .yama-mini-relance.red{ background:rgba(224,82,82,.12);color:#e05252;border-color:rgba(224,82,82,.3); }
+  /* Modal générique message (satisfaction, etc.) */
+  #yama-msg-modal{ position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:99999;padding:18px; }
+  #yama-msg-modal.open{ display:flex; }
+  #yama-msg-modal .ymm-box{ background:var(--bg2,#141414);border:1px solid rgba(201,168,76,.3);border-radius:16px;max-width:520px;width:100%;padding:22px; }
+  #yama-msg-modal .ymm-title{ font-size:16px;font-weight:800;color:#fff;margin-bottom:4px; }
+  #yama-msg-modal .ymm-sub{ font-size:12px;color:#8a8a8a;margin-bottom:14px; }
+  #yama-msg-modal .ymm-text{ background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:11px;padding:13px 15px;color:var(--text,#efefef);font-size:13px;line-height:1.7;white-space:pre-wrap;min-height:150px;max-height:46vh;overflow:auto; }
+  #yama-msg-modal .ymm-row{ display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;justify-content:flex-end; }
+  #yama-msg-modal .ymm-btn{ border-radius:9px;padding:9px 14px;font-size:12px;font-weight:800;cursor:pointer;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#ddd; }
+  #yama-msg-modal .ymm-btn.wa{ background:rgba(37,211,102,.14);color:#25D366;border-color:rgba(37,211,102,.4); }
+  #yama-msg-modal .ymm-btn.gold{ background:rgba(201,168,76,.16);color:#C9A84C;border-color:rgba(201,168,76,.4); }
+  .yama-export-bar{ display:flex;justify-content:flex-end;margin-bottom:14px; }
+  .yama-export-btn{ background:rgba(82,199,127,.12);color:#52c77f;border:1px solid rgba(82,199,127,.32);border-radius:9px;padding:9px 14px;font-size:12px;font-weight:800;cursor:pointer; }
+</style>
+<script id="yama-automations-2026">
+(function yamaAutomations(){
+  if (window.__YAMA_AUTOMATIONS_2026__) return;
+  window.__YAMA_AUTOMATIONS_2026__ = true;
+
+  /* ── helpers ── */
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];}); }
+  function getC(){ try { return (typeof getContacts==='function')?getContacts():[]; } catch(e){ return []; } }
+  function nrm(c){ try { return (typeof normalizeContact==='function')?normalizeContact(c):c; } catch(e){ return c; } }
+  function hist(){ try { return (typeof getHistory==='function')?getHistory():[]; } catch(e){ return []; } }
+  function clientPaid(){ try { return (typeof getClientPaid==='function')?getClientPaid():{}; } catch(e){ return {}; } }
+  function devisStatuses(){ try { return (typeof getDevisStatuses==='function')?getDevisStatuses():{}; } catch(e){ return {}; } }
+  function chantiers(){ try { if (typeof getChantiers==='function') return getChantiers(); } catch(e){} try { return JSON.parse(localStorage.getItem('yama_chantiers_v12')||'[]'); } catch(e){ return []; } }
+  function normName(s){ return String(s||'').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim(); }
+  function eur(n){ var v=parseFloat(n)||0; return v.toLocaleString('fr-BE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+  function fdate(d){ try { return (typeof fmtDateFR==='function' && d)?fmtDateFR(d):String(d||'').slice(0,10); } catch(e){ return String(d||'').slice(0,10); } }
+  function daysSince(iso){ if(!iso) return 0; var t=new Date(iso).getTime(); if(isNaN(t)) return 0; return Math.floor((Date.now()-t)/86400000); }
+  function findCidByName(name){ var t=normName(name); if(!t||t.length<3) return null; var f=getC().find(function(c){ var nc=normName(nrm(c).nom); return nc.length>=3 && (t.indexOf(nc)>=0||nc.indexOf(t)>=0); }); return f?(f.id||f.contact_id):null; }
+  function waLink(tel,text){ var c=String(tel||'').replace(/[^\d+]/g,''); var n=c.charAt(0)==='0'?'32'+c.slice(1):c.replace(/^\+/,''); return 'https://wa.me/'+encodeURIComponent(n)+'?text='+encodeURIComponent(text||''); }
+
+  /* ════════ Modal générique message ════════ */
+  function ensureMsgModal(){
+    var m=document.getElementById('yama-msg-modal'); if(m) return m;
+    m=document.createElement('div'); m.id='yama-msg-modal';
+    m.innerHTML='<div class="ymm-box"><div class="ymm-title" id="ymm-title"></div><div class="ymm-sub" id="ymm-sub"></div>'
+      +'<div class="ymm-text" id="ymm-text" contenteditable="true"></div>'
+      +'<div class="ymm-row"><button class="ymm-btn wa" id="ymm-wa">📲 WhatsApp</button>'
+      +'<button class="ymm-btn gold" id="ymm-copy">Copier</button>'
+      +'<button class="ymm-btn" id="ymm-close">Fermer</button></div></div>';
+    document.body.appendChild(m);
+    m.addEventListener('click',function(e){ if(e.target===m) m.classList.remove('open'); });
+    m.querySelector('#ymm-close').onclick=function(){ m.classList.remove('open'); };
+    m.querySelector('#ymm-copy').onclick=function(){
+      var t=m.querySelector('#ymm-text').innerText||'';
+      try{ navigator.clipboard.writeText(t); }catch(e){}
+      var b=m.querySelector('#ymm-copy'); var p=b.textContent; b.textContent='✓ Copié'; setTimeout(function(){b.textContent=p;},1800);
+    };
+    return m;
+  }
+  function showMsgModal(title, sub, text, tel){
+    var m=ensureMsgModal();
+    m.querySelector('#ymm-title').textContent=title||'Message';
+    m.querySelector('#ymm-sub').textContent=sub||'';
+    m.querySelector('#ymm-text').innerText=text||'';
+    var wa=m.querySelector('#ymm-wa');
+    if(tel){ wa.style.display=''; wa.onclick=function(){ window.open(waLink(tel,(m.querySelector('#ymm-text').innerText||'')),'_blank'); }; }
+    else { wa.style.display='none'; }
+    m.classList.add('open');
+  }
+  window.yamaShowMsgModal = showMsgModal;
+
+  /* ════════ 1. FIN DE CHANTIER → MESSAGE DE SATISFACTION ════════ */
+  var _lastSatis = 0;
+  function satisfactionFor(name, tel){
+    var n=(name||'').trim();
+    var msg='Bonjour '+(n||'')+',\n\n'
+      +'Votre chantier est à présent terminé. J’espère que tout s’est bien passé et que le résultat correspond à vos attentes.\n\n'
+      +'N’hésitez pas à me dire s’il y a le moindre point à vérifier ou la moindre question — nous restons disponibles.\n\n'
+      +'Si vous êtes satisfait du travail réalisé, un petit avis ou une recommandation nous aiderait beaucoup.\n\n'
+      +'Bien à vous,\nYAMA GROUP\n📞 0489 33 77 00';
+    showMsgModal('🤝 Chantier terminé — satisfaction client', 'Message prêt à envoyer au client.', msg, tel);
+  }
+  function triggerSatisfaction(name, tel, cid){
+    var now=Date.now(); if(now-_lastSatis<2500) return; _lastSatis=now;
+    // si on a un contact CRM, on privilégie le modal natif (options + suivi)
+    if(cid && typeof window.openCrmFinalMessageModal==='function'){ try{ window.openCrmFinalMessageModal(cid); return; }catch(e){} }
+    satisfactionFor(name, tel);
+  }
+  // a) fiche chantier marquée terminée
+  if (typeof window.markYamaChantierDone==='function'){
+    var _origDone=window.markYamaChantierDone;
+    window.markYamaChantierDone=function(id){
+      var r=_origDone.apply(this,arguments);
+      setTimeout(function(){ try{
+        var ch=chantiers().find(function(c){return String(c.id)===String(id);});
+        if(!ch) return;
+        var nm=ch.clientName||ch.clientNom||''; var cid=findCidByName(nm);
+        var tel=''; if(cid){ var c=getC().find(function(x){return String(x.id||x.contact_id)===String(cid);}); tel=c?nrm(c).tel:''; }
+        triggerSatisfaction(nm, tel, cid);
+      }catch(e){ console.warn('[YAMA auto] satisfaction:',e); } }, 500);
+      return r;
+    };
+  }
+  // b) contact CRM en chantier marqué terminé
+  if (typeof window.markFollowUpDone==='function'){
+    var _origFU=window.markFollowUpDone;
+    window.markFollowUpDone=function(cid){
+      var wasChantier=false;
+      try{ var c=getC().find(function(x){return String(x.id||x.contact_id)===String(cid);}); var n=c?nrm(c):null; wasChantier=!!(n&&(n.followUpStatus==='chantier'||n.type==='chantier')); }catch(e){}
+      var r=_origFU.apply(this,arguments);
+      if(wasChantier) setTimeout(function(){ try{
+        var c=getC().find(function(x){return String(x.id||x.contact_id)===String(cid);}); var n=c?nrm(c):{};
+        triggerSatisfaction((n.civilite?n.civilite+' ':'')+(n.nom||''), n.tel||'', cid);
+      }catch(e){} }, 500);
+      return r;
+    };
+  }
+
+  /* ════════ 2. COCKPIT : PANNEAU « RELANCES À FAIRE » ════════ */
+  function buildRelanceItem(e, kind){
+    var nm=e.clientNom||''; var cid=findCidByName(nm);
+    var act, cls;
+    if(kind==='facture'){ cls='red'; act = cid ? "openClientRelanceModal('"+cid+"')" : "switchTab('history')"; }
+    else { cls=''; act = cid ? "openClientRelanceModal('"+cid+"')" : "switchTab('devis')"; }
+    var meta = esc(nm||'—')+' · '+eur(e.totalTTC) + (kind==='devis'?(' · '+daysSince(e.savedAt||e.dateEmission)+'j'):'');
+    return '<div class="yama-relance-item"><div style="min-width:0;"><div class="ri-id">'+esc(e.docNum||'')+'</div><div class="ri-meta">'+meta+'</div></div>'
+      +'<button class="yama-mini-relance '+cls+'" onclick="try{'+act+'}catch(e){}">Relancer</button></div>';
+  }
+  function renderCockpitRelances(){
+    var host=document.getElementById('tab-cockpit'); if(!host) return;
+    var all=hist(); var cp=clientPaid(); var ds=devisStatuses();
+    var impayes=all.filter(function(e){ return e&&e.docType==='facture'&&!e.deleted&&!e.deletedAt&&!cp[e.docNum]; })
+      .sort(function(a,b){ return String(a.savedAt||'').localeCompare(String(b.savedAt||'')); });
+    var pending=all.filter(function(e){ if(!e||e.docType!=='devis'||e.deleted||e.deletedAt) return false; var st=(ds[e.docNum]&&ds[e.docNum].status)||'pending'; return st==='pending'; })
+      .sort(function(a,b){ return String(a.savedAt||'').localeCompare(String(b.savedAt||'')); });
+    var impTot=impayes.reduce(function(s,e){return s+(parseFloat(e.totalTTC)||0);},0);
+    var panel=document.getElementById('yama-cockpit-relances');
+    if(!panel){ panel=document.createElement('div'); panel.id='yama-cockpit-relances'; panel.className='yama-relances-panel'; }
+    if(host.firstChild!==panel) host.insertBefore(panel, host.firstChild);
+    var colImp = impayes.length
+      ? impayes.slice(0,6).map(function(e){return buildRelanceItem(e,'facture');}).join('')
+      : '<div class="yama-relance-empty">Aucune facture impayée. 👌</div>';
+    var colDev = pending.length
+      ? pending.slice(0,6).map(function(e){return buildRelanceItem(e,'devis');}).join('')
+      : '<div class="yama-relance-empty">Aucun devis en attente de réponse.</div>';
+    panel.innerHTML =
+      '<div class="yama-relances-head"><div class="yama-relances-title">Relances à faire</div>'
+      +'<div class="yama-relances-sub">'+impayes.length+' impayé(s) · '+eur(impTot)+' à encaisser</div></div>'
+      +'<div class="yama-relances-cols">'
+      +'<div class="yama-relances-col"><h4>Factures impayées <span class="cnt">'+impayes.length+'</span></h4>'+colImp+'</div>'
+      +'<div class="yama-relances-col"><h4>Devis sans réponse <span class="cnt">'+pending.length+'</span></h4>'+colDev+'</div>'
+      +'</div>';
+  }
+  if (typeof window.renderCockpit==='function'){
+    var _origCockpit=window.renderCockpit;
+    window.renderCockpit=function(){
+      var r=_origCockpit.apply(this,arguments);
+      setTimeout(function(){ try{ renderCockpitRelances(); }catch(e){ console.warn('[YAMA auto] cockpit relances:',e); } }, 60);
+      return r;
+    };
+  }
+
+  /* ════════ 3. EXPORT COMPTABLE CSV DES FACTURES (onglet Analyse) ════════ */
+  function csvCell(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; }
+  function htOf(e){
+    if(e.totalHT!=null && !isNaN(parseFloat(e.totalHT))) return parseFloat(e.totalHT);
+    try{ if(Array.isArray(e.lignesClient)) return e.lignesClient.reduce(function(s,l){return s+(parseFloat(l.qte)||0)*(parseFloat(l.pu)||0);},0); }catch(x){}
+    return null;
+  }
+  window.yamaExportFacturesCSV=function(){
+    var cp=clientPaid();
+    var facts=hist().filter(function(e){return e&&e.docType==='facture'&&!e.deleted&&!e.deletedAt;})
+      .sort(function(a,b){ return String(a.savedAt||a.dateEmission||'').localeCompare(String(b.savedAt||b.dateEmission||'')); });
+    if(!facts.length){ if(typeof showToast==='function') showToast('Aucune facture à exporter','error'); return; }
+    var E=new Intl.NumberFormat('fr-BE',{minimumFractionDigits:2,maximumFractionDigits:2});
+    var head=['Mois','Date','N° Facture','Client','Ville','Montant HT','TVA','Total TTC','Sous-traitant','Statut paiement'];
+    var rows=facts.map(function(e){
+      var d=String(e.dateEmission||e.savedAt||'').slice(0,10);
+      var mois=d.slice(0,7);
+      var ht=htOf(e); var ttc=parseFloat(e.totalTTC)||0; var tva=(ht!=null)?(ttc-ht):'';
+      return [mois, d, e.docNum||'', e.clientNom||'', e.chantierVille||e.clientVille||'',
+        ht!=null?E.format(ht):'', tva!==''?E.format(tva):'', E.format(ttc), e.stNom||'',
+        cp[e.docNum]?'PAYÉE':'IMPAYÉE'].map(csvCell).join(';');
+    });
+    var blob=new Blob(['﻿'+[head.map(csvCell).join(';')].concat(rows).join('\r\n')],{type:'text/csv;charset=utf-8'});
+    var url=URL.createObjectURL(blob); var a=document.createElement('a');
+    a.href=url; a.download='YAMA_Factures_'+new Date().toISOString().slice(0,10)+'.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    if(typeof showToast==='function') showToast('Export comptable CSV généré','success');
+  };
+  function ensureExportButton(){
+    var tab=document.getElementById('tab-analyse'); if(!tab) return;
+    if(tab.querySelector('#yamaExportFacturesBtn')) return;
+    var cont=tab.querySelector('.container')||tab;
+    var bar=document.createElement('div'); bar.className='yama-export-bar';
+    bar.innerHTML='<button class="yama-export-btn" id="yamaExportFacturesBtn" onclick="yamaExportFacturesCSV()">⬇ Export comptable (CSV)</button>';
+    cont.insertBefore(bar, cont.firstChild);
+  }
+  if (typeof window.renderAnalyse==='function'){
+    var _origAnalyse=window.renderAnalyse;
+    window.renderAnalyse=function(){ var r=_origAnalyse.apply(this,arguments); setTimeout(function(){ try{ ensureExportButton(); }catch(e){} },40); return r; };
+  }
+  setTimeout(ensureExportButton, 1500);
+
+  console.info('[YAMA AUTOMATISATIONS 2026] Satisfaction fin de chantier · Cockpit relances · Export CSV factures.');
+})();
+</script>
+
+<!-- ════════════════════════════════════════════════════════════════
+     YAMA UI PRO 2026 — Navigation épurée
+     Retire les émojis des onglets (rendu plus professionnel) + finition
+     typographique légère et sûre. Ne touche pas aux couleurs de fond.
+════════════════════════════════════════════════════════════════ -->
+<style id="yama-ui-pro-css">
+  /* Onglets : finition sobre et professionnelle (léger, non destructif) */
+  .tabs .tab,
+  .crm-timeline-tabs .nav-tab,
+  .nav-tabs .nav-tab{
+    letter-spacing:.01em;
+    font-weight:600;
+  }
+  /* Badge compteur : plus discret et neutre */
+  .tab-count, .tab-badge{
+    font-weight:700 !important;
+    letter-spacing:0 !important;
+  }
+  /* App switcher : libellés plus posés */
+  .u-switcher .u-btn{ letter-spacing:.01em; }
+</style>
+<script id="yama-ui-pro-2026">
+(function yamaUiPro(){
+  if (window.__YAMA_UI_PRO_2026__) return;
+  window.__YAMA_UI_PRO_2026__ = true;
+
+  /* Retire un éventuel préfixe d'émoji/symbole en tête de libellé, en
+     conservant les nœuds enfants (compteurs/badges). On nettoie seulement
+     le premier nœud texte significatif → idempotent et sans risque. */
+  var LEAD = /^[^\p{L}\p{N}]+/u;
+  function stripLeadEmoji(el){
+    if (!el) return;
+    for (var i=0; i<el.childNodes.length; i++){
+      var nd = el.childNodes[i];
+      if (nd.nodeType===3 && nd.nodeValue && nd.nodeValue.trim()){
+        var cleaned = nd.nodeValue.replace(LEAD, '');
+        if (cleaned !== nd.nodeValue) nd.nodeValue = cleaned;
+        return;
+      }
+    }
+  }
+  var SELECTORS = [
+    '.tabs .tab',
+    '.u-switcher .u-btn',
+    '.crm-timeline-tabs .nav-tab',
+    '.nav-tabs .nav-tab',
+    '#v37-s-nav .v37-s-nav-item',
+    '.crm-overdue-tab'
+  ];
+  function deEmojiAll(){
+    try {
+      SELECTORS.forEach(function(sel){
+        document.querySelectorAll(sel).forEach(stripLeadEmoji);
+      });
+    } catch(e){ /* navigateur sans \p{L} : on ignore proprement */ }
+  }
+  // Premiers passages
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', deEmojiAll);
+  else deEmojiAll();
+  [200,800,1600,3200,5000].forEach(function(ms){ setTimeout(deEmojiAll, ms); });
+
+  // Re-nettoyage après navigation (les onglets injectés/redessinés peuvent réintroduire un émoji)
+  ['switchTab','showPage','switchApp','renderCockpit','renderContacts'].forEach(function(fn){
+    if (typeof window[fn]==='function' && !window[fn].__uiProWrapped){
+      var orig=window[fn];
+      window[fn]=function(){ var r=orig.apply(this,arguments); setTimeout(deEmojiAll, 50); return r; };
+      window[fn].__uiProWrapped=true;
+    }
+  });
+
+  // Observe les deux barres d'onglets pour les libellés posés dynamiquement
+  try {
+    var bars = document.querySelectorAll('.tabs, .crm-timeline-tabs, .nav-tabs');
+    var mo = new MutationObserver(function(){ deEmojiAll(); });
+    bars.forEach(function(b){ mo.observe(b, { childList:true, subtree:true, characterData:true }); });
+  } catch(e){}
+
+  console.info('[YAMA UI PRO 2026] Navigation épurée — émojis retirés des onglets.');
+})();
+</script>
 </body>
 </html>
