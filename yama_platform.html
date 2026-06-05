@@ -12667,9 +12667,11 @@ order by table_name;</textarea>
 
     const streetBeforeNumber = new RegExp("\\b((?:" + STREET_TYPES + ")\\s+(?:d[eu]s?\\s+|de\\s+la\\s+|de\\s+l[‘’]|d[‘’]|l[‘’]|la\\s+|le\\s+|les\\s+)?[A-Za-zÀ-ÿ0-9’’ .-]{2,80}?\\s+\\d{1,4}\\s*(?:[A-Za-z]|/[A-Za-z0-9]+)?)\\b", "i");
     const numberBeforeStreet = new RegExp("\\b(\\d{1,4}\\s*(?:[A-Za-z])?\\s*,?\\s*(?:" + STREET_TYPES + ")\\s+[A-Za-zÀ-ÿ0-9’’ .-]{2,80})\\b", "i");
+    // "rue de Géraniums, numéro 1" — numéro/n°/no label before the house number
+    const streetNumeroLabel = new RegExp("\\b((?:" + STREET_TYPES + ")\\s+(?:d[eu]s?\\s+|de\\s+la\\s+|de\\s+l[‘’]|d[‘’]|l[‘’]|la\\s+|le\\s+|les\\s+)?[A-Za-zÀ-ÿ0-9’’ .-]{2,80}?)\\s*,?\\s*(?:num[eé]ro|n[°o]\\.?|nr\\.?|#)\\s*(\\d{1,4}(?:\\s*[A-Za-z]|/[A-Za-z0-9]+)?)", "i");
 
     let candidates = [];
-    const kw = text.match(/(?:\b(?:mon|ma|notre|votre)\s+)?(?:adresse|domicile|chantier)\s*(?:c[’']est|est|:|=|se\s+trouve\s+(?:à|a)|au|à|a)?\s*([^\n\r;]{4,140})/i);
+    const kw = text.match(/(?:\b(?:mon|ma|notre|votre)\s+)?(?:adresse|domicile|chantier)\s*(?:c[‘’]est|est|:|=|se\s+trouve\s+(?:à|a)|au|à|a)?\s*([^\n\r;]{4,140})/i);
     if (kw) candidates.push(kw[1]);
     candidates.push(text);
 
@@ -12677,12 +12679,22 @@ order by table_name;</textarea>
       const m = String(block).match(streetBeforeNumber) || String(block).match(numberBeforeStreet);
       if (m) {
         let adr = cleanLabelValue(m[1])
-          .replace(/^(?:c[’']est|est|se\s+trouve\s+(?:à|a)|(?:à|a)\s+)\s*/i,'')
-          .replace(/\s*,?\s*(?:à|a)\s+[A-Za-zÀ-ÿ'’ -]{2,40}\s*$/i,'')
-          .replace(/[,.]+$/,'');
+          .replace(/^(?:c[‘’]est|est|se\s+trouve\s+(?:à|a)|(?:à|a)\s+)\s*/i,’’)
+          .replace(/\s*,?\s*(?:à|a)\s+[A-Za-zÀ-ÿ’’ -]{2,40}\s*$/i,’’)
+          .replace(/[,.]+$/,’’);
         if (!/\b\d{1,4}\w?\b/.test(adr)) continue;
         if (OWN_WORDS_RX.test(adr)) continue;
         return titleWords(adr);
+      }
+      // Handle "rue de Géraniums, numéro 1" — street name + explicit numéro label
+      const mN = String(block).match(streetNumeroLabel);
+      if (mN) {
+        const streetPart = cleanLabelValue(mN[1].trim().replace(/[,\s]+$/, ‘’));
+        const numPart = mN[2].trim();
+        if (!streetPart || !numPart) continue;
+        const combined = streetPart + ‘ ‘ + numPart;
+        if (OWN_WORDS_RX.test(combined)) continue;
+        return titleWords(combined);
       }
     }
 
@@ -32646,142 +32658,136 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
      en page (fond qui apparaît).
 ════════════════════════════════════════════════════════════════ -->
 <style id="yama-view-controller-css">
-  /* Indicateur d'onglet actif — soulignement doré INSIDE (jamais rogné par overflow) */
-  #app-platform .tabs .tab.active::after,
-  #app-platform .tabs .tab.yama-v23-active::after,
-  #app-crm .crm-timeline-tabs .nav-tab.active::after,
-  #app-crm .nav-tabs .nav-tab.active::after{ display:none !important; }
-  #app-platform .tabs .tab.active,
-  #app-platform .tabs .tab.yama-v23-active,
-  #app-crm .crm-timeline-tabs .nav-tab.active,
-  #app-crm .nav-tabs .nav-tab.active{
-    color:var(--gold,#C9A84C) !important;
-    font-weight:700 !important;
-    box-shadow: inset 0 -3px 0 0 var(--gold,#C9A84C) !important;
-  }
-  /* Espacement et respiration nets des sous-onglets */
-  #app-platform .tabs,
-  #app-crm .crm-timeline-tabs,
-  #app-crm .nav-tabs{ gap:6px !important; padding-top:2px !important; }
-  #app-platform .tabs .tab,
-  #app-crm .crm-timeline-tabs .nav-tab,
-  #app-crm .nav-tabs .nav-tab{
-    flex:0 0 auto !important;
-    padding:12px 18px !important;
-    border-radius:9px 9px 0 0 !important;
-  }
-  .tab-count, .tab-badge{ margin-left:8px !important; }
-  /* Stabilité : hauteur minimale uniforme → plus de saut/fond qui apparaît au changement d'onglet */
-  #app-platform .tab-content.active{ min-height: calc(100vh - 175px) !important; }
+  /* Supprime le min-height qui causait les sauts de mise en page */
+  #app-platform .tab-content.active{ min-height:0 !important; }
+  /* Annule les ::after d'onglets (remplacés par JS inline) */
+  #app-platform .tabs::after,
+  #app-platform .tabs .tab::after,
+  #app-crm .crm-timeline-tabs::after,
+  #app-crm .nav-tabs::after{ display:none !important; content:none !important; }
+  /* Espacement propre */
+  #app-platform .tabs{ gap:4px !important; }
+  #app-platform .tabs .tab{ flex:0 0 auto !important; }
+  .tab-count,.tab-badge{ margin-left:7px !important; }
 </style>
 <script id="yama-view-controller-2026">
-(function yamaViewController(){
-  if (window.__YAMA_VIEW_CONTROLLER_2026__) return;
-  window.__YAMA_VIEW_CONTROLLER_2026__ = true;
+/* ════════════════════════════════════════════════════════════
+   YAMA VIEW FIX 2026 — correctif définitif empilement + indicateur
+   Racine du bug "ancienne page visible sous nouvelle page" :
+   applyExclusive utilisait removeProperty('display') pour le panneau
+   actif, qui gardait display:none!important inline pendant 1 frame RAF.
+   Fix : setProperty('block','important') toujours, synchrone, setInterval.
+   ════════════════════════════════════════════════════════════ */
+(function yamaViewFix(){
+  if (window.__YAMA_VIEW_FIX_2026__) return;
+  window.__YAMA_VIEW_FIX_2026__ = true;
 
-  var HIDE = 'none';
-  function qa(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
+  var GOLD = '#C9A84C';
 
-  /* ── 1. EXCLUSIVITÉ DES APPLICATIONS (empêche le CRM de transparaître) ── */
-  function applyApps(){
-    var crm = document.getElementById('app-crm');
-    var plat = document.getElementById('app-platform');
-    if (!crm || !plat) return;
-    var btn = document.querySelector('.u-switcher .u-btn.active[data-app]');
-    var app = btn ? btn.dataset.app
-            : (typeof window.currentApp !== 'undefined' ? window.currentApp : 'platform');
-    crm.style.setProperty('display', app==='crm' ? 'block' : HIDE, 'important');
-    plat.style.setProperty('display', app==='platform' ? 'block' : HIDE, 'important');
-  }
+  function enforce(){
+    try {
+      /* 1 ── App level : CRM vs Platform ── */
+      var app = window.currentApp || 'crm';
+      var crm  = document.getElementById('app-crm');
+      var plat = document.getElementById('app-platform');
+      if (crm)  crm.style.setProperty('display',  app==='crm'      ? 'block' : 'none', 'important');
+      if (plat) plat.style.setProperty('display', app==='platform'  ? 'block' : 'none', 'important');
+      if (app !== 'platform' || !plat) return;
 
-  /* ── 2. EXCLUSIVITÉ DES PANNEAUX (un seul .tab-content / .page visible) ── */
-  function applyExclusive(contents, targetId){
-    var hasTarget = false;
-    contents.forEach(function(c){ if (c.id === targetId) hasTarget = true; });
-    contents.forEach(function(c){
-      if (c.id === targetId){
-        c.style.removeProperty('display');          // laisse le CSS .active l'afficher
-        c.classList.add('active');                  // garantit l'état actif
-      } else {
-        c.style.setProperty('display', HIDE, 'important'); // force le masquage (bat tout)
-        c.classList.remove('active');
-      }
-    });
-    return hasTarget;
-  }
-  function applyPlatform(){
-    var t = document.querySelector('#app-platform .tabs .tab.active, #app-platform .tabs .tab.yama-v23-active');
-    if (!t) return;
-    applyExclusive(qa('#app-platform .tab-content'), 'tab-' + (t.dataset.tab||''));
-  }
-  function applyCrm(){
-    var t = document.querySelector('#app-crm .nav-tab.active');
-    if (t) applyExclusive(qa('#app-crm .page'), 'page-' + (t.dataset.page||''));
-    // certains écrans CRM utilisent aussi .tab-content
-    var tc = qa('#app-crm .tab-content');
-    if (tc.length){
-      var act = document.querySelector('#app-crm .tab-content.active');
-      if (act) applyExclusive(tc, act.id);
-    }
-  }
-  var _raf = null;
-  function applyAll(){
-    if (_raf) return;
-    _raf = requestAnimationFrame(function(){
-      _raf = null;
-      try { applyApps(); } catch(e){}
-      try { applyPlatform(); } catch(e){}
-      try { applyCrm(); } catch(e){}
-    });
-  }
-  window.__yamaApplyViews = applyAll;
+      /* 2 ── Platform tab panels ── */
+      var activeBtn = plat.querySelector('.tabs .tab.active') ||
+                      plat.querySelector('.tabs .tab.yama-v23-active');
+      if (!activeBtn) return;
 
-  /* ── 3. DÉCLENCHEURS ── */
-  // a) Observe les changements de classe sur les barres d'onglets (capte TOUS les systèmes)
-  function attachObservers(){
-    var mo = new MutationObserver(applyAll);
-    ['#app-platform .tabs', '#app-crm .crm-timeline-tabs', '#app-crm .nav-tabs', '.u-switcher']
-      .forEach(function(sel){
-        var el = document.querySelector(sel);
-        if (el) mo.observe(el, { subtree:true, attributes:true, attributeFilter:['class'], childList:true });
+      var activeTabName = activeBtn.dataset.tab || '';
+      /* Ne pas forcer 'priorites' : V44 le redirige vers cockpit à T+200ms */
+      if (activeTabName === 'priorites') return;
+
+      var targetId = 'tab-' + activeTabName;
+      var panels   = plat.querySelectorAll('.tab-content');
+
+      panels.forEach(function(p){
+        var isAct = (p.id === targetId);
+        /*
+         * FIX CRITIQUE : toujours setProperty (jamais removeProperty).
+         * removeProperty laissait le panneau actif avec display:none!important
+         * résiduel pendant 1 frame → flash blanc / empilement.
+         */
+        p.style.setProperty('display', isAct ? 'block' : 'none', 'important');
+        if (isAct) p.classList.add('active');
+        else       p.classList.remove('active');
       });
-  }
-  // b) Clic direct (réactivité immédiate, avant même le re-render)
-  document.addEventListener('click', function(e){
-    if (!e.target.closest) return;
-    if (e.target.closest('#app-platform .tabs .tab, #app-crm .nav-tab, .u-switcher .u-btn')){
-      applyAll(); setTimeout(applyAll, 80); setTimeout(applyAll, 280);
-    }
-  }, false);
-  // c) Enrobe les points d'entrée connus
-  ['switchTab','showPage','switchApp','renderCockpit','renderHistory','renderAnalyse','activateCockpit']
-    .forEach(function(fn){
-      if (typeof window[fn]==='function' && !window[fn].__viewCtl){
-        var orig = window[fn];
-        window[fn] = function(){ var r = orig.apply(this, arguments); applyAll(); return r; };
-        window[fn].__viewCtl = true;
-      }
-    });
 
-  /* ── 4. INIT ── */
-  function boot(){ attachObservers(); applyAll(); }
-  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
-  [300,900,2000,4000].forEach(function(ms){ setTimeout(applyAll, ms); });
-  // ré-enrobe les fonctions définies tardivement
-  setTimeout(function(){
-    ['switchTab','showPage','switchApp','renderCockpit','renderHistory','renderAnalyse','activateCockpit']
-      .forEach(function(fn){
-        if (typeof window[fn]==='function' && !window[fn].__viewCtl){
-          var orig = window[fn];
-          window[fn] = function(){ var r = orig.apply(this, arguments); applyAll(); return r; };
-          window[fn].__viewCtl = true;
+      /* 3 ── Indicateur doré (box-shadow inset + couleur, inline !important) ── */
+      plat.querySelectorAll('.tabs .tab').forEach(function(t){
+        var isAct = (t === activeBtn) ||
+                    t.classList.contains('active') ||
+                    t.classList.contains('yama-v23-active');
+        if (isAct){
+          t.style.setProperty('box-shadow', 'inset 0 -3px 0 0 '+GOLD, 'important');
+          t.style.setProperty('color',       GOLD,  'important');
+          t.style.setProperty('font-weight', '700', 'important');
+          t.style.setProperty('border-bottom','3px solid '+GOLD,'important');
+        } else {
+          t.style.setProperty('box-shadow',   'none',              'important');
+          t.style.setProperty('border-bottom','3px solid transparent','important');
+          t.style.removeProperty('color');
+          t.style.removeProperty('font-weight');
         }
       });
-    attachObservers();
-  }, 1500);
+    } catch(e){}
+  }
 
-  console.info('[YAMA VIEW CONTROLLER 2026] Affichage exclusif app+panneau (inline) · indicateur · espacement.');
+  window.__yamaEnforce = enforce;
+
+  /* ── Surveillance continue (rattrape les renders async) ── */
+  setInterval(enforce, 180);
+
+  /* ── Déclenchement immédiat ── */
+  enforce();
+
+  /* ── DOMContentLoaded : s'enregistre APRÈS la ligne 9366
+     → notre handler s'exécute après le display:block CRM forcé ── */
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){
+      enforce();
+      setTimeout(enforce, 80);
+      setTimeout(enforce, 300);
+      setTimeout(enforce, 800);
+    });
+  } else {
+    setTimeout(enforce, 0);
+    setTimeout(enforce, 80);
+    setTimeout(enforce, 300);
+  }
+
+  /* ── Clic (réaction immédiate sans attendre l'intervalle) ── */
+  document.addEventListener('click', function(e){
+    var t = e.target && e.target.closest &&
+            e.target.closest('#app-platform .tab, #app-crm .nav-tab, .u-btn');
+    if (!t) return;
+    enforce();
+    setTimeout(enforce, 60);
+    setTimeout(enforce, 250);
+  });
+
+  /* ── Enrobage des fonctions de navigation ── */
+  var FNS = ['switchTab','switchTabSmooth','switchApp','showPage','activateCockpit',
+             'renderCockpit','renderHistory','renderAnalyse'];
+  function wrapFn(name){
+    if (typeof window[name] !== 'function' || window[name].__vFix2026) return;
+    var orig = window[name];
+    window[name] = function(){ var r = orig.apply(this, arguments); enforce(); return r; };
+    window[name].__vFix2026 = true;
+  }
+  FNS.forEach(wrapFn);
+
+  /* Ré-enrobage des fonctions injectées tardivement */
+  [250, 700, 1800, 4000].forEach(function(ms){
+    setTimeout(function(){ FNS.forEach(wrapFn); enforce(); }, ms);
+  });
+
+  console.info('[YAMA VIEW FIX 2026] setProperty!important · setInterval · border-bottom indicator');
 })();
 </script>
 </body>
