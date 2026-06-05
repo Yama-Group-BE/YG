@@ -32524,5 +32524,116 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   console.info('[YAMA UI PRO 2026] Navigation épurée — émojis retirés des onglets.');
 })();
 </script>
+
+<!-- ════════════════════════════════════════════════════════════════
+     YAMA TAB STABILITY 2026 — couche d'autorité finale
+     Corrige : (1) empilement de pages (ancienne page qui reste sous la
+     nouvelle), (2) indicateur d'onglet actif manquant, (3) espacement
+     trop condensé. Couche additive prioritaire : neutralise les conflits
+     entre les multiples systèmes d'onglets sans casser leurs fonctions.
+════════════════════════════════════════════════════════════════ -->
+<style id="yama-tab-stability-css">
+  /* 1) UN SEUL PANNEAU VISIBLE — anti-empilement (la cause du bug « pages collées ») */
+  #app-platform .tab-content:not(.active),
+  #app-crm .tab-content:not(.active),
+  #app-crm .page:not(.active){ display:none !important; }
+  #app-platform .tab-content.active,
+  #app-crm .tab-content.active,
+  #app-crm .page.active{
+    display:block !important;
+    transform:none !important;
+    animation:none !important;
+    position:relative !important;
+  }
+  /* Neutralise les classes de glissement résiduelles qui pouvaient superposer */
+  .tab-content.yama-v23-slide-next,.tab-content.yama-v23-slide-prev,
+  .tab-content.yama-final-slide-next,.tab-content.yama-final-slide-prev{
+    transform:none !important; animation:none !important; position:relative !important;
+  }
+
+  /* 2) INDICATEUR D'ONGLET ACTIF — net, CSS pur (remplace l'indicateur mobile bogué) */
+  #app-platform .tabs::after,
+  #app-crm .crm-timeline-tabs::after,
+  #app-crm .nav-tabs::after{ display:none !important; }
+  #app-platform .tabs .tab,
+  #app-crm .crm-timeline-tabs .nav-tab,
+  #app-crm .nav-tabs .nav-tab{ position:relative; }
+  #app-platform .tabs .tab.active,
+  #app-platform .tabs .tab.yama-v23-active,
+  #app-crm .crm-timeline-tabs .nav-tab.active,
+  #app-crm .nav-tabs .nav-tab.active{ color:var(--gold,#C9A84C) !important; font-weight:700 !important; }
+  #app-platform .tabs .tab.active::after,
+  #app-platform .tabs .tab.yama-v23-active::after,
+  #app-crm .crm-timeline-tabs .nav-tab.active::after,
+  #app-crm .nav-tabs .nav-tab.active::after{
+    content:''; position:absolute; left:14px; right:14px; bottom:-1px; height:2.5px;
+    background:linear-gradient(90deg, var(--gold,#C9A84C), var(--accent2,#f5c050));
+    border-radius:3px; pointer-events:none;
+  }
+
+  /* 3) ESPACEMENT + RESPIRATION des sous-onglets */
+  #app-platform .tabs,
+  #app-crm .crm-timeline-tabs,
+  #app-crm .nav-tabs{ gap:3px !important; }
+  #app-platform .tabs .tab,
+  #app-crm .crm-timeline-tabs .nav-tab,
+  #app-crm .nav-tabs .nav-tab{ padding:11px 17px !important; }
+  /* compteur un peu détaché du libellé */
+  .tab-count, .tab-badge{ margin-left:7px !important; }
+</style>
+<script id="yama-tab-stability-2026">
+(function yamaTabStability(){
+  if (window.__YAMA_TAB_STABILITY_2026__) return;
+  window.__YAMA_TAB_STABILITY_2026__ = true;
+
+  /* Filet de sécurité : garantit qu'UN SEUL panneau porte .active par app.
+     Ne fait que RETIRER les .active en trop (jamais en ajouter) → ne peut pas
+     provoquer d'écran vide. */
+  function keepOne(nodes, preferredId){
+    if (nodes.length <= 1) return;
+    var keep = null;
+    if (preferredId) for (var i=0;i<nodes.length;i++){ if (nodes[i].id===preferredId){ keep=nodes[i]; break; } }
+    if (!keep) keep = nodes[nodes.length-1];           // sinon on garde le dernier activé
+    nodes.forEach(function(n){ if (n!==keep) n.classList.remove('active'); });
+  }
+  function enforceSingle(){
+    try {
+      var plat = document.getElementById('app-platform');
+      if (plat){
+        var pTab = plat.querySelector('.tabs .tab.active, .tabs .tab.yama-v23-active');
+        keepOne(Array.prototype.slice.call(plat.querySelectorAll('.tab-content.active')),
+                pTab ? ('tab-' + (pTab.dataset.tab||'')) : null);
+      }
+      var crm = document.getElementById('app-crm');
+      if (crm){
+        var cTab = crm.querySelector('.nav-tab.active');
+        var pageId = cTab ? ('page-' + (cTab.dataset.page||'')) : null;
+        keepOne(Array.prototype.slice.call(crm.querySelectorAll('.page.active')), pageId);
+        keepOne(Array.prototype.slice.call(crm.querySelectorAll('.tab-content.active')), null);
+      }
+    } catch(e){ /* silencieux */ }
+  }
+  window.yamaEnforceSingleTab = enforceSingle;
+
+  // Après tout clic d'onglet (phase bubbling = après les handlers capture existants)
+  document.addEventListener('click', function(e){
+    var t = e.target.closest && e.target.closest(
+      '#app-platform .tabs .tab, #app-crm .crm-timeline-tabs .nav-tab, #app-crm .nav-tabs .nav-tab');
+    if (t){ setTimeout(enforceSingle, 0); setTimeout(enforceSingle, 70); setTimeout(enforceSingle, 260); }
+  }, false);
+
+  // Au démarrage + après bascule d'application
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', enforceSingle);
+  else enforceSingle();
+  [400,1200,2600].forEach(function(ms){ setTimeout(enforceSingle, ms); });
+  if (typeof window.switchApp==='function' && !window.switchApp.__tabStab){
+    var _origSwitchApp = window.switchApp;
+    window.switchApp = function(){ var r=_origSwitchApp.apply(this,arguments); setTimeout(enforceSingle,40); return r; };
+    window.switchApp.__tabStab = true;
+  }
+
+  console.info('[YAMA TAB STABILITY 2026] Anti-empilement · indicateur actif · espacement.');
+})();
+</script>
 </body>
 </html>
