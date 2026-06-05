@@ -31921,5 +31921,302 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   console.info('[YAMA PARITÉ 2026] Photo + historique + sous-traitants synchronisés inter-appareils, parité mobile active.');
 })();
 </script>
+
+<!-- ════════════════════════════════════════════════════════════════
+     YAMA CRM 2026 — Annuaire neutre + Dossiers liés + Refus non-archivant
+                     + Automatisation « devis validé → messages chantier »
+     Patch final non destructif (dernière définition = prioritaire).
+════════════════════════════════════════════════════════════════ -->
+<style id="yama-crm-neutral-css">
+  /* Annuaire neutre : aucun indicateur de statut dans le listing.
+     Belt-and-suspenders : même si un décorateur (setInterval) ré-injecte
+     une pastille, le CSS la garde invisible dans le listing. */
+  .contact-row .crm-stage-pill,
+  .contact-row .cr-badge,
+  .contact-row .crm-pipeline-bar,
+  .contact-row .crm-follow-pill,
+  .contact-row .crm-waiting-pill,
+  .contact-row .crm-finished-pill,
+  .contact-row .crm-devis-pill,
+  .contact-row .crm-rdv-pill,
+  .contact-row .crm-refused-pill,
+  .contact-row .crm-stage-dot,
+  .contact-row .crm-v5-deadline-btn,
+  .contact-row .crm-sla-badge { display:none !important; }
+  .crm-neutral-row .avatar.crm-neutral-av{
+    background:rgba(201,168,76,.12)!important; color:var(--gold,#C9A84C)!important;
+  }
+  .crm-neutral-row{ border-color:rgba(255,255,255,.07)!important; }
+  /* Dossier — section « Dossiers liés » */
+  .crm-dossier-section{ padding:14px 22px; border-top:1px solid var(--border,rgba(255,255,255,.08)); }
+  .crm-dossier-title{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#5b9cf6; font-weight:800; margin-bottom:10px; }
+  .crm-dossier-item{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border:1px solid rgba(255,255,255,.08); border-radius:10px; margin-bottom:8px; background:rgba(255,255,255,.025); }
+  .crm-dossier-left{ min-width:0; }
+  .crm-dossier-num{ font-weight:800; color:var(--white,#fff); font-size:13px; }
+  .crm-dossier-meta{ font-size:11px; color:#8a8a8a; margin-top:2px; }
+  .crm-dossier-badge{ font-size:10px; font-weight:800; padding:4px 9px; border-radius:20px; white-space:nowrap; }
+  .crm-dossier-empty{ font-size:12px; color:#777; padding:6px 0; }
+</style>
+<script id="yama-crm-neutral-dossier-2026">
+(function yamaCrmNeutralDossier(){
+  if (window.__YAMA_CRM_NEUTRAL_2026__) return;
+  window.__YAMA_CRM_NEUTRAL_2026__ = true;
+
+  /* ── helpers ── */
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];}); }
+  function getC(){ try { return (typeof getContacts==='function')?getContacts():[]; } catch(e){ return []; } }
+  function nrm(c){ try { return (typeof normalizeContact==='function')?normalizeContact(c):c; } catch(e){ return c; } }
+  function hist(){ try { return (typeof getHistory==='function')?getHistory():[]; } catch(e){ return []; } }
+  function normName(s){ return String(s||'').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim(); }
+  function fdate(d){ try { return (typeof fmtDateFR==='function' && d)?fmtDateFR(d):''; } catch(e){ return ''; } }
+  function ftime(h){ try { return (typeof fmtTime==='function' && h)?fmtTime(h):(h||''); } catch(e){ return h||''; } }
+  function eur(n){ var v=parseFloat(n)||0; return v.toLocaleString('fr-BE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+  function contactById(cid){ var f=getC().find(function(x){return String(x.id||x.contact_id)===String(cid);}); return f?nrm(f):null; }
+
+  /* ════════ 1. ANNUAIRE 100% NEUTRE ════════
+     Le listing est un simple répertoire de contacts. Aucune pastille de
+     statut (refusé/accepté/RDV/chantier). Tout le pipeline vit dans le dossier
+     que l'on ouvre en cliquant sur le contact. */
+  function neutralRender(containerId, filterType){
+    var searchEl = document.getElementById('search-all');
+    var search = (searchEl && searchEl.value ? searchEl.value : '').toLowerCase();
+    var list;
+    try {
+      list = (typeof filterContactsForScope==='function')
+        ? filterContactsForScope(getC(), filterType || 'all')
+        : getC().map(nrm);
+    } catch(e){ list = getC().map(nrm); }
+    if (search) list = list.filter(function(c){
+      return (c.nom||'').toLowerCase().indexOf(search)>=0
+          || (c.commune||'').toLowerCase().indexOf(search)>=0
+          || (c.tel||'').indexOf(search)>=0;
+    });
+    var el = document.getElementById(containerId); if (!el) return;
+    if (!list.length){
+      el.innerHTML = '<div class="empty"><div class="empty-emoji">👥</div><div class="empty-text">Aucun contact ici pour l’instant</div><div class="empty-sub">Cliquez sur un contact pour ouvrir son dossier complet.</div></div>';
+      return;
+    }
+    el.innerHTML = list.map(function(c){
+      var cid = c.id || c.contact_id;
+      var init = (c.nom||'?').split(' ').map(function(w){return (w||'')[0]||'';}).slice(0,2).join('').toUpperCase();
+      var dl = fdate(c.date); var hl = ftime(c.heure);
+      var dateLine = dl ? (dl + (hl?(' · '+hl):'')) : '';
+      return '<div class="contact-row crm-neutral-row" onclick="openContactDetail(\''+cid+'\')" style="cursor:pointer;">'
+        + '<div class="avatar crm-neutral-av">'+esc(init)+'</div>'
+        + '<div class="crm-neutral-id"><div class="cr-name">'+esc(c.civilite||'')+' '+esc(c.nom||'')+'</div>'
+        + '<div class="cr-meta"><span>📍 '+esc(c.commune||'—')+'</span><span>📞 '+esc(c.tel||'—')+'</span>'+(c.st?'<span>🔧 '+esc(c.st)+'</span>':'')+'</div></div>'
+        + '<div class="crm-neutral-date">'+(dateLine?('<div class="cr-date">'+esc(dateLine)+'</div>'):'')+'</div>'
+        + '<div class="cr-actions crm-neutral-actions" onclick="event.stopPropagation()">'
+        + '<button class="btn btn-outline btn-sm" title="Ouvrir le dossier" onclick="event.stopPropagation();openContactDetail(\''+cid+'\')">📂</button>'
+        + '<button class="btn btn-outline btn-sm" title="Modifier" onclick="event.stopPropagation();editContact(\''+cid+'\')">✏️</button>'
+        + '<button class="btn btn-red btn-sm" title="Supprimer" onclick="event.stopPropagation();deleteContact(\''+cid+'\')">🗑</button>'
+        + '</div></div>';
+    }).join('');
+  }
+  neutralRender.__yamaNeutral = true;
+  function installNeutral(){
+    if (window.renderContactList !== neutralRender){
+      window.renderContactList = neutralRender;
+      try { renderContactList = neutralRender; } catch(e){}
+    }
+  }
+  installNeutral();
+  setTimeout(installNeutral, 1500);
+  setTimeout(installNeutral, 4500);
+  setTimeout(function(){ try { if (typeof renderContacts==='function') renderContacts(); } catch(e){} }, 1600);
+
+  /* ════════ 2. UN DEVIS REFUSÉ N'ARCHIVE PLUS LE CONTACT ════════
+     Le refus est l'issue du DOSSIER (devis), pas la mort du CONTACT.
+     On conserve le lien devis↔contact mais le contact reste dans l'annuaire,
+     réutilisable pour un futur travail. (override global → couvre refuseDevis
+     ET crmRefuseDevisFromCRM qui appellent tous deux cette fonction.) */
+  window.linkDevisRefuseToContactCRM = function(docNum){
+    try {
+      var h = hist().find(function(e){return String(e.docNum)===String(docNum);});
+      var nomDevis = normName(h && h.clientNom);
+      var match = getC().find(function(c){
+        var n = nrm(c);
+        if (String(n.devisDocNum||'')===String(docNum)) return true;
+        if (!nomDevis || nomDevis.length<2) return false;
+        var nc = normName(n.nom);
+        return nc.length>=2 && (nomDevis.indexOf(nc)>=0 || nc.indexOf(nomDevis)>=0);
+      });
+      if (match){
+        var cid = match.id||match.contact_id;
+        var raw = (typeof findRawContact==='function')?findRawContact(cid):match;
+        if (raw){
+          var updated = Object.assign({}, raw, { devisDocNum:String(docNum) });
+          updated.devisRefused = false;                       /* ne plus marquer refusé */
+          if (updated.followUpStatus==='refused') updated.followUpStatus='';
+          if (updated.status==='refuse') updated.status='';
+          if (updated.finished===true && updated.suiviTermine!==true) updated.finished=false;
+          if (typeof upsertLocalContact==='function') upsertLocalContact(updated);
+          try { if (typeof pushContact==='function') pushContact(updated); } catch(e){}
+        }
+      }
+    } catch(e){ console.warn('[YAMA CRM] refus non-archivant:', e); }
+    try { if (typeof updateBadges==='function') updateBadges(); } catch(e){}
+    try { if (typeof renderAll==='function') renderAll(); } catch(e){}
+  };
+
+  window.refuseDevis = function(docNum){
+    if (!confirm('Marquer ce devis comme refusé ?\n\nLe devis sera classé « refusé » dans son dossier.\nLe contact RESTE dans votre annuaire pour un futur travail.')) return;
+    try { if (typeof setDevisStatus==='function') setDevisStatus(docNum,'refused',''); } catch(e){}
+    try { if (typeof renderDevisTab==='function') renderDevisTab(); } catch(e){}
+    try { window.linkDevisRefuseToContactCRM(docNum); } catch(e){}
+    try { if (typeof showToast==='function') showToast('Devis refusé — contact conservé dans l’annuaire', 'success'); } catch(e){}
+  };
+  window.refuseDevis.__ytWrapped = true;
+
+  /* ════════ 3. DOSSIER : tous les devis & factures liés au contact ════════
+     En ouvrant un contact on voit l'historique de TOUS ses devis/factures,
+     chacun avec son statut (en attente / accepté / refusé / facturé / payé). */
+  function linkedDocs(c){
+    var ddn = String(c.devisDocNum||'');
+    var cName = normName(c.nom);
+    var seen = {};
+    return hist().filter(function(e){
+      if (!e || e.deleted || e.deletedAt) return false;
+      var id = String(e.docNum||'');
+      if (!id || seen[id]) return false;
+      var hit = false;
+      if (ddn && (id===ddn || String(e.parentDevisNum||'')===ddn)) hit = true;
+      else if (cName && cName.length>=3){
+        var en = normName(e.clientNom);
+        if (en && (en.indexOf(cName)>=0 || cName.indexOf(en)>=0)) hit = true;
+      }
+      if (hit) seen[id]=true;
+      return hit;
+    }).sort(function(a,b){ return String(b.savedAt||b.dateEmission||'').localeCompare(String(a.savedAt||a.dateEmission||'')); });
+  }
+  function statusBadge(e){
+    if (e.docType==='facture'){
+      var cp = {}; try { cp = (typeof getClientPaid==='function')?getClientPaid():{}; } catch(x){}
+      return cp[e.docNum]
+        ? '<span class="crm-dossier-badge" style="background:rgba(82,199,127,.12);color:#52c77f;">🧾 Payée</span>'
+        : '<span class="crm-dossier-badge" style="background:rgba(224,82,82,.12);color:#e05252;">🧾 Impayée</span>';
+    }
+    var st = 'pending';
+    try { var ds=(typeof getDevisStatuses==='function')?getDevisStatuses():{}; st = (ds[e.docNum] && ds[e.docNum].status) || 'pending'; } catch(x){}
+    var map = {
+      pending:['⏳ En attente','rgba(232,160,32,.12)','#e8a020'],
+      accepted:['✅ Accepté','rgba(82,199,127,.12)','#52c77f'],
+      refused:['❌ Refusé','rgba(224,82,82,.12)','#e05252'],
+      done:['🔨 Travaux','rgba(91,156,246,.12)','#5b9cf6'],
+      invoiced:['🧾 Facturé','rgba(201,168,76,.14)','#C9A84C']
+    };
+    var m = map[st] || map.pending;
+    return '<span class="crm-dossier-badge" style="background:'+m[1]+';color:'+m[2]+';">'+m[0]+'</span>';
+  }
+  function injectDossier(cid){
+    var body = document.getElementById('detail-modal-body'); if (!body) return;
+    if (body.querySelector('.crm-dossier-section')) return;
+    var c = contactById(cid); if (!c) return;
+    var docs = linkedDocs(c);
+    var inner = docs.length ? docs.map(function(e){
+      var icon = e.docType==='facture' ? '🧾' : '📋';
+      var typ  = e.docType==='facture' ? 'Facture' : (e.docType==='devis-brouillon'?'Brouillon':'Devis');
+      var d = fdate(e.savedAt || e.dateEmission || '');
+      var tab = e.docType==='facture' ? 'history' : 'devis';
+      return '<div class="crm-dossier-item">'
+        + '<div class="crm-dossier-left">'
+        + '<div class="crm-dossier-num">'+icon+' '+esc(e.docNum||'')+'</div>'
+        + '<div class="crm-dossier-meta">'+esc(typ)+(d?(' · '+esc(d)):'')+' · '+eur(e.totalTTC)+'</div>'
+        + '</div>'
+        + '<div style="display:flex;align-items:center;gap:8px;">'+statusBadge(e)
+        + '<button class="btn btn-outline btn-sm" title="Voir dans la plateforme" onclick="try{if(typeof closeContactDetail===\'function\')closeContactDetail();if(typeof switchApp===\'function\')switchApp(\'platform\');setTimeout(function(){try{if(typeof switchTab===\'function\')switchTab(\''+tab+'\');}catch(_){}}, 220);}catch(_){}">Voir →</button>'
+        + '</div></div>';
+    }).join('') : '<div class="crm-dossier-empty">Aucun devis ou facture lié pour le moment.</div>';
+    var sec = document.createElement('div');
+    sec.className = 'crm-dossier-section';
+    sec.innerHTML = '<div class="crm-dossier-title">📁 Dossiers liés ('+docs.length+')</div>'+inner;
+    body.appendChild(sec);
+  }
+  var _prevOpenDetailNeutral = window.openContactDetail;
+  window.openContactDetail = function(cid){
+    var r = _prevOpenDetailNeutral ? _prevOpenDetailNeutral.apply(this, arguments) : undefined;
+    setTimeout(function(){ try { injectDossier(cid); } catch(e){} }, 60);
+    return r;
+  };
+
+  /* ════════ 4. AUTOMATISATION : DEVIS VALIDÉ → MESSAGES CHANTIER ════════
+     Quand un devis passe en « accepté », l'app prépare automatiquement les
+     2 messages de confirmation (client + sous-traitant) prêts à envoyer,
+     en réutilisant le modal v42 existant. Bouton WhatsApp ajouté. */
+  var _origV42Show = window.v42ShowChantierModal;
+  var _lastChantierModal = 0, _lastChantierContact = null;
+  function waLink(tel, text){
+    var cleaned = String(tel||'').replace(/[^\d+]/g,'');
+    var n = cleaned.charAt(0)==='0' ? '32'+cleaned.slice(1) : cleaned.replace(/^\+/,'');
+    return 'https://wa.me/'+encodeURIComponent(n)+'?text='+encodeURIComponent(text||'');
+  }
+  function stPhone(name){
+    try {
+      if (typeof getSTList!=='function' || !name) return '';
+      var st = getSTList().find(function(s){ return (s.nom||'').toLowerCase().trim()===String(name).toLowerCase().trim(); });
+      return st ? (st.tel||'') : '';
+    } catch(e){ return ''; }
+  }
+  function addWAButtons(contact){
+    var modal = document.getElementById('v42-chantier-confirm-modal'); if (!modal) return;
+    if (modal.querySelector('.v42-wa-client')) return;
+    var rows = modal.querySelectorAll('.v42-btn-row');
+    var clientTel = (contact && contact.tel) || '';
+    var sTel = stPhone(contact && (contact.st || contact.stName));
+    if (rows[0] && clientTel){
+      var b1 = document.createElement('button');
+      b1.className = 'v42-btn v42-wa-client';
+      b1.style.cssText = 'background:rgba(37,211,102,.14);color:#25D366;border:1px solid rgba(37,211,102,.4);';
+      b1.textContent = '📲 WhatsApp client';
+      b1.onclick = function(){ window.open(waLink(clientTel, (document.getElementById('v42-msg-client')||{}).textContent||''), '_blank'); };
+      rows[0].appendChild(b1);
+    }
+    if (rows[1] && sTel){
+      var b2 = document.createElement('button');
+      b2.className = 'v42-btn v42-wa-st';
+      b2.style.cssText = 'background:rgba(37,211,102,.14);color:#25D366;border:1px solid rgba(37,211,102,.4);';
+      b2.textContent = '📲 WhatsApp ST';
+      b2.onclick = function(){ window.open(waLink(sTel, (document.getElementById('v42-msg-st')||{}).textContent||''), '_blank'); };
+      rows[1].appendChild(b2);
+    }
+  }
+  if (typeof _origV42Show === 'function'){
+    window.v42ShowChantierModal = function(contact){
+      var now = Date.now();
+      if (now - _lastChantierModal < 2500) return;   /* anti double-affichage */
+      _lastChantierModal = now;
+      _lastChantierContact = contact || {};
+      var r = _origV42Show.apply(this, arguments);
+      setTimeout(function(){ try { addWAButtons(_lastChantierContact); } catch(e){} }, 30);
+      return r;
+    };
+  }
+  var _prevAccept = window.acceptDevis;
+  window.acceptDevis = function(docNum){
+    var r = _prevAccept ? _prevAccept.apply(this, arguments) : undefined;
+    setTimeout(function(){
+      try {
+        if (typeof window.v42ShowChantierModal !== 'function') return;
+        var h = hist().find(function(e){return String(e.docNum)===String(docNum);});
+        var nomDevis = normName(h && h.clientNom);
+        var match = getC().find(function(c){
+          var n = nrm(c);
+          if (String(n.devisDocNum||'')===String(docNum)) return true;
+          if (!nomDevis||nomDevis.length<2) return false;
+          var nc = normName(n.nom);
+          return nc.length>=2 && (nomDevis.indexOf(nc)>=0 || nc.indexOf(nomDevis)>=0);
+        });
+        var c = match ? nrm(match) : null;
+        if (!c && h) c = { civilite:'', nom:h.clientNom||'', tel:h.clientTel||'', adresse:h.chantierAdresse||h.clientAdresse||'', commune:h.chantierVille||h.clientVille||'', ville:h.clientVille||'', st:h.stNom||'', date:'', heure:'' };
+        if (c) window.v42ShowChantierModal(c);
+      } catch(e){ console.warn('[YAMA CRM] devis validé → chantier:', e); }
+    }, 750);
+    return r;
+  };
+  window.acceptDevis.__ytWrapped = true;
+
+  console.info('[YAMA CRM 2026] Annuaire neutre · dossiers liés · refus non-archivant · devis validé → messages chantier.');
+})();
+</script>
 </body>
 </html>
