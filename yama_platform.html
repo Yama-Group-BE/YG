@@ -32635,5 +32635,154 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   console.info('[YAMA TAB STABILITY 2026] Anti-empilement · indicateur actif · espacement.');
 })();
 </script>
+
+<!-- ════════════════════════════════════════════════════════════════
+     YAMA VIEW CONTROLLER 2026 — autorité finale d'affichage
+     Le CSS seul ne suffisait pas (trop de règles concurrentes). Ce
+     contrôleur force, en styles INLINE (qui battent toutes les feuilles
+     de style), qu'UN SEUL panneau et UNE SEULE app soient visibles.
+     Corrige définitivement : empilement cockpit/historique/analyse,
+     CRM qui transparaît, indicateur d'onglet, espacement, saut de mise
+     en page (fond qui apparaît).
+════════════════════════════════════════════════════════════════ -->
+<style id="yama-view-controller-css">
+  /* Indicateur d'onglet actif — soulignement doré INSIDE (jamais rogné par overflow) */
+  #app-platform .tabs .tab.active::after,
+  #app-platform .tabs .tab.yama-v23-active::after,
+  #app-crm .crm-timeline-tabs .nav-tab.active::after,
+  #app-crm .nav-tabs .nav-tab.active::after{ display:none !important; }
+  #app-platform .tabs .tab.active,
+  #app-platform .tabs .tab.yama-v23-active,
+  #app-crm .crm-timeline-tabs .nav-tab.active,
+  #app-crm .nav-tabs .nav-tab.active{
+    color:var(--gold,#C9A84C) !important;
+    font-weight:700 !important;
+    box-shadow: inset 0 -3px 0 0 var(--gold,#C9A84C) !important;
+  }
+  /* Espacement et respiration nets des sous-onglets */
+  #app-platform .tabs,
+  #app-crm .crm-timeline-tabs,
+  #app-crm .nav-tabs{ gap:6px !important; padding-top:2px !important; }
+  #app-platform .tabs .tab,
+  #app-crm .crm-timeline-tabs .nav-tab,
+  #app-crm .nav-tabs .nav-tab{
+    flex:0 0 auto !important;
+    padding:12px 18px !important;
+    border-radius:9px 9px 0 0 !important;
+  }
+  .tab-count, .tab-badge{ margin-left:8px !important; }
+  /* Stabilité : hauteur minimale uniforme → plus de saut/fond qui apparaît au changement d'onglet */
+  #app-platform .tab-content.active{ min-height: calc(100vh - 175px) !important; }
+</style>
+<script id="yama-view-controller-2026">
+(function yamaViewController(){
+  if (window.__YAMA_VIEW_CONTROLLER_2026__) return;
+  window.__YAMA_VIEW_CONTROLLER_2026__ = true;
+
+  var HIDE = 'none';
+  function qa(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
+
+  /* ── 1. EXCLUSIVITÉ DES APPLICATIONS (empêche le CRM de transparaître) ── */
+  function applyApps(){
+    var crm = document.getElementById('app-crm');
+    var plat = document.getElementById('app-platform');
+    if (!crm || !plat) return;
+    var btn = document.querySelector('.u-switcher .u-btn.active[data-app]');
+    var app = btn ? btn.dataset.app
+            : (typeof window.currentApp !== 'undefined' ? window.currentApp : 'platform');
+    crm.style.setProperty('display', app==='crm' ? 'block' : HIDE, 'important');
+    plat.style.setProperty('display', app==='platform' ? 'block' : HIDE, 'important');
+  }
+
+  /* ── 2. EXCLUSIVITÉ DES PANNEAUX (un seul .tab-content / .page visible) ── */
+  function applyExclusive(contents, targetId){
+    var hasTarget = false;
+    contents.forEach(function(c){ if (c.id === targetId) hasTarget = true; });
+    contents.forEach(function(c){
+      if (c.id === targetId){
+        c.style.removeProperty('display');          // laisse le CSS .active l'afficher
+        c.classList.add('active');                  // garantit l'état actif
+      } else {
+        c.style.setProperty('display', HIDE, 'important'); // force le masquage (bat tout)
+        c.classList.remove('active');
+      }
+    });
+    return hasTarget;
+  }
+  function applyPlatform(){
+    var t = document.querySelector('#app-platform .tabs .tab.active, #app-platform .tabs .tab.yama-v23-active');
+    if (!t) return;
+    applyExclusive(qa('#app-platform .tab-content'), 'tab-' + (t.dataset.tab||''));
+  }
+  function applyCrm(){
+    var t = document.querySelector('#app-crm .nav-tab.active');
+    if (t) applyExclusive(qa('#app-crm .page'), 'page-' + (t.dataset.page||''));
+    // certains écrans CRM utilisent aussi .tab-content
+    var tc = qa('#app-crm .tab-content');
+    if (tc.length){
+      var act = document.querySelector('#app-crm .tab-content.active');
+      if (act) applyExclusive(tc, act.id);
+    }
+  }
+  var _raf = null;
+  function applyAll(){
+    if (_raf) return;
+    _raf = requestAnimationFrame(function(){
+      _raf = null;
+      try { applyApps(); } catch(e){}
+      try { applyPlatform(); } catch(e){}
+      try { applyCrm(); } catch(e){}
+    });
+  }
+  window.__yamaApplyViews = applyAll;
+
+  /* ── 3. DÉCLENCHEURS ── */
+  // a) Observe les changements de classe sur les barres d'onglets (capte TOUS les systèmes)
+  function attachObservers(){
+    var mo = new MutationObserver(applyAll);
+    ['#app-platform .tabs', '#app-crm .crm-timeline-tabs', '#app-crm .nav-tabs', '.u-switcher']
+      .forEach(function(sel){
+        var el = document.querySelector(sel);
+        if (el) mo.observe(el, { subtree:true, attributes:true, attributeFilter:['class'], childList:true });
+      });
+  }
+  // b) Clic direct (réactivité immédiate, avant même le re-render)
+  document.addEventListener('click', function(e){
+    if (!e.target.closest) return;
+    if (e.target.closest('#app-platform .tabs .tab, #app-crm .nav-tab, .u-switcher .u-btn')){
+      applyAll(); setTimeout(applyAll, 80); setTimeout(applyAll, 280);
+    }
+  }, false);
+  // c) Enrobe les points d'entrée connus
+  ['switchTab','showPage','switchApp','renderCockpit','renderHistory','renderAnalyse','activateCockpit']
+    .forEach(function(fn){
+      if (typeof window[fn]==='function' && !window[fn].__viewCtl){
+        var orig = window[fn];
+        window[fn] = function(){ var r = orig.apply(this, arguments); applyAll(); return r; };
+        window[fn].__viewCtl = true;
+      }
+    });
+
+  /* ── 4. INIT ── */
+  function boot(){ attachObservers(); applyAll(); }
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+  [300,900,2000,4000].forEach(function(ms){ setTimeout(applyAll, ms); });
+  // ré-enrobe les fonctions définies tardivement
+  setTimeout(function(){
+    ['switchTab','showPage','switchApp','renderCockpit','renderHistory','renderAnalyse','activateCockpit']
+      .forEach(function(fn){
+        if (typeof window[fn]==='function' && !window[fn].__viewCtl){
+          var orig = window[fn];
+          window[fn] = function(){ var r = orig.apply(this, arguments); applyAll(); return r; };
+          window[fn].__viewCtl = true;
+        }
+      });
+    attachObservers();
+  }, 1500);
+
+  console.info('[YAMA VIEW CONTROLLER 2026] Affichage exclusif app+panneau (inline) · indicateur · espacement.');
+})();
+</script>
 </body>
 </html>
