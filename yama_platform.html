@@ -31997,14 +31997,14 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   transition: color .14s ease, background-color .14s ease, border-color .15s ease !important;
 }
 
-/* Onglet ACTIF — film doré via border-bottom (spécificité 1,3,0,
-   même rang que la règle border:0 de l.19270, mais APRÈS → on gagne) */
+/* Onglet ACTIF — couleur + fond (l'indicateur est injecté en JS via
+   box-shadow inline !important, seul moyen qui survit à overflow-y:hidden
+   + contain:paint + toutes les guerres de spécificité CSS) */
 #app-platform .tabs .tab.active,
 #app-platform .tabs .tab.yama-v23-active {
-  border-bottom: 3px solid #C9A84C !important;
   padding: 0 22px !important;
   color: #C9A84C !important;
-  background: rgba(201,168,76,0.10) !important;
+  background-color: rgba(201,168,76,0.10) !important;
   font-weight: 700 !important;
 }
 
@@ -32138,11 +32138,16 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
         else       { p.classList.remove('active'); }
       });
 
-      /* 4. Sync classe .active → CSS gère le border-bottom doré */
+      /* 4. Sync classe .active + indicateur doré via box-shadow inline
+            (inline !important est au-dessus de toute règle CSS — survit à
+            overflow-y:hidden, contain:paint et toute guerre de spécificité) */
       plat.querySelectorAll('.tabs .tab').forEach(function(t) {
         var isAct = (t.dataset.tab === activeTabName);
         if (t.classList.contains('active') !== isAct) t.classList.toggle('active', isAct);
         if (t.classList.contains('yama-v23-active') !== isAct) t.classList.toggle('yama-v23-active', isAct);
+        var shadow = isAct ? 'inset 0 -3px 0 0 #C9A84C' : 'none';
+        if (t.style.getPropertyValue('box-shadow') !== shadow)
+          t.style.setProperty('box-shadow', shadow, 'important');
       });
 
       /* 5. Anti-contamination Analyse : V14 (MutationObserver) insère ses
