@@ -8211,24 +8211,25 @@ function renderHistory() {
       ? '<span class="type-badge facture">Facture</span>'
       : (h.docType === 'devis' ? '<span class="type-badge devis">Devis</span>' : '<span class="type-badge devis">Brouillon</span>');
 
-    let statusBadge = '';
-    if (isFacture) {
-      const inv = invoiceStatuses[h.docNum] || {};
-      const paid = inv.status === 'paid';
-      statusBadge = paid
-        ? `<span style="font-size:10px;font-weight:700;color:#52c77f;margin-left:6px;background:rgba(82,199,127,.12);padding:2px 8px;border-radius:10px;">✅ Payée</span>`
-        : `<span style="font-size:10px;font-weight:700;color:rgba(201,168,76,.9);margin-left:6px;background:rgba(201,168,76,.1);padding:2px 8px;border-radius:10px;">⏳ En attente</span>`;
-    } else {
+    // Statut : pour les FACTURES, le statut paiement (Payée/Partielle/Impayée
+    // + échéance + bouton) est affiché par enhanceHistoryInvoices sur sa
+    // propre ligne — on évite donc le doublon ici. Pour les DEVIS, on montre
+    // le statut du workflow (En attente / Accepté / Refusé / Travaux finis…).
+    let statusPill = '';
+    if (!isFacture) {
       const st = devisStatuses[h.docNum];
       const si = st ? (STATUS_HIST[st.status] || STATUS_HIST.pending) : STATUS_HIST.pending;
-      statusBadge = `<span style="font-size:10px;font-weight:600;color:${si.col};margin-left:6px;">${si.label}</span>`;
+      statusPill = `<span class="hi-status" style="color:${si.col};">${si.label}</span>`;
     }
+
+    const dateStr  = fmtDate(h.dateEmission) || new Date(h.savedAt || Date.now()).toLocaleDateString('fr-BE');
+    const villeStr = escapeHtml(h.chantierVille || '');
 
     item.innerHTML = `
       <div class="history-num">${h.docNum || '—'}</div>
       <div class="history-info">
-        <div class="hi-title">${badge}${escapeHtml(h.clientNom || 'Client sans nom')} — ${escapeHtml(h.chantierRef || 'Chantier')}${statusBadge}</div>
-        <div class="hi-sub">${fmtDate(h.dateEmission) || new Date(h.savedAt || Date.now()).toLocaleDateString('fr-BE')} · ${escapeHtml(h.chantierVille || '')}</div>
+        <div class="hi-title">${badge}<span class="hi-client">${escapeHtml(h.clientNom || 'Client sans nom')}</span><span class="hi-dash">—</span><span class="hi-chantier">${escapeHtml(h.chantierRef || 'Chantier')}</span></div>
+        <div class="hi-sub"><span class="hi-date">${dateStr}</span>${villeStr ? `<span class="hi-ville">📍 ${villeStr}</span>` : ''}${statusPill}</div>
       </div>
       <div class="history-amount">${fmt(h.totalTTC || 0)}</div>
       <div class="history-actions"></div>
@@ -8261,20 +8262,19 @@ function renderHistory() {
     return item;
   }
 
-  function addSectionHeader(label, count, color) {
+  function addSectionHeader(label, count, type) {
     const sep = document.createElement('div');
-    sep.style.cssText = `display:flex;align-items:center;gap:10px;padding:10px 0 8px;margin-top:10px;border-bottom:1px solid rgba(${color},0.35);`;
-    sep.innerHTML = `<span style="font-size:11px;font-weight:800;letter-spacing:1.5px;color:rgba(${color},1);">${label}</span>`
-      + `<span style="font-size:11px;background:rgba(${color},.15);color:rgba(${color},1);padding:2px 9px;border-radius:10px;font-weight:700;">${count}</span>`;
+    sep.className = 'history-section-header hs-' + type;
+    sep.innerHTML = `<span class="hs-label">${label}</span><span class="hs-count">${count}</span>`;
     list.appendChild(sep);
   }
 
   if (factures.length > 0) {
-    addSectionHeader('FACTURES', factures.length, '201,168,76');
+    addSectionHeader('FACTURES', factures.length, 'facture');
     factures.forEach(h => list.appendChild(makeItem(h)));
   }
   if (devisAll.length > 0) {
-    addSectionHeader('DEVIS', devisAll.length, '160,170,200');
+    addSectionHeader('DEVIS', devisAll.length, 'devis');
     devisAll.forEach(h => list.appendChild(makeItem(h)));
   }
 }
@@ -9152,6 +9152,9 @@ function makeChart(id, type, labels, datasets, options = {}) {
 }
 
 function renderAnalyse() {
+  // Garde : une version enrichie remplace la structure statique (#kpiCards…).
+  // Si ces éléments n'existent plus, on laisse la version enrichie s'en charger.
+  if (!document.getElementById('kpiCards')) return;
   const allHist = getHistory(); // TOUS les documents
   const histFactures = allHist.filter(h => h.docType === 'facture');
   const clientPaid = getClientPaid();
@@ -14888,7 +14891,11 @@ order by table_name;</textarea>
     if (!window.__YAMA_V12_RENDER_HISTORY_PATCHED__ && typeof window.renderHistory === 'function') {
       window.__YAMA_V12_RENDER_HISTORY_PATCHED__ = true;
       const old = window.renderHistory;
-      window.renderHistory = function(){ const res = old.apply(this, arguments); setTimeout(enhanceHistoryInvoices, 30); return res; };
+      // Exécution SYNCHRONE (et non +30ms) : les lignes de statut paiement
+      // sont ajoutées dans la même passe de rendu → plus de saut/redimensionnement
+      // visible de la liste lorsqu'on ouvre l'historique avec des factures.
+      window.enhanceHistoryInvoices = enhanceHistoryInvoices;
+      window.renderHistory = function(){ const res = old.apply(this, arguments); try { enhanceHistoryInvoices(); } catch(e){} return res; };
     }
     if (!window.__YAMA_V12_RENDER_ST_PATCHED__ && typeof window.renderSTTab === 'function') {
       window.__YAMA_V12_RENDER_ST_PATCHED__ = true;
@@ -31923,10 +31930,12 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════
-     YAMA FIX PROPRE 2026 — Corrections chirurgicales (v1)
-     1. Stacking : page visible sous une autre lors du changement d'onglet
-     2. Indicateur doré sur l'onglet actif (::after clippé → inline box-shadow)
-     3. Historique : présentation visuelle des sections et intitulés
+     YAMA FIX PROPRE 2026 — Corrections chirurgicales (v2)
+     Diagnostic ligne-par-ligne ; ce patch est le DERNIER du fichier.
+     1. Stacking : un seul panneau visible (display !important + sync classe)
+     2. Anti-resize : neutralise les slides/animations qui font sauter la page
+     3. Indicateur doré "film" : ::after PAR ONGLET (non clippé) + teinte active
+     4. Historique : intitulés/sections construits proprement au rendu (CSS)
      ═══════════════════════════════════════════════════════════════════ -->
 <style id="yama-fix-propre-css">
 
@@ -31943,78 +31952,151 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   opacity: 1 !important;
 }
 
-/* ── 2. INDICATOR ───────────────────────────────────────────────── */
-/* Kill l'::after sur .tabs — coupé par overflow-y:hidden + contain:paint */
-#app-platform .tabs::after,
-#app-platform .tabs .tab::after {
+/* ── 2. ANTI-RESIZE : aucune animation/slide sur les panneaux ────── */
+/* Les slides translateX/translateY/translate3d faisaient "sauter" la page
+   au changement d'onglet (surtout Historique avec beaucoup de factures). */
+#app-platform .tab-content,
+#app-platform .tab-content.active,
+#app-platform .tab-content.yama-v23-slide-next,
+#app-platform .tab-content.yama-v23-slide-prev,
+#app-platform .tab-content.yama-final-slide-next,
+#app-platform .tab-content.yama-final-slide-prev {
+  animation: none !important;
+  transition: none !important;
+  transform: none !important;
+  will-change: auto !important;
+}
+
+/* ── 3. INDICATEUR DORÉ ─────────────────────────────────────────── */
+/* On neutralise UNIQUEMENT l'indicateur GLOBAL (::after sur .tabs) qui
+   était clippé par overflow-y:hidden + contain:paint. On CONSERVE et on
+   renforce l'indicateur PAR ONGLET (::after sur .tab) — jamais clippé. */
+#app-platform .tabs::after {
   display: none !important;
   content: none !important;
 }
-/* Baseline pour tous les onglets (JS reinforcement suit) */
 #app-platform .tabs .tab {
+  position: relative !important;
   border-bottom: 3px solid transparent !important;
-  box-shadow: none !important;
+  transition: color .14s ease, background-color .14s ease !important;
+}
+/* Le "film" doré : barre lumineuse glissante en bas de l'onglet actif */
+#app-platform .tabs .tab::after {
+  content: "" !important;
+  display: block !important;
+  position: absolute !important;
+  left: 10px !important;
+  right: 10px !important;
+  bottom: 0 !important;
+  height: 3px !important;
+  border-radius: 3px 3px 0 0 !important;
+  background: #C9A84C !important;
+  box-shadow: 0 0 12px rgba(201,168,76,.55) !important;
+  transform: scaleX(0) !important;
+  transform-origin: center !important;
+  opacity: 0 !important;
+  transition: opacity .16s ease, transform .2s cubic-bezier(.22,.61,.36,1) !important;
+  pointer-events: none !important;
+  z-index: 4 !important;
+}
+#app-platform .tabs .tab.active::after,
+#app-platform .tabs .tab.yama-v23-active::after {
+  transform: scaleX(1) !important;
+  opacity: 1 !important;
+}
+/* Renforcement visuel de l'onglet actif (teinte + couleur, comme le CRM) */
+#app-platform .tabs .tab.active,
+#app-platform .tabs .tab.yama-v23-active {
+  color: #C9A84C !important;
+  background: rgba(201,168,76,0.10) !important;
+  font-weight: 700 !important;
 }
 
-/* ── 3. HISTORIQUE — Présentation propre ────────────────────────── */
-/* Type-badge : plus lisible, plus visible */
+/* ── 4. HISTORIQUE — Présentation propre ────────────────────────── */
+/* Type-badge (Devis / Facture / Brouillon) */
 .type-badge {
   font-size: 10px !important;
   padding: 3px 9px !important;
   border-radius: 4px !important;
   font-weight: 800 !important;
   letter-spacing: 0.4px !important;
-  vertical-align: middle !important;
   flex-shrink: 0 !important;
 }
-.type-badge.devis {
-  background: rgba(201,168,76,0.2) !important;
-  color: #C9A84C !important;
-  border: 1px solid rgba(201,168,76,0.5) !important;
+.type-badge.devis   { background: rgba(201,168,76,0.2) !important; color:#C9A84C !important; border:1px solid rgba(201,168,76,0.5) !important; }
+.type-badge.facture { background: rgba(82,199,127,0.2) !important; color:#52c77f !important; border:1px solid rgba(82,199,127,0.5) !important; }
+
+/* En-têtes de section FACTURES / DEVIS */
+.history-section-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 22px 2px 12px !important;
+  margin-top: 22px !important;
+  border-bottom: 2px solid rgba(201,168,76,0.4) !important;
 }
-.type-badge.facture {
-  background: rgba(82,199,127,0.2) !important;
-  color: #52c77f !important;
-  border: 1px solid rgba(82,199,127,0.5) !important;
+.history-section-header:first-child { margin-top: 4px !important; }
+.history-section-header .hs-label {
+  font-family: 'Barlow Condensed', sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  letter-spacing: 2px !important;
+  text-transform: uppercase !important;
 }
-/* Item : espacement et mise en page */
+.history-section-header .hs-count {
+  font-size: 11px !important;
+  padding: 3px 10px !important;
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+}
+.hs-facture                { border-bottom-color: rgba(82,199,127,0.45) !important; }
+.hs-facture .hs-label      { color:#52c77f !important; }
+.hs-facture .hs-count      { background:rgba(82,199,127,0.18) !important; color:#52c77f !important; border:1px solid rgba(82,199,127,0.35) !important; }
+.hs-devis                  { border-bottom-color: rgba(201,168,76,0.45) !important; }
+.hs-devis .hs-label        { color:#C9A84C !important; }
+.hs-devis .hs-count        { background:rgba(201,168,76,0.18) !important; color:#C9A84C !important; border:1px solid rgba(201,168,76,0.35) !important; }
+
+/* Ligne d'historique */
 .history-item {
   padding: 14px 18px !important;
   margin-bottom: 8px !important;
   border-radius: 6px !important;
   gap: 16px !important;
+  align-items: center !important;
 }
-/* Titre : flex pour aligner badge + texte proprement */
+.history-info { min-width: 0 !important; }
 .history-info .hi-title {
   display: flex !important;
   align-items: center !important;
   flex-wrap: wrap !important;
-  gap: 6px !important;
+  gap: 7px !important;
   font-size: 13px !important;
-  line-height: 1.5 !important;
+  line-height: 1.45 !important;
 }
-/* Client + chantier : pas de saut de ligne brutal */
-.history-info .hi-client-chantier {
-  display: inline !important;
-  font-weight: 600 !important;
-}
+.hi-client   { font-weight: 700 !important; color: var(--white,#fff) !important; }
+.hi-dash     { opacity: .4 !important; }
+.hi-chantier { font-weight: 500 !important; opacity: .85 !important; }
 .history-info .hi-sub {
-  font-size: 11px !important;
-  margin-top: 5px !important;
-  opacity: 0.72 !important;
   display: flex !important;
   align-items: center !important;
   flex-wrap: wrap !important;
-  gap: 6px !important;
+  gap: 10px !important;
+  font-size: 11px !important;
+  margin-top: 5px !important;
+  opacity: .92 !important;
 }
-.history-num {
-  font-size: 14px !important;
-  min-width: 72px !important;
-}
-.history-amount {
-  font-size: 16px !important;
+.hi-sub .hi-date,
+.hi-sub .hi-ville { color: var(--gray,#9aa) !important; }
+.hi-status {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  padding: 2px 9px !important;
+  border-radius: 8px !important;
   white-space: nowrap !important;
 }
+.hi-status-paid { color:#52c77f !important; background:rgba(82,199,127,0.14) !important; }
+.hi-status-wait { color:#C9A84C !important; background:rgba(201,168,76,0.12) !important; }
+.history-num    { font-size: 14px !important; min-width: 64px !important; }
+.history-amount { font-size: 16px !important; white-space: nowrap !important; }
 
 </style>
 
@@ -32023,8 +32105,6 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   'use strict';
   if (window.__YAMA_FIX_PROPRE_2026__) return;
   window.__YAMA_FIX_PROPRE_2026__ = true;
-
-  var GOLD = '#C9A84C';
 
   /* ── Enforcement principal ──────────────────────────────────────── */
   function enforce() {
@@ -32060,22 +32140,13 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
         else       { p.classList.remove('active'); }
       });
 
-      /* 4. Indicateur doré via box-shadow inline — gagne sur tout CSS */
+      /* 4. Indicateur doré : on garantit qu'UN SEUL onglet porte .active.
+         Le visuel (film doré ::after + teinte) est 100% géré par le CSS,
+         donc plus aucune écriture de style inline ici (pas de reflow). */
       plat.querySelectorAll('.tabs .tab').forEach(function(t) {
-        var isAct = (t === activeBtn ||
-                     t.classList.contains('active') ||
-                     t.classList.contains('yama-v23-active'));
-        if (isAct) {
-          t.style.setProperty('box-shadow',    'inset 0 -3px 0 0 ' + GOLD,  'important');
-          t.style.setProperty('color',         GOLD,                          'important');
-          t.style.setProperty('font-weight',   '700',                         'important');
-          t.style.setProperty('border-bottom', '3px solid ' + GOLD,           'important');
-        } else {
-          t.style.setProperty('box-shadow',    'none',                        'important');
-          t.style.setProperty('border-bottom', '3px solid transparent',       'important');
-          t.style.removeProperty('color');
-          t.style.removeProperty('font-weight');
-        }
+        var isAct = (t.dataset.tab === activeTabName);
+        if (t.classList.contains('active') !== isAct) t.classList.toggle('active', isAct);
+        if (t.classList.contains('yama-v23-active') !== isAct) t.classList.toggle('yama-v23-active', isAct);
       });
     } catch(e) { /* silencieux */ }
   }
@@ -32126,124 +32197,11 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     setTimeout(function() { FNS.forEach(wrapFn); enforce(); }, ms);
   });
 
-  /* ═══════════════════════════════════════════════════════════════
-     HISTORIQUE — Amélioration DOM post-render
-  ═══════════════════════════════════════════════════════════════ */
-
-  /* Améliorer les en-têtes de section FACTURES / DEVIS */
-  function upgradeHistoryHeaders() {
-    var list = document.getElementById('historyList');
-    if (!list) return;
-    Array.from(list.children).forEach(function(el) {
-      if (el.tagName !== 'DIV') return;
-      if (el.classList.contains('history-item') || el.classList.contains('history-empty')) return;
-      if (el.dataset.yamaHdrUpgraded) return;
-      el.dataset.yamaHdrUpgraded = '1';
-
-      var spans = el.querySelectorAll('span');
-      if (spans.length < 2) return;
-      var labelSpan = spans[0];
-      var countSpan = spans[1];
-      var labelText = (labelSpan.textContent || '').toUpperCase();
-      var isFacture = labelText.indexOf('FACTURE') !== -1;
-      var r = isFacture ? '82,199,127' : '201,168,76';
-
-      /* En-tête de section : plus de présence visuelle */
-      el.style.cssText = [
-        'display:flex',
-        'align-items:center',
-        'gap:12px',
-        'padding:22px 0 12px',
-        'margin-top:24px',
-        'margin-bottom:4px',
-        'border-bottom:2px solid rgba(' + r + ',0.45)'
-      ].join(';');
-
-      /* Label */
-      labelSpan.style.cssText = [
-        'font-family:Barlow Condensed,sans-serif',
-        'font-size:13px',
-        'font-weight:800',
-        'letter-spacing:2px',
-        'text-transform:uppercase',
-        'color:rgba(' + r + ',1)'
-      ].join(';');
-
-      /* Badge compteur */
-      countSpan.style.cssText = [
-        'font-size:11px',
-        'background:rgba(' + r + ',0.18)',
-        'color:rgba(' + r + ',1)',
-        'padding:3px 10px',
-        'border-radius:10px',
-        'font-weight:700',
-        'border:1px solid rgba(' + r + ',0.35)'
-      ].join(';');
-    });
-  }
-
-  /* Améliorer chaque ligne de l'historique : séparer statut du titre */
-  function upgradeHistoryItems() {
-    var list = document.getElementById('historyList');
-    if (!list) return;
-    list.querySelectorAll('.history-item:not([data-yama-item-upgraded])').forEach(function(item) {
-      item.dataset.yamaItemUpgraded = '1';
-      var hiTitle = item.querySelector('.hi-title');
-      var hiSub   = item.querySelector('.hi-sub');
-      if (!hiTitle || !hiSub) return;
-
-      /* Le statut est le dernier span sans classe dans hi-title */
-      var allSpans = Array.from(hiTitle.querySelectorAll('span'));
-      var statusSpan = null;
-      for (var i = allSpans.length - 1; i >= 0; i--) {
-        if (!allSpans[i].className) { statusSpan = allSpans[i]; break; }
-      }
-
-      if (statusSpan && statusSpan.parentNode === hiTitle) {
-        var statusText  = statusSpan.textContent || '';
-        var statusColor = statusSpan.style.color || 'inherit';
-        var statusBg    = statusSpan.style.background || 'transparent';
-        statusSpan.parentNode.removeChild(statusSpan);
-
-        /* Recréer le statut dans hi-sub, aligné et discret */
-        var pill = document.createElement('span');
-        pill.style.cssText = [
-          'display:inline-flex',
-          'align-items:center',
-          'font-size:10px',
-          'font-weight:700',
-          'color:' + statusColor,
-          'background:' + (statusBg !== 'transparent' ? statusBg : 'transparent'),
-          'padding:2px 8px',
-          'border-radius:8px'
-        ].join(';');
-        pill.textContent = statusText;
-        hiSub.appendChild(pill);
-      }
-    });
-  }
-
-  function upgradeHistory() {
-    upgradeHistoryHeaders();
-    upgradeHistoryItems();
-  }
-
-  /* Patcher renderHistory une seule fois */
-  function patchRenderHistory() {
-    if (window.__yamaFP26histPatched) return;
-    var orig = window.renderHistory;
-    if (typeof orig !== 'function') return;
-    window.renderHistory = function() {
-      var r = orig.apply(this, arguments);
-      setTimeout(upgradeHistory, 30);
-      return r;
-    };
-    window.__yamaFP26histPatched = true;
-  }
-
-  [0, 400, 1200, 3500].forEach(function(ms) {
-    setTimeout(function() { patchRenderHistory(); upgradeHistory(); }, ms);
-  });
+  /* HISTORIQUE — La présentation (en-têtes de section, intitulés, statut)
+     est désormais construite directement dans renderHistory() au moment du
+     rendu, et stylée par le CSS ci-dessus. Plus AUCUNE mutation DOM
+     post-render ici : c'est ce qui causait la cascade de reflows et le
+     redimensionnement visible de la page. */
 
 })();
 </script>
