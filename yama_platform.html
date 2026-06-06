@@ -9151,126 +9151,6 @@ function makeChart(id, type, labels, datasets, options = {}) {
   } catch(e) { console.error('Chart error:', id, e); }
 }
 
-function renderAnalyse() {
-  // Garde : une version enrichie remplace la structure statique (#kpiCards…).
-  // Si ces éléments n'existent plus, on laisse la version enrichie s'en charger.
-  if (!document.getElementById('kpiCards')) return;
-  const allHist = getHistory(); // TOUS les documents
-  const histFactures = allHist.filter(h => h.docType === 'facture');
-  const clientPaid = getClientPaid();
-
-  // CA/marge calculés sur factures uniquement
-  let totalHT = 0, totalCharges = 0;
-  histFactures.forEach(h => {
-    totalHT += getHTFromEntry(h);
-    totalCharges += getSTCost(h);
-  });
-  // Taux de conversion : devis émis vs factures générées
-  const nbDevis = allHist.filter(h => h.docType === 'devis' || h.docType === 'devis-brouillon').length;
-  const nbFactures = histFactures.length;
-  const hist = histFactures; // pour la suite (impayés, graphiques)
-  const totalMarge = totalHT - totalCharges;
-  const margePct = totalHT > 0 ? (totalMarge / totalHT * 100) : 0;
-
-  const impayes = hist.filter(h => h.docType === 'facture' && !clientPaid[h.docNum]);
-  const impayesAmt = impayes.reduce((s, h) => s + (parseFloat(h.totalTTC)||0), 0);
-
-  // KPI Cards
-  document.getElementById('kpiCards').innerHTML = [
-    { label: 'CA Total HT', val: fmt(totalHT), color: 'var(--gold)' },
-    { label: 'Marge brute', val: fmt(totalMarge), color: '#52c77f' },
-    { label: 'Marge %', val: totalHT > 0 ? margePct.toFixed(1) + '%' : '—', color: margePct >= 40 ? '#1a8a4a' : margePct >= 30 ? '#52c77f' : margePct >= 20 ? '#E07B39' : '#e74c3c' },
-    { label: 'Impayés clients', val: fmt(impayesAmt), color: impayesAmt > 0 ? '#e74c3c' : '#52c77f' },
-  ].map(k => `
-    <div class="kpi-card">
-      <div class="kpi-label">${k.label}</div>
-      <div class="kpi-value" style="color:${k.color}">${k.val}</div>
-    </div>`).join('');
-
-  // Conversion
-  document.getElementById('nbDevis').textContent = nbDevis;
-  document.getElementById('nbFactures').textContent = nbFactures;
-  const taux = nbDevis > 0 ? Math.round(nbFactures / nbDevis * 100) : 0;
-  document.getElementById('tauxConv').textContent = nbDevis > 0 ? taux + '%' : '—';
-  document.getElementById('convBar').style.width = taux + '%';
-
-  // Impayés clients
-  document.getElementById('impayesTotal').textContent = fmt(impayesAmt);
-  const impayesEl = document.getElementById('impayesList');
-  if (impayes.length === 0) {
-    impayesEl.innerHTML = '<div style="text-align:center;padding:30px;color:#52c77f;">✅ Aucune facture impayée</div>';
-  } else {
-    impayesEl.innerHTML = impayes.map(h => `
-      <div class="impaye-item">
-        <div class="impaye-doc">${escapeHtml(h.docNum || '—')}</div>
-        <div class="impaye-client">${escapeHtml(h.clientNom || 'Client')} — ${escapeHtml(h.chantierRef || h.chantierVille || '')}</div>
-        <div class="impaye-date">${fmtDate(h.dateEmission)}</div>
-        <div class="impaye-amount">${fmt(h.totalTTC || 0)}</div>
-        <button class="btn-mark-paid" onclick="markClientPaid('${h.docNum}')">✅ Payé</button>
-      </div>`).join('');
-  }
-
-  if (hist.length === 0) {
-    ['chartCA','chartMarge','chartCommune','chartST'].forEach(id => destroyChart(id));
-    return;
-  }
-
-  // Graphiques par mois
-  const byMonth = {};
-  hist.forEach(h => {
-    if (!h.savedAt) return;
-    const d = new Date(h.savedAt);
-    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-    if (!byMonth[key]) byMonth[key] = { ca: 0, marge: 0 };
-    const ht = getHTFromEntry(h);
-    byMonth[key].ca += ht;
-    byMonth[key].marge += ht - getSTCost(h);
-  });
-  const months = Object.keys(byMonth).sort();
-  const mLabels = months.map(m => {
-    const [y, mo] = m.split('-');
-    return ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'][parseInt(mo)-1] + ' ' + y.slice(2);
-  });
-
-  makeChart('chartCA', 'bar', mLabels.length ? mLabels : ['—'], [{
-    data: months.length ? months.map(m => Math.round(byMonth[m].ca)) : [0],
-    backgroundColor: 'rgba(201,168,76,0.7)', borderColor: '#C9A84C', borderWidth: 1, borderRadius: 3,
-  }]);
-
-  makeChart('chartMarge', 'bar', mLabels.length ? mLabels : ['—'], [{
-    data: months.length ? months.map(m => Math.round(byMonth[m].marge)) : [0],
-    backgroundColor: 'rgba(82,199,127,0.7)', borderColor: '#52c77f', borderWidth: 1, borderRadius: 3,
-  }]);
-
-  const COLORS = ['#C9A84C','#52c77f','#E07B39','#378ADD','#7F77DD','#D4537E'];
-
-  const byCommune = {};
-  hist.forEach(h => {
-    const ville = (h.chantierVille || 'Non défini').trim() || 'Non défini';
-    const ht = getHTFromEntry(h);
-    if (ht > 0) byCommune[ville] = (byCommune[ville] || 0) + ht;
-  });
-  const commE = Object.entries(byCommune).sort((a,b) => b[1]-a[1]).slice(0,6);
-  makeChart('chartCommune', 'doughnut',
-    commE.length ? commE.map(e => e[0]) : ['Aucune donnée'],
-    [{ data: commE.length ? commE.map(e => Math.round(e[1])) : [1], backgroundColor: COLORS, borderWidth: 2, borderColor: '#0F0F1F' }],
-    { plugins: { legend: { display: true, position: 'right', labels: { color: '#888', font: { size: 11 } } } } }
-  );
-
-  const byST = {};
-  hist.forEach(h => {
-    const nom = (h.stNom && h.stNom.trim()) ? h.stNom.trim() : null;
-    if (!nom) return;
-    const cost = getSTCost(h);
-    if (cost > 0) byST[nom] = (byST[nom] || 0) + cost;
-  });
-  const stE = Object.entries(byST).sort((a,b) => b[1]-a[1]).slice(0,6);
-  makeChart('chartST', 'doughnut',
-    stE.length ? stE.map(e => e[0]) : ['Aucune donnée'],
-    [{ data: stE.length ? stE.map(e => Math.round(e[1])) : [1], backgroundColor: COLORS, borderWidth: 2, borderColor: '#0F0F1F' }],
-    { plugins: { legend: { display: true, position: 'right', labels: { color: '#888', font: { size: 11 } } } } }
-  );
-}
 
 window.addEventListener('DOMContentLoaded', async () => {
   updateNumDisplay();
@@ -16784,32 +16664,6 @@ order by table_name;</textarea>
     .cr-actions > *:last-child{grid-column:auto;}
   }
 </style>
-<script id="yama-v16-responsive-script">
-(function(){
-  function markCompactCrmCards(){
-    document.querySelectorAll('.contact-row').forEach(function(row){
-      row.classList.add('yama-v16-card');
-    });
-  }
-  const oldRenderContacts = window.renderContacts;
-  if (typeof oldRenderContacts === 'function') {
-    window.renderContacts = function(){
-      const res = oldRenderContacts.apply(this, arguments);
-      setTimeout(markCompactCrmCards, 40);
-      return res;
-    };
-  }
-  const oldRenderContactList = window.renderContactList;
-  if (typeof oldRenderContactList === 'function') {
-    window.renderContactList = function(){
-      const res = oldRenderContactList.apply(this, arguments);
-      setTimeout(markCompactCrmCards, 40);
-      return res;
-    };
-  }
-  document.addEventListener('DOMContentLoaded', function(){ setTimeout(markCompactCrmCards, 80); });
-})();
-</script>
 
 
 
@@ -18890,20 +18744,6 @@ order by table_name;</textarea>
     contain:layout paint!important;
   }
   #app-platform .tabs::-webkit-scrollbar{display:none!important;}
-  #app-platform .tabs::after{
-    content:"";
-    position:absolute;
-    left:var(--yama-v23-indicator-left,18px);
-    bottom:0;
-    width:var(--yama-v23-indicator-width,80px);
-    height:2px;
-    border-radius:2px 2px 0 0;
-    background:var(--gold,#C9A84C);
-    box-shadow:0 0 14px rgba(201,168,76,.38);
-    transition:left .22s cubic-bezier(.22,.61,.36,1), width .22s cubic-bezier(.22,.61,.36,1);
-    pointer-events:none;
-    z-index:5;
-  }
   #app-platform .tabs .tab,
   #app-platform .tabs .tab.active,
   body.yama-pro-polish #app-platform .tabs .tab,
@@ -18970,13 +18810,6 @@ order by table_name;</textarea>
     transform:none!important;
   }
 
-  /* Transition de contenu : glissement léger, sans toucher à la barre */
-  #app-platform .tab-content{animation:none!important;transform:none!important;will-change:auto!important;}
-  #app-platform .tab-content.active{display:block!important;}
-  #app-platform .tab-content.yama-v23-slide-next{animation:yamaV23SlideNext .18s cubic-bezier(.22,.61,.36,1) both!important;}
-  #app-platform .tab-content.yama-v23-slide-prev{animation:yamaV23SlidePrev .18s cubic-bezier(.22,.61,.36,1) both!important;}
-  @keyframes yamaV23SlideNext{from{opacity:.82;transform:translateX(14px);}to{opacity:1;transform:translateX(0);}}
-  @keyframes yamaV23SlidePrev{from{opacity:.82;transform:translateX(-14px);}to{opacity:1;transform:translateX(0);}}
 
   /* Catalogue : Actif Oui/Non devient un toggle stable, sans menu qui recouvre Catégorie */
   #articleActive.yama-v23-active-hidden{
@@ -19227,21 +19060,6 @@ order by table_name;</textarea>
     box-sizing:border-box!important;
   }
   #app-platform .tabs::-webkit-scrollbar{display:none!important;}
-  #app-platform .tabs::after{
-    content:""!important;
-    position:absolute!important;
-    left:0!important;
-    bottom:0!important;
-    width:var(--yama-final-indicator-width,48px)!important;
-    height:2px!important;
-    border-radius:2px 2px 0 0!important;
-    background:var(--gold,#C9A84C)!important;
-    transform:translate3d(var(--yama-final-indicator-x,18px),0,0)!important;
-    transition:transform .22s cubic-bezier(.22,.61,.36,1), width .18s cubic-bezier(.22,.61,.36,1)!important;
-    pointer-events:none!important;
-    z-index:6!important;
-    will-change:transform,width!important;
-  }
   #app-platform .tabs .tab,
   #app-platform .tabs .tab.active,
   #app-platform .tabs .tab.yama-v23-active,
@@ -19303,12 +19121,6 @@ order by table_name;</textarea>
     transform:none!important;
     transition:none!important;
   }
-  #app-platform .tab-content{animation:none!important;transform:none!important;will-change:auto!important;}
-  #app-platform .tab-content.active{display:block!important;}
-  #app-platform .tab-content.yama-final-slide-next{animation:yamaFinalSlideNext .16s cubic-bezier(.22,.61,.36,1) both!important;}
-  #app-platform .tab-content.yama-final-slide-prev{animation:yamaFinalSlidePrev .16s cubic-bezier(.22,.61,.36,1) both!important;}
-  @keyframes yamaFinalSlideNext{from{opacity:.88;transform:translate3d(10px,0,0);}to{opacity:1;transform:translate3d(0,0,0);}}
-  @keyframes yamaFinalSlidePrev{from{opacity:.88;transform:translate3d(-10px,0,0);}to{opacity:1;transform:translate3d(0,0,0);}}
 
   /* CRM : filtres sans clignotement et sans transition de dimensions. */
   #page-contacts .ftabs{align-items:center!important;contain:paint!important;}
@@ -19664,28 +19476,6 @@ order by table_name;</textarea>
     position:relative!important;
     border-bottom:0!important;
     box-sizing:border-box!important;
-  }
-  #app-platform .tabs .tab::after{
-    content:""!important;
-    position:absolute!important;
-    left:12px!important;
-    right:12px!important;
-    bottom:0!important;
-    height:2px!important;
-    border-radius:2px 2px 0 0!important;
-    background:var(--gold,#C9A84C)!important;
-    box-shadow:0 0 14px rgba(201,168,76,.38)!important;
-    transform:scaleX(0)!important;
-    transform-origin:center!important;
-    opacity:0!important;
-    pointer-events:none!important;
-    transition:opacity .14s ease, transform .18s cubic-bezier(.22,.61,.36,1)!important;
-    z-index:9!important;
-  }
-  #app-platform .tabs .tab.active::after,
-  #app-platform .tabs .tab.yama-v23-active::after{
-    opacity:1!important;
-    transform:scaleX(1)!important;
   }
 
   /* Verrouillage strict des deux onglets encore sensibles au reflow. */
@@ -28677,117 +28467,6 @@ console.info('[YAMA V46] Patch chargé');
       return result;
     };
   }
-
-  function getHistoryFinal() {
-    try { return typeof getHistory === 'function' ? getHistory() : readJSON(LS_HISTORY, []); }
-    catch(e){ return readJSON(LS_HISTORY, []); }
-  }
-  function getStatusesFinal() {
-    try { return typeof getDevisStatuses === 'function' ? getDevisStatuses() : {}; }
-    catch(e){ return {}; }
-  }
-  function getPaidFinal() {
-    try { return typeof getClientPaid === 'function' ? getClientPaid() : readJSON('yama_client_paid_v1', {}); }
-    catch(e){ return readJSON('yama_client_paid_v1', {}); }
-  }
-  function entryHT(entry) {
-    try { if (typeof getHTFromEntry === 'function') return getHTFromEntry(entry); } catch(e){}
-    return (entry.lignesClient || []).reduce((sum, l) => sum + parseMoney(l.qte) * parseMoney(l.pu), 0);
-  }
-  function entryCost(entry) {
-    try { if (typeof getSTCost === 'function') return getSTCost(entry); } catch(e){}
-    return (entry.lignesST || []).reduce((sum, l) => sum + parseMoney(l.qte) * parseMoney(l.pu), 0) + parseMoney(entry.coutMateriaux) + parseMoney(entry.autresCouts);
-  }
-  function contactStage(contact) {
-    const c = contact || {};
-    if (c.finished || c.followUpStatus === 'finished' || c.status === 'fini') return 'Archives';
-    if (c.followUpStatus === 'chantier' || c.type === 'chantier') return 'Chantiers';
-    if (c.followUpStatus === 'waiting' || c.waitingResponse) return 'Réponse attendue';
-    if (c.followUpStatus === 'devis_to_make' || c.followUpStatus === 'devis_started' || c.devisToMake) return 'Devis à faire';
-    try { if (typeof isDueForFollowUp === 'function' && isDueForFollowUp(c)) return 'À relancer'; } catch(e){}
-    return 'RDV planifiés';
-  }
-
-  window.renderAnalyse = function finalRenderAnalyse() {
-    const container = document.querySelector('#tab-analyse .container');
-    if (!container) return;
-    const hist = getHistoryFinal();
-    const statuses = getStatusesFinal();
-    const paid = getPaidFinal();
-    const contacts = getContactsFinal();
-    const devis = hist.filter(h => h && h.docType !== 'facture');
-    const factures = hist.filter(h => h && h.docType === 'facture');
-    const caHT = factures.reduce((s,h) => s + entryHT(h), 0);
-    const costs = factures.reduce((s,h) => s + entryCost(h), 0);
-    const margin = caHT - costs;
-    const marginPct = caHT > 0 ? Math.round((margin / caHT) * 100) : 0;
-    const unpaid = factures.filter(h => !paid[h.docNum]);
-    const unpaidTotal = unpaid.reduce((s,h) => s + parseMoney(h.totalTTC), 0);
-    const pendingDevis = devis.filter(h => ((statuses[h.docNum] || {}).status || 'pending') === 'pending');
-    const accepted = devis.filter(h => ['accepted','done'].includes(((statuses[h.docNum] || {}).status || 'pending')));
-    const conversion = devis.length ? Math.round((accepted.length / devis.length) * 100) : 0;
-    const potential = pendingDevis.reduce((s,h) => s + parseMoney(h.totalTTC), 0);
-    const sourceCounts = {};
-    contacts.forEach(c => {
-      const raw = c.sourceClient || c.clientSource || c.source_client || '';
-      const label = raw ? sourceLabel(raw) : 'Non renseigné';
-      sourceCounts[label] = (sourceCounts[label] || 0) + 1;
-    });
-    const topSources = Object.entries(sourceCounts).sort((a,b) => b[1] - a[1]).slice(0, 5);
-    const stageCounts = contacts.reduce((acc,c) => {
-      const stage = contactStage(c);
-      acc[stage] = (acc[stage] || 0) + 1;
-      return acc;
-    }, {});
-    const missingSourcePct = contacts.length ? Math.round(((sourceCounts['Non renseigné'] || 0) / contacts.length) * 100) : 0;
-
-    const actions = [];
-    if (unpaid.length) actions.push({ title:`${unpaid.length} facture(s) à encaisser`, sub:`Montant ouvert : ${euro(unpaidTotal)}`, pill:'Urgent', cls:'red' });
-    if (pendingDevis.length) actions.push({ title:`${pendingDevis.length} devis sans décision`, sub:`Potentiel commercial : ${euro(potential)}`, pill:'Suivi', cls:'' });
-    if (accepted.length) actions.push({ title:`${accepted.length} devis accepté(s) à transformer`, sub:'Vérifier facturation ou chantier lié', pill:'Action', cls:'green' });
-    if (missingSourcePct >= 25) actions.push({ title:'Origines clients incomplètes', sub:`${missingSourcePct}% des contacts sans origine : l'analyse commerciale perd en précision`, pill:'Qualité', cls:'' });
-    if (!actions.length) actions.push({ title:'Aucune alerte majeure', sub:'Les données clés sont cohérentes pour le moment', pill:'OK', cls:'green' });
-
-    container.innerHTML = `
-      <div class="yama-final-analysis">
-        <div class="yama-final-analysis-head">
-          <div>
-            <div class="yama-final-analysis-title">Analyse opérationnelle</div>
-            <div class="yama-final-analysis-sub">Vue courte : encaissement, conversion, potentiel et qualité des données.</div>
-          </div>
-          <button class="yama-final-sync-btn" type="button" onclick="renderAnalyse()">Actualiser</button>
-        </div>
-
-        <div class="yama-final-kpi-grid">
-          <div class="yama-final-kpi"><div class="yama-final-kpi-label">CA facturé HT</div><div class="yama-final-kpi-value">${esc(euro(caHT))}</div><div class="yama-final-kpi-note">${factures.length} facture(s)</div></div>
-          <div class="yama-final-kpi"><div class="yama-final-kpi-label">Marge brute</div><div class="yama-final-kpi-value" style="color:${marginPct >= 30 ? '#52c77f' : '#E07B39'}">${esc(euro(margin))}</div><div class="yama-final-kpi-note">${marginPct || 0}% sur factures</div></div>
-          <div class="yama-final-kpi"><div class="yama-final-kpi-label">Conversion devis</div><div class="yama-final-kpi-value">${devis.length ? conversion + '%' : '—'}</div><div class="yama-final-kpi-note">${accepted.length}/${devis.length} accepté(s)</div></div>
-          <div class="yama-final-kpi"><div class="yama-final-kpi-label">À encaisser</div><div class="yama-final-kpi-value" style="color:${unpaidTotal ? '#ff8b8b' : '#52c77f'}">${esc(euro(unpaidTotal))}</div><div class="yama-final-kpi-note">${unpaid.length || 'Aucune'} facture(s) ouverte(s)</div></div>
-        </div>
-
-        <div class="yama-final-panels">
-          <div class="yama-final-panel">
-            <div class="yama-final-panel-title">Décisions prioritaires</div>
-            ${actions.map(a => `<div class="yama-final-row"><div><strong>${esc(a.title)}</strong><small>${esc(a.sub)}</small></div><span class="yama-final-pill ${a.cls || ''}">${esc(a.pill)}</span></div>`).join('')}
-          </div>
-          <div class="yama-final-panel">
-            <div class="yama-final-panel-title">Pipeline CRM</div>
-            ${['RDV planifiés','À relancer','Devis à faire','Réponse attendue','Chantiers','Archives'].map(stage => `<div class="yama-final-row"><div>${esc(stage)}</div><span class="yama-final-pill">${stageCounts[stage] || 0}</span></div>`).join('')}
-          </div>
-        </div>
-
-        <div class="yama-final-panels">
-          <div class="yama-final-panel">
-            <div class="yama-final-panel-title">Origines clients</div>
-            ${topSources.length ? topSources.map(([name,count]) => `<div class="yama-final-row"><div>${esc(name)}<small>${Math.round(count / Math.max(contacts.length, 1) * 100)}% des contacts</small></div><span class="yama-final-pill">${count}</span></div>`).join('') : '<div class="yama-final-row"><div>Aucune origine renseignée</div><span class="yama-final-pill red">0</span></div>'}
-          </div>
-          <div class="yama-final-panel">
-            <div class="yama-final-panel-title">Devis à suivre</div>
-            ${pendingDevis.slice(0,5).map(h => `<div class="yama-final-row"><div><strong>${esc(h.clientNom || 'Client')}</strong><small>${esc(h.docNum || 'Devis')} · relance suggérée ${shortDate(h.nextRelanceDueAt || h.dateValidite || h.savedAt)}</small></div><span class="yama-final-pill">${esc(euro(h.totalTTC || 0))}</span></div>`).join('') || '<div class="yama-final-row"><div>Aucun devis en attente</div><span class="yama-final-pill green">OK</span></div>'}
-          </div>
-        </div>
-      </div>`;
-  };
 
   function injectForceSyncButton() {
     if ($('yama-final-force-sync')) return;
