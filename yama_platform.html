@@ -31967,46 +31967,42 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   will-change: auto !important;
 }
 
-/* ── 3. INDICATEUR DORÉ ─────────────────────────────────────────── */
-/* On neutralise UNIQUEMENT l'indicateur GLOBAL (::after sur .tabs) qui
-   était clippé par overflow-y:hidden + contain:paint. On CONSERVE et on
-   renforce l'indicateur PAR ONGLET (::after sur .tab) — jamais clippé. */
+/* ── 3. INDICATEUR DORÉ — border-bottom direct ──────────────────── */
+/* L'approche ::after (scaleX) échouait car contain:paint sur chaque
+   .tab (règle l.19291, spécificité 1,3,0) masquait le pseudo-élément.
+   Solution : border-bottom sur .tab.active — impossible à clipper,
+   sans conflit de spécificité dès que le sélecteur est 1,3,0+.        */
+
+/* Kill les deux ::after (global clippé ET par-onglet défaillant) */
 #app-platform .tabs::after {
   display: none !important;
   content: none !important;
 }
+#app-platform .tabs .tab::after {
+  display: none !important;
+  content: none !important;
+}
+
+/* Espacement : gap entre onglets + padding interne plus généreux */
+#app-platform .tabs {
+  gap: 6px !important;
+}
+
+/* Onglet baseline : réserve les 3 px de hauteur, padding confortable */
 #app-platform .tabs .tab {
   position: relative !important;
+  box-sizing: border-box !important;
   border-bottom: 3px solid transparent !important;
-  transition: color .14s ease, background-color .14s ease !important;
+  padding: 0 22px !important;
+  transition: color .14s ease, background-color .14s ease, border-color .15s ease !important;
 }
-/* Le "film" doré : barre lumineuse glissante en bas de l'onglet actif */
-#app-platform .tabs .tab::after {
-  content: "" !important;
-  display: block !important;
-  position: absolute !important;
-  left: 10px !important;
-  right: 10px !important;
-  bottom: 0 !important;
-  height: 3px !important;
-  border-radius: 3px 3px 0 0 !important;
-  background: #C9A84C !important;
-  box-shadow: 0 0 12px rgba(201,168,76,.55) !important;
-  transform: scaleX(0) !important;
-  transform-origin: center !important;
-  opacity: 0 !important;
-  transition: opacity .16s ease, transform .2s cubic-bezier(.22,.61,.36,1) !important;
-  pointer-events: none !important;
-  z-index: 4 !important;
-}
-#app-platform .tabs .tab.active::after,
-#app-platform .tabs .tab.yama-v23-active::after {
-  transform: scaleX(1) !important;
-  opacity: 1 !important;
-}
-/* Renforcement visuel de l'onglet actif (teinte + couleur, comme le CRM) */
+
+/* Onglet ACTIF — film doré via border-bottom (spécificité 1,3,0,
+   même rang que la règle border:0 de l.19270, mais APRÈS → on gagne) */
 #app-platform .tabs .tab.active,
 #app-platform .tabs .tab.yama-v23-active {
+  border-bottom: 3px solid #C9A84C !important;
+  padding: 0 22px !important;
   color: #C9A84C !important;
   background: rgba(201,168,76,0.10) !important;
   font-weight: 700 !important;
@@ -32106,6 +32102,9 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   if (window.__YAMA_FIX_PROPRE_2026__) return;
   window.__YAMA_FIX_PROPRE_2026__ = true;
 
+  /* IDs des éléments V14 qui contaminent le conteneur Analyse V3 */
+  var V14_IDS = ['yama-v14-analysis-head','yama-v14-insights','yama-v14-analysis-panels'];
+
   /* ── Enforcement principal ──────────────────────────────────────── */
   function enforce() {
     try {
@@ -32113,42 +32112,60 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
       var crm  = document.getElementById('app-crm');
       var plat = document.getElementById('app-platform');
 
-      /* 1. Visibilité des sections principales */
+      /* 1. Visibilité sections principales */
       if (crm)  crm.style.setProperty('display',  app === 'crm'      ? 'block' : 'none', 'important');
       if (plat) plat.style.setProperty('display',  app === 'platform' ? 'block' : 'none', 'important');
 
       if (app !== 'platform' || !plat) return;
 
-      /* 2. Trouver l'onglet actif */
+      /* 2. Onglet actif */
       var activeBtn = plat.querySelector('.tabs .tab.active') ||
                       plat.querySelector('.tabs .tab.yama-v23-active');
       if (!activeBtn) return;
 
       var activeTabName = activeBtn.dataset.tab || '';
-      /* V44/V45 gère la redirection priorites→cockpit, ne pas interférer */
       if (activeTabName === 'priorites') return;
 
       var targetId = 'tab-' + activeTabName;
 
-      /* 3. Stacking fix : display forcé sur chaque panel */
+      /* 3. Stacking fix */
       plat.querySelectorAll('.tab-content').forEach(function(p) {
         var isAct = (p.id === targetId);
-        p.style.setProperty('display',         isAct ? 'block'   : 'none',  'important');
-        p.style.setProperty('pointer-events',  isAct ? 'auto'    : 'none',  'important');
-        p.style.setProperty('opacity',         isAct ? '1'       : '0',     'important');
+        p.style.setProperty('display',        isAct ? 'block' : 'none',  'important');
+        p.style.setProperty('pointer-events', isAct ? 'auto'  : 'none',  'important');
+        p.style.setProperty('opacity',        isAct ? '1'     : '0',     'important');
         if (isAct) { if (!p.classList.contains('active')) p.classList.add('active'); }
         else       { p.classList.remove('active'); }
       });
 
-      /* 4. Indicateur doré : on garantit qu'UN SEUL onglet porte .active.
-         Le visuel (film doré ::after + teinte) est 100% géré par le CSS,
-         donc plus aucune écriture de style inline ici (pas de reflow). */
+      /* 4. Sync classe .active → CSS gère le border-bottom doré */
       plat.querySelectorAll('.tabs .tab').forEach(function(t) {
         var isAct = (t.dataset.tab === activeTabName);
         if (t.classList.contains('active') !== isAct) t.classList.toggle('active', isAct);
         if (t.classList.contains('yama-v23-active') !== isAct) t.classList.toggle('yama-v23-active', isAct);
       });
-    } catch(e) { /* silencieux */ }
+
+      /* 5. Anti-contamination Analyse : V14 (MutationObserver) insère ses
+            éléments dans le conteneur après que V3 a rendu yama-final-analysis.
+            On les déplace au niveau body (ghost caché) → ensureAnalysisShell()
+            les trouve via getElementById → ne réinsère plus jamais.          */
+      var aCont = plat.querySelector('#tab-analyse .container');
+      if (aCont && aCont.querySelector('.yama-final-analysis')) {
+        V14_IDS.forEach(function(id) {
+          var inCont = aCont.querySelector('#' + id);
+          if (inCont) {
+            inCont.style.cssText = 'display:none!important;';
+            document.body.appendChild(inCont); /* déplace hors du conteneur */
+          }
+          if (!document.getElementById(id)) {
+            var g = document.createElement('div');
+            g.id = id;
+            g.style.cssText = 'display:none!important;';
+            document.body.appendChild(g);
+          }
+        });
+      }
+    } catch(e) {}
   }
 
   window.__yamaEnforce = enforce;
@@ -32169,7 +32186,7 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     setTimeout(enforce, 320);
   }
 
-  /* ── Trigger immédiat après chaque clic sur onglet/bouton app ── */
+  /* ── Trigger sur clic onglet / bouton app ───────────────────────── */
   document.addEventListener('click', function(e) {
     if (!e.target) return;
     var t = e.target.closest &&
@@ -32180,7 +32197,7 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     setTimeout(enforce, 270);
   });
 
-  /* ── Wrapping des fonctions critiques ───────────────────────────── */
+  /* ── Wrapping fonctions critiques ───────────────────────────────── */
   var FNS = [
     'switchTab', 'switchTabSmooth', 'switchPlatformTabStable',
     'switchApp', 'showPage', 'activateCockpit',
@@ -32196,12 +32213,6 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   [260, 820, 2000, 5000].forEach(function(ms) {
     setTimeout(function() { FNS.forEach(wrapFn); enforce(); }, ms);
   });
-
-  /* HISTORIQUE — La présentation (en-têtes de section, intitulés, statut)
-     est désormais construite directement dans renderHistory() au moment du
-     rendu, et stylée par le CSS ci-dessus. Plus AUCUNE mutation DOM
-     post-render ici : c'est ce qui causait la cascade de reflows et le
-     redimensionnement visible de la page. */
 
 })();
 </script>
