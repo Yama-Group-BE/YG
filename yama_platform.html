@@ -31646,45 +31646,43 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   will-change: auto !important;
 }
 
-/* ── 3. INDICATEUR DORÉ — border-bottom direct ──────────────────── */
-/* L'approche ::after (scaleX) échouait car contain:paint sur chaque
-   .tab (règle l.19291, spécificité 1,3,0) masquait le pseudo-élément.
-   Solution : border-bottom sur .tab.active — impossible à clipper,
-   sans conflit de spécificité dès que le sélecteur est 1,3,0+.        */
+/* ── 3. INDICATEUR DORÉ — border-bottom via contain:none + gap ────── */
+/* ::after échouait : contain:paint sur .tabs (L17968) forçait overflow
+   à clip — même avec overflow:visible le rendu était clippé.
+   box-shadow:inset échouait : CSS box-shadow:none!important (L18305,
+   L18322, L19104) dans des blocs antérieurs écrasait l'inline.
+   Solution définitive : retire contain:paint des deux niveaux,
+   padding-bottom:3px crée 3 px de marge → border-bottom visible.       */
 
-/* Kill les deux ::after (global clippé ET par-onglet défaillant) */
-#app-platform .tabs::after {
-  display: none !important;
-  content: none !important;
-}
-#app-platform .tabs .tab::after {
-  display: none !important;
-  content: none !important;
-}
+/* Kill les ::after (désormais inutiles) */
+#app-platform .tabs::after { display: none !important; content: none !important; }
+#app-platform .tabs .tab::after { display: none !important; content: none !important; }
 
-/* Espacement : gap entre onglets + padding interne plus généreux */
+/* Espacement + neutralisation contain:paint + marge 3px pour l'indicateur */
 #app-platform .tabs {
+  contain: layout style !important;
+  padding-bottom: 3px !important;
   gap: 6px !important;
 }
 
-/* Onglet baseline : réserve les 3 px de hauteur, padding confortable */
+/* Onglet baseline */
 #app-platform .tabs .tab {
   position: relative !important;
   box-sizing: border-box !important;
+  contain: none !important;
   border-bottom: 3px solid transparent !important;
   padding: 0 22px !important;
   transition: color .14s ease, background-color .14s ease, border-color .15s ease !important;
 }
 
-/* Onglet ACTIF — couleur + fond (l'indicateur est injecté en JS via
-   box-shadow inline !important, seul moyen qui survit à overflow-y:hidden
-   + contain:paint + toutes les guerres de spécificité CSS) */
+/* Onglet ACTIF : couleur + fond + indicateur doré (border-bottom + JS inline) */
 #app-platform .tabs .tab.active,
 #app-platform .tabs .tab.yama-v23-active {
   padding: 0 22px !important;
   color: #C9A84C !important;
   background-color: rgba(201,168,76,0.10) !important;
   font-weight: 700 !important;
+  border-bottom-color: #C9A84C !important;
 }
 
 /* ── 4. HISTORIQUE — Présentation propre ────────────────────────── */
@@ -31817,16 +31815,16 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
         else       { p.classList.remove('active'); }
       });
 
-      /* 4. Sync classe .active + indicateur doré via box-shadow inline
-            (inline !important est au-dessus de toute règle CSS — survit à
-            overflow-y:hidden, contain:paint et toute guerre de spécificité) */
+      /* 4. Sync classe .active + indicateur doré via border-bottom-color inline
+            (inline !important prime sur toute règle CSS, même !important sheet) */
       plat.querySelectorAll('.tabs .tab').forEach(function(t) {
         var isAct = (t.dataset.tab === activeTabName);
         if (t.classList.contains('active') !== isAct) t.classList.toggle('active', isAct);
         if (t.classList.contains('yama-v23-active') !== isAct) t.classList.toggle('yama-v23-active', isAct);
-        var shadow = isAct ? 'inset 0 -3px 0 0 #C9A84C' : 'none';
-        if (t.style.getPropertyValue('box-shadow') !== shadow)
-          t.style.setProperty('box-shadow', shadow, 'important');
+        t.style.setProperty('border-bottom-color', isAct ? '#C9A84C' : 'transparent', 'important');
+        t.style.setProperty('border-bottom-width', '3px', 'important');
+        t.style.setProperty('border-bottom-style', 'solid', 'important');
+        if (t.style.getPropertyValue('box-shadow')) t.style.removeProperty('box-shadow');
       });
 
       /* 5. Anti-contamination Analyse : V14 (MutationObserver) insère ses
