@@ -31646,36 +31646,49 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   will-change: auto !important;
 }
 
-/* ── 3. INDICATEUR DORÉ — border-bottom via contain:none + gap ────── */
-/* ::after échouait : contain:paint sur .tabs (L17968) forçait overflow
-   à clip — même avec overflow:visible le rendu était clippé.
-   box-shadow:inset échouait : CSS box-shadow:none!important (L18305,
-   L18322, L19104) dans des blocs antérieurs écrasait l'inline.
-   Solution définitive : retire contain:paint des deux niveaux,
-   padding-bottom:3px crée 3 px de marge → border-bottom visible.       */
+/* ── 3. INDICATEUR DORÉ — hauteur 57px conteneur / 54px onglet ────── */
+/* Historique des échecs :
+   • ::after scaleX  : contain:paint (.tabs L17968) forçait overflow→clip
+   • border-bottom   : height:54px+max-height:54px sur conteneur → padding
+     réduit la zone de contenu au lieu d'agrandir → border pile au bord clip
+   • box-shadow inset: CSS box-shadow:none!important (L18305/18322/19104)
+     dans blocs antérieurs écrase la valeur inline
+   Solution : conteneur à 57px, onglet à 54px, contain:none partout →
+   3px de marge garantie, border-bottom toujours dans la zone visible.   */
 
-/* Kill les ::after (désormais inutiles) */
+/* Kill les ::after */
 #app-platform .tabs::after { display: none !important; content: none !important; }
 #app-platform .tabs .tab::after { display: none !important; content: none !important; }
 
-/* Espacement + neutralisation contain:paint + marge 3px pour l'indicateur */
+/* Conteneur : 57px (onglet 54px → 3px garantis sous l'onglet) */
 #app-platform .tabs {
   contain: layout style !important;
-  padding-bottom: 3px !important;
+  height: 57px !important;
+  min-height: 57px !important;
+  max-height: 57px !important;
+  padding: 0 18px !important;
+  align-items: center !important;
   gap: 6px !important;
+  border-bottom: 1px solid rgba(255,255,255,0.07) !important;
 }
 
-/* Onglet baseline */
+/* Onglet baseline : police alignée sur les nav-tabs CRM (13px / 500) */
 #app-platform .tabs .tab {
   position: relative !important;
   box-sizing: border-box !important;
   contain: none !important;
+  height: 54px !important;
+  min-height: 54px !important;
+  max-height: 54px !important;
   border-bottom: 3px solid transparent !important;
   padding: 0 22px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
   transition: color .14s ease, background-color .14s ease, border-color .15s ease !important;
 }
 
-/* Onglet ACTIF : couleur + fond + indicateur doré (border-bottom + JS inline) */
+/* Onglet ACTIF */
 #app-platform .tabs .tab.active,
 #app-platform .tabs .tab.yama-v23-active {
   padding: 0 22px !important;
