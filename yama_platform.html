@@ -31914,5 +31914,507 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 
 })();
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     YAMA SMART V1 — 8 fonctionnalités avancées
+     Guard : window.__YAMA_SMART_V1__
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  'use strict';
+  if (window.__YAMA_SMART_V1__) return;
+  window.__YAMA_SMART_V1__ = true;
+  console.log('[YAMA Smart V1] Chargement…');
+
+  var F = {
+    neutralCRM:           false,
+    acompteInPdf:         false,
+    autoMsgChantier:      false,
+    autoMsgSatisfaction:  false,
+    cockpitBanner:        false,
+    execMode:             false,
+    margeTempsPatch:      false,
+    csvExport:            false
+  };
+
+  function fmtBE(v) {
+    return new Intl.NumberFormat('fr-BE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(v||0)+' €';
+  }
+
+  // ── Utilitaire : modal message auto ──────────────────────────────────────
+  function yamaShowAutoMessage(title, message, cid) {
+    var old = document.getElementById('yama-automsg-overlay');
+    if (old) old.remove();
+    var tel = '';
+    if (cid) {
+      try {
+        var raw = typeof findRawContact==='function' ? findRawContact(cid) : null;
+        var c = raw && typeof normalizeContact==='function' ? normalizeContact(raw) : raw;
+        tel = c ? (c.tel || '') : '';
+      } catch(e){}
+    }
+    var ov = document.createElement('div');
+    ov.id = 'yama-automsg-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;';
+    var md = document.createElement('div');
+    md.style.cssText = 'background:#1a1e30;border:1px solid rgba(201,168,76,.22);border-radius:14px;max-width:560px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;';
+    var hd = document.createElement('div');
+    hd.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:15px 20px;border-bottom:1px solid rgba(255,255,255,.08);';
+    hd.innerHTML = '<span style="font-size:14px;font-weight:700;color:#f0f2f8;">'+title+'</span>'+
+      '<button onclick="document.getElementById(\'yama-automsg-overlay\').remove()" style="background:none;border:none;color:rgba(180,190,220,.45);font-size:22px;cursor:pointer;line-height:1;padding:0;">&times;</button>';
+    var bd = document.createElement('div');
+    bd.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px;';
+    var ta = document.createElement('textarea');
+    ta.value = message;
+    ta.style.cssText = 'width:100%;height:210px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:rgba(240,242,248,.9);font-size:13px;line-height:1.6;padding:12px;resize:vertical;font-family:inherit;box-sizing:border-box;';
+    bd.appendChild(ta);
+    var ft = document.createElement('div');
+    ft.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px;border-top:1px solid rgba(255,255,255,.07);';
+    var cpBtn = document.createElement('button');
+    cpBtn.textContent = '📋 Copier';
+    cpBtn.style.cssText = 'padding:8px 16px;background:rgba(201,168,76,.14);border:1px solid rgba(201,168,76,.3);border-radius:8px;color:#C9A84C;font-size:13px;font-weight:600;cursor:pointer;';
+    cpBtn.onclick = function(){
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(ta.value).then(function(){ cpBtn.textContent='✅ Copié !'; setTimeout(function(){ cpBtn.textContent='📋 Copier'; },2000); });
+      } else { ta.select(); document.execCommand('copy'); cpBtn.textContent='✅ Copié !'; setTimeout(function(){ cpBtn.textContent='📋 Copier'; },2000); }
+    };
+    ft.appendChild(cpBtn);
+    if (tel) {
+      var tc = tel.replace(/[\s\-\+]/g,'').replace(/^0/,'32');
+      var waBtn = document.createElement('button');
+      waBtn.textContent = '💬 WhatsApp';
+      waBtn.style.cssText = 'padding:8px 16px;background:rgba(37,211,102,.1);border:1px solid rgba(37,211,102,.22);border-radius:8px;color:#25d366;font-size:13px;font-weight:600;cursor:pointer;';
+      waBtn.onclick = function(){ window.open('https://wa.me/'+tc+'?text='+encodeURIComponent(ta.value),'_blank'); };
+      ft.appendChild(waBtn);
+    }
+    var clBtn = document.createElement('button');
+    clBtn.textContent = 'Fermer';
+    clBtn.style.cssText = 'padding:8px 16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:rgba(180,190,220,.65);font-size:13px;cursor:pointer;margin-left:auto;';
+    clBtn.onclick = function(){ ov.remove(); };
+    ft.appendChild(clBtn);
+    md.appendChild(hd); md.appendChild(bd); md.appendChild(ft);
+    ov.appendChild(md);
+    document.body.appendChild(ov);
+  }
+  window.yamaShowAutoMessage = yamaShowAutoMessage;
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 1. CRM ANNUAIRE NEUTRE — masquer les badges pipeline dans la vue "tous"
+  // ══════════════════════════════════════════════════════════════════════════
+  (function patchNeutralCRM(){
+    var _orig = window.renderContactList;
+    if (typeof _orig !== 'function') return;
+    window.renderContactList = function(containerId, filterType){
+      _orig.apply(this, arguments);
+      if (!filterType || filterType === 'all') {
+        var el = document.getElementById(containerId);
+        if (!el) return;
+        el.querySelectorAll('.cr-badge').forEach(function(b){
+          if (/^(📋|🔨|⏳)/.test((b.textContent||'').trim())) b.style.display = 'none';
+        });
+      }
+    };
+    F.neutralCRM = true;
+    console.log('[YAMA SV1] ✅ CRM neutre actif');
+  })();
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 2. ACOMPTE DANS LE TABLEAU PDF — lignes après TOTAL TTC
+  // ══════════════════════════════════════════════════════════════════════════
+  (function patchAcompteInPdf(){
+    var _orig = window.buildPdfHtml;
+    if (typeof _orig !== 'function') return;
+    window.buildPdfHtml = function(docType, data, meta){
+      var html = _orig.apply(this, arguments);
+      var isDevis = docType === 'devis';
+      var acomptePct = (typeof getSetting==='function' ? (getSetting('financier.acomptePct')||30) : 30);
+      var acompteVerse = parseFloat((data && data.acompteVerse)||0);
+      // Recalcul totalTTC depuis data
+      var htBrut=0, tvaBase=0;
+      var lignes = (data && data.lignesClient)||[];
+      lignes.forEach(function(l){
+        var ht=(parseFloat(l.qte)||0)*(parseFloat(l.pu)||0);
+        htBrut+=ht; tvaBase+=ht*(parseFloat(l.tva)||0);
+      });
+      var remise=parseFloat((data&&data.remiseEur)||0);
+      var totalHT=Math.max(0,htBrut-remise);
+      var tvaTotal=htBrut>0?tvaBase*(totalHT/htBrut):tvaBase;
+      var totalTTC=totalHT+tvaTotal;
+      var extra='';
+      if (isDevis && totalTTC>0) {
+        var ac=totalTTC*acomptePct/100;
+        extra=
+          '<tr class="tva" style="border-top:1px solid rgba(201,168,76,.3);background:rgba(201,168,76,.04);">'+
+            '<td colspan="5" class="r" style="color:#C9A84C;font-weight:600;">📋 Acompte '+acomptePct+'% à la commande</td>'+
+            '<td class="r" style="color:#C9A84C;font-weight:600;">'+fmtBE(ac)+'</td>'+
+          '</tr>'+
+          '<tr class="tva">'+
+            '<td colspan="5" class="r">Solde à payer à réception des travaux</td>'+
+            '<td class="r">'+fmtBE(totalTTC-ac)+'</td>'+
+          '</tr>';
+      } else if (!isDevis && acompteVerse>0 && totalTTC>0) {
+        var solde=Math.max(0,totalTTC-acompteVerse);
+        extra=
+          '<tr class="tva" style="border-top:1px solid rgba(82,199,127,.25);background:rgba(82,199,127,.04);">'+
+            '<td colspan="5" class="r" style="color:#52c77f;font-weight:600;">✅ Acompte versé</td>'+
+            '<td class="r" style="color:#52c77f;font-weight:600;">- '+fmtBE(acompteVerse)+'</td>'+
+          '</tr>'+
+          '<tr style="font-weight:800;background:rgba(201,168,76,.06);">'+
+            '<td colspan="5" class="r" style="color:#C9A84C;font-size:13px;">💰 SOLDE RESTANT DÛ</td>'+
+            '<td class="r amount" style="color:#C9A84C;">'+fmtBE(solde)+'</td>'+
+          '</tr>';
+      }
+      if (extra) html = html.replace(/(<tr class="total">[\s\S]*?<\/tr>)/, '$1'+extra);
+      return html;
+    };
+    F.acompteInPdf = true;
+    console.log('[YAMA SV1] ✅ Acompte PDF actif');
+  })();
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 3. AUTO MESSAGE — Devis → Chantier confirmé
+  // ══════════════════════════════════════════════════════════════════════════
+  (function patchAutoMsgChantier(){
+    var _orig = window.markAsChantier;
+    if (typeof _orig !== 'function') return;
+    window.markAsChantier = function(cid){
+      _orig.apply(this, arguments);
+      setTimeout(function(){
+        var raw=typeof findRawContact==='function'?findRawContact(cid):null;
+        var c=raw&&typeof normalizeContact==='function'?normalizeContact(raw):raw;
+        if (!c) return;
+        var name=((c.civilite||'')+' '+(c.nom||'')).trim();
+        var commune=c.commune||c.ville||'';
+        var msg='Bonjour '+name+',\n\n'+
+          'Nous avons le plaisir de vous confirmer que votre dossier'+
+          (commune?' ('+commune+')':'')+' est désormais en phase de chantier.\n\n'+
+          'Nos équipes vont se coordonner pour programmer le début des travaux dans les meilleurs délais. '+
+          'Nous vous tiendrons informé(e) de l\'avancement et restons joignables à tout moment.\n\n'+
+          'Merci de votre confiance.\nCordialement,\nL\'équipe YAMA Group\n📞 0489 33 77 00';
+        yamaShowAutoMessage('🔨 Chantier confirmé — Message client', msg, cid);
+      }, 1200);
+    };
+    F.autoMsgChantier = true;
+    console.log('[YAMA SV1] ✅ Auto-message chantier actif');
+  })();
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 4. AUTO MESSAGE — Chantier terminé → Satisfaction client
+  //    Utilise openCrmReportModal pour capturer le cid (crmReportCid est privé)
+  // ══════════════════════════════════════════════════════════════════════════
+  (function patchAutoMsgSatisfaction(){
+    // Capture cid when report modal opens
+    var _origOpen = window.openCrmReportModal;
+    if (typeof _origOpen === 'function' && !_origOpen.__yamaSV1Cap) {
+      window.openCrmReportModal = function(cid){
+        window.__yamaSV1ReportCid = String(cid||'');
+        _origOpen.apply(this, arguments);
+      };
+      window.openCrmReportModal.__yamaSV1Cap = true;
+    }
+
+    function wrapSatisfaction(){
+      var _orig = window.saveCrmReportAndFinish;
+      if (typeof _orig !== 'function' || _orig.__yamaSatWrapped) return;
+      window.saveCrmReportAndFinish = function(){
+        var cid = window.__yamaSV1ReportCid || '';
+        _orig.apply(this, arguments);
+        setTimeout(function(){
+          if (!cid) return;
+          var raw=typeof findRawContact==='function'?findRawContact(cid):null;
+          var c=raw&&typeof normalizeContact==='function'?normalizeContact(raw):raw;
+          if (!c) return;
+          var name=((c.civilite||'')+' '+(c.nom||'')).trim();
+          var msg='Bonjour '+name+',\n\n'+
+            'Les travaux réalisés chez vous sont à présent terminés. Nous espérons que vous êtes entièrement satisfait(e) du résultat et du suivi de notre équipe.\n\n'+
+            'Votre satisfaction est notre priorité. Si vous avez la moindre remarque, nous restons à votre écoute.\n\n'+
+            '⭐ Si vous êtes satisfait(e), nous serions ravis que vous partagiez votre avis sur Google ou que vous nous recommandiez à votre entourage.\n\n'+
+            'Merci encore pour votre confiance.\nCordialement,\nL\'équipe YAMA Group\n📞 0489 33 77 00';
+          yamaShowAutoMessage('✅ Chantier terminé — Message satisfaction', msg, cid);
+        }, 1000);
+      };
+      window.saveCrmReportAndFinish.__yamaSatWrapped = true;
+      F.autoMsgSatisfaction = true;
+      console.log('[YAMA SV1] ✅ Auto-message satisfaction actif');
+    }
+    [300, 800, 2000, 5000].forEach(function(ms){ setTimeout(wrapSatisfaction, ms); });
+  })();
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 5. COCKPIT — Bannière priorités en haut
+  // ══════════════════════════════════════════════════════════════════════════
+  (function patchCockpitBanner(){
+    function injectBanner(){
+      var el = document.getElementById('tab-cockpit');
+      if (!el || !el.querySelector('.v37-cockpit')) return;
+      var existing = el.querySelector('.yama-sv1-banner');
+      if (existing) existing.remove();
+      var contacts = typeof getContacts==='function'?getContacts():[];
+      var history  = typeof getHistory==='function'?getHistory():[];
+      var now = Date.now();
+      var impayees = history.filter(function(d){
+        return (d.type==='facture'||d.docType==='facture')&&!d.paid&&!d.archived;
+      });
+      var devisSansReponse = history.filter(function(d){
+        if (d.type!=='devis'&&d.docType!=='devis') return false;
+        if (d.accepted||d.refused||d.archived) return false;
+        var created=new Date(d.savedAt||d.date||0).getTime();
+        return (now-created)>7*24*3600*1000;
+      });
+      var aRelancer = contacts.filter(function(c){
+        return typeof isDueForFollowUp==='function'?isDueForFollowUp(c):false;
+      });
+      var pretChantier = contacts.filter(function(c){
+        return c.type==='devis'&&!c.finished&&(c.waitingResponse||c.followUpStatus==='waiting');
+      });
+      var items=[
+        {icon:'🔴',label:'Impayées',count:impayees.length,urgent:impayees.length>0},
+        {icon:'📋',label:'Devis sans réponse',count:devisSansReponse.length,urgent:devisSansReponse.length>2},
+        {icon:'📞',label:'À relancer',count:aRelancer.length,urgent:aRelancer.length>0},
+        {icon:'🔨',label:'Prêts → chantier',count:pretChantier.length,urgent:false}
+      ];
+      var banner = document.createElement('div');
+      banner.className = 'yama-sv1-banner';
+      banner.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;margin-bottom:18px;background:rgba(201,168,76,.05);border:1px solid rgba(201,168,76,.17);border-radius:10px;';
+      var lbl=document.createElement('span');
+      lbl.style.cssText='font-size:10px;font-weight:800;color:rgba(140,155,200,.5);text-transform:uppercase;letter-spacing:1.2px;width:100%;margin-bottom:2px;';
+      lbl.textContent='⚡ PRIORITÉS EN COURS';
+      banner.appendChild(lbl);
+      items.forEach(function(item){
+        var chip=document.createElement('div');
+        var cs='display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;';
+        if (item.urgent&&item.count>0) cs+='background:rgba(231,76,60,.14);border:1px solid rgba(231,76,60,.28);color:#e74c3c;';
+        else if (item.count>0) cs+='background:rgba(201,168,76,.09);border:1px solid rgba(201,168,76,.22);color:#C9A84C;';
+        else cs+='background:rgba(82,199,127,.07);border:1px solid rgba(82,199,127,.14);color:#52c77f;';
+        chip.style.cssText=cs;
+        chip.innerHTML=item.icon+' <strong>'+item.count+'</strong>&nbsp;'+item.label;
+        banner.appendChild(chip);
+      });
+      var container=el.querySelector('.v37-cockpit');
+      if (container) container.insertBefore(banner,container.firstChild);
+      else el.insertBefore(banner,el.firstChild);
+    }
+
+    function wrapCockpit(){
+      if (typeof window.renderCockpit!=='function'||window.renderCockpit.__yamaBanner) return;
+      var _orig=window.renderCockpit;
+      window.renderCockpit=function(){ _orig.apply(this,arguments); setTimeout(injectBanner,60); };
+      window.renderCockpit.__yamaBanner=true;
+      F.cockpitBanner=true;
+      console.log('[YAMA SV1] ✅ Bannière cockpit active');
+    }
+    [400,1200,3000].forEach(function(ms){ setTimeout(wrapCockpit,ms); });
+  })();
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 6. MODE EXÉCUTIF — couleurs atténuées, bouton flottant
+  // ══════════════════════════════════════════════════════════════════════════
+  (function setupExecMode(){
+    var sty=document.createElement('style');
+    sty.textContent=
+      'body.yama-exec-mode #app-platform .tabs .tab.active,'+
+      'body.yama-exec-mode #app-platform .tabs .tab.yama-v23-active{'+
+        'color:#8899BB!important;border-bottom-color:#8899BB!important;background:rgba(136,153,187,.09)!important;}'+
+      'body.yama-exec-mode .v37-kpi{filter:saturate(.25)!important;}'+
+      'body.yama-exec-mode .crm-follow-pill{filter:saturate(.2)!important;}'+
+      'body.yama-exec-mode .cr-badge{filter:saturate(.2)!important;}'+
+      'body.yama-exec-mode .btn-primary{filter:saturate(.3)!important;}'+
+      'body.yama-exec-mode .yama-v12-mini-btn.green{filter:saturate(.25)!important;}';
+    document.head.appendChild(sty);
+    var btn=document.createElement('button');
+    btn.id='yama-exec-toggle';
+    btn.title='Mode exécutif — couleurs atténuées';
+    btn.style.cssText='position:fixed;bottom:80px;right:18px;z-index:9999;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.1);background:rgba(18,22,36,.92);color:rgba(180,190,220,.65);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .2s;box-shadow:0 2px 8px rgba(0,0,0,.4);';
+    btn.textContent='👔';
+    btn.addEventListener('click',function(){
+      var on=document.body.classList.toggle('yama-exec-mode');
+      btn.style.borderColor=on?'rgba(136,153,187,.5)':'rgba(255,255,255,.1)';
+      btn.style.background=on?'rgba(136,153,187,.18)':'rgba(18,22,36,.92)';
+      if (typeof showToast==='function') showToast(on?'👔 Mode exécutif activé':'🎨 Mode normal','info');
+    });
+    document.body.appendChild(btn);
+    F.execMode=true;
+    console.log('[YAMA SV1] ✅ Mode exécutif prêt');
+  })();
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 7. MARGE-TEMPS RÉELLE — champ heures dans la fiche chantier
+  // ══════════════════════════════════════════════════════════════════════════
+  (function patchMargeTempsPatch(){
+    var LS_KEY='yama_heures_v1';
+    function loadH(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||'{}'); }catch(e){ return {}; } }
+    function saveH(o){ try{ localStorage.setItem(LS_KEY,JSON.stringify(o)); }catch(e){} }
+    window.yamaGetHeures=function(id){ return loadH()[id]||{nb:0,cout:0}; };
+    window.yamaSetHeures=function(id,nb,cout){ var o=loadH(); o[id]={nb:nb||0,cout:cout||0}; saveH(o); };
+
+    window.yamaUpdateHeurePrev=function(){
+      var nbEl=document.getElementById('yama-sv1-nb-heures');
+      var cEl=document.getElementById('yama-sv1-cout-h');
+      var prev=document.getElementById('yama-sv1-heure-prev');
+      if (!prev) return;
+      var nb=parseFloat((nbEl||{}).value)||0;
+      var cout=parseFloat((cEl||{}).value)||0;
+      if (nb<=0){ prev.textContent=''; return; }
+      var rev=parseFloat((document.getElementById('v12ChRevenueHT')||{}).value)||0;
+      var chg=parseFloat((document.getElementById('v12ChChargesHT')||{}).value)||0;
+      var marge=rev-chg;
+      var margeH=nb>0?marge/nb:0;
+      prev.innerHTML='<span style="color:#5b9cf6;">'+nb+'h</span>'+
+        (cout>0?' · Coût m.d.œuvre&nbsp;: <strong>'+fmtBE(nb*cout)+'</strong>':'')+
+        (rev>0?' · Marge/h&nbsp;: <strong style="color:'+(margeH>=30?'#52c77f':'#C9A84C')+';">'+fmtBE(margeH)+'/h</strong>':'');
+    };
+
+    function injectHeures(chantierId){
+      var modal=document.getElementById('v12ChantierModal');
+      if (!modal||modal.querySelector('#yama-sv1-heures-row')) return;
+      var marginPrev=modal.querySelector('#v12MarginPreview');
+      if (!marginPrev) return;
+      var container=marginPrev.parentElement;
+      if (!container) return;
+      var row=document.createElement('div');
+      row.id='yama-sv1-heures-row';
+      row.style.cssText='margin-top:12px;background:rgba(91,156,246,.06);border:1px solid rgba(91,156,246,.2);border-radius:8px;padding:12px 14px;';
+      row.innerHTML=
+        '<div style="font-size:10px;letter-spacing:1.5px;color:#5b9cf6;text-transform:uppercase;font-weight:800;margin-bottom:8px;">Marge-temps réelle</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+          '<div class="field"><label style="font-size:11px;">Heures travaillées</label>'+
+            '<input id="yama-sv1-nb-heures" type="number" min="0" step="0.5" placeholder="ex: 24" style="width:100%;box-sizing:border-box;" oninput="yamaUpdateHeurePrev()"></div>'+
+          '<div class="field"><label style="font-size:11px;">Coût horaire moyen (€/h)</label>'+
+            '<input id="yama-sv1-cout-h" type="number" min="0" step="1" placeholder="ex: 45" style="width:100%;box-sizing:border-box;" oninput="yamaUpdateHeurePrev()"></div>'+
+        '</div>'+
+        '<div id="yama-sv1-heure-prev" style="margin-top:8px;font-size:13px;color:rgba(180,190,220,.7);min-height:18px;"></div>';
+      container.parentNode.insertBefore(row, container.nextSibling);
+      if (chantierId) {
+        var entry=loadH()[chantierId]||{};
+        if (entry.nb) document.getElementById('yama-sv1-nb-heures').value=entry.nb;
+        if (entry.cout) document.getElementById('yama-sv1-cout-h').value=entry.cout;
+        yamaUpdateHeurePrev();
+      }
+    }
+
+    function wrapOpen(){
+      var _cur=window.openChantierSheetModal;
+      if (typeof _cur!=='function'||_cur.__yamaSV1H) return;
+      window.openChantierSheetModal=function(chantierId){
+        _cur.apply(this,arguments);
+        setTimeout(function(){ injectHeures(chantierId||''); },120);
+      };
+      window.openChantierSheetModal.__yamaSV1H=true;
+    }
+    function wrapSave(){
+      var _cur=window.saveChantierSheetFromModal;
+      if (typeof _cur!=='function'||_cur.__yamaSV1H) return;
+      window.saveChantierSheetFromModal=function(){
+        var nb=parseFloat((document.getElementById('yama-sv1-nb-heures')||{}).value)||0;
+        var cout=parseFloat((document.getElementById('yama-sv1-cout-h')||{}).value)||0;
+        _cur.apply(this,arguments);
+        if (nb>0) setTimeout(function(){
+          try {
+            var list=JSON.parse(localStorage.getItem('yama_chantiers_v12')||'[]');
+            if (list.length){ var o=loadH(); o[list[0].id]={nb:nb,cout:cout}; saveH(o); }
+          } catch(e){}
+        },100);
+      };
+      window.saveChantierSheetFromModal.__yamaSV1H=true;
+    }
+    [400,1200,3000].forEach(function(ms){ setTimeout(function(){ wrapOpen(); wrapSave(); },ms); });
+    F.margeTempsPatch=true;
+    console.log('[YAMA SV1] ✅ Marge-temps prête');
+  })();
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 8. EXPORT COMPTABLE CSV — factures → fichier .csv
+  // ══════════════════════════════════════════════════════════════════════════
+  (function setupCSVExport(){
+    window.exportComptableCSV=function(){
+      var hist=typeof getHistory==='function'?getHistory():[];
+      var facs=hist.filter(function(d){ return d.type==='facture'||d.docType==='facture'; });
+      if (!facs.length){ if(typeof showToast==='function') showToast('Aucune facture enregistrée','info'); return; }
+      var hdr=['Date','Référence','Client','Chantier','Total HT (€)','TVA (€)','Total TTC (€)','Statut paiement','Date paiement'].join(';');
+      var rows=facs.map(function(f){
+        var ht=parseFloat(f.totalHT||0).toFixed(2).replace('.',',');
+        var ttc=parseFloat(f.totalTTC||0).toFixed(2).replace('.',',');
+        var tva=(parseFloat(f.totalTTC||0)-parseFloat(f.totalHT||0)).toFixed(2).replace('.',',');
+        var status=f.paid?'Payée':(f.partialPaid?'Partiel':'Impayée');
+        var datePay=f.paidAt?new Date(f.paidAt).toLocaleDateString('fr-BE'):'';
+        var date=f.savedAt?new Date(f.savedAt).toLocaleDateString('fr-BE'):(f.date||'');
+        return [date,f.docNum||'','"'+(f.clientNom||'').replace(/"/g,'""')+'"','"'+(f.chantierRef||f.chantierVille||'').replace(/"/g,'""')+'"',ht,tva,ttc,status,datePay].join(';');
+      });
+      var csv='﻿'+hdr+'\n'+rows.join('\n');
+      var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a');
+      a.href=url; a.download='yama_comptable_'+new Date().toISOString().slice(0,10)+'.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); },1000);
+      if(typeof showToast==='function') showToast('✅ Export CSV — '+facs.length+' facture(s)','success');
+    };
+
+    function injectCSVBtn(){
+      var tab=document.getElementById('tab-history');
+      if (!tab||tab.querySelector('#yama-sv1-csv-btn')) return;
+      var wrap=document.createElement('div');
+      wrap.style.cssText='display:flex;justify-content:flex-end;padding:8px 4px 4px;';
+      var btn=document.createElement('button');
+      btn.id='yama-sv1-csv-btn';
+      btn.textContent='📊 Export comptable CSV';
+      btn.style.cssText='padding:8px 15px;background:rgba(91,156,246,.11);border:1px solid rgba(91,156,246,.24);border-radius:8px;color:#5b9cf6;font-size:12px;font-weight:600;cursor:pointer;';
+      btn.onclick=window.exportComptableCSV;
+      wrap.appendChild(btn); tab.insertBefore(wrap,tab.firstChild);
+    }
+
+    function wrapHistory(){
+      var _cur=window.renderHistory;
+      if (typeof _cur!=='function'||_cur.__yamaSV1CSV) return;
+      window.renderHistory=function(){ _cur.apply(this,arguments); setTimeout(injectCSVBtn,100); };
+      window.renderHistory.__yamaSV1CSV=true;
+    }
+    [500,1500,4000].forEach(function(ms){ setTimeout(function(){ wrapHistory(); injectCSVBtn(); },ms); });
+    F.csvExport=true;
+    console.log('[YAMA SV1] ✅ Export CSV prêt');
+  })();
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TEST SUITE — window.yamaRunTests()
+  // ══════════════════════════════════════════════════════════════════════════
+  window.yamaRunTests=function(){
+    var checks=[
+      {name:'1. CRM Annuaire neutre',        ok:F.neutralCRM,                                               desc:'renderContactList patché — badges pipeline masqués'},
+      {name:'2. Acompte dans PDF',            ok:F.acompteInPdf,                                             desc:'buildPdfHtml patché — lignes acompte/solde dans le tableau'},
+      {name:'3. Auto-message chantier',       ok:F.autoMsgChantier,                                          desc:'markAsChantier patché — modal message auto'},
+      {name:'4. Auto-message satisfaction',   ok:!!(window.saveCrmReportAndFinish&&window.saveCrmReportAndFinish.__yamaSatWrapped), desc:'saveCrmReportAndFinish patché — modal satisfaction'},
+      {name:'5. Bannière cockpit',            ok:!!(window.renderCockpit&&window.renderCockpit.__yamaBanner), desc:'renderCockpit patché — bannière priorités en haut'},
+      {name:'6. Mode exécutif',               ok:F.execMode&&!!document.getElementById('yama-exec-toggle'),  desc:'Bouton 👔 présent dans le DOM'},
+      {name:'7. Marge-temps réelle',          ok:F.margeTempsPatch&&typeof window.yamaGetHeures==='function', desc:'yamaGetHeures/yamaSetHeures disponibles'},
+      {name:'8. Export comptable CSV',        ok:F.csvExport&&typeof window.exportComptableCSV==='function',  desc:'exportComptableCSV() disponible'}
+    ];
+    var pass=checks.filter(function(c){ return c.ok; }).length;
+    var lines=checks.map(function(c){ return (c.ok?'✅':'❌')+' '+c.name+' — '+c.desc; });
+    var summary='── YAMA Smart V1 — Rapport de tests ──\n'+lines.join('\n')+'\n──────────────────────────\n'+pass+'/'+checks.length+' OK';
+    console.log(summary);
+    // Modal de résultat
+    var old=document.getElementById('yama-tests-overlay');
+    if (old) old.remove();
+    var ov=document.createElement('div');
+    ov.id='yama-tests-overlay';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.innerHTML=
+      '<div style="background:#141828;border:1px solid rgba(201,168,76,.25);border-radius:14px;padding:24px;max-width:520px;width:100%;max-height:82vh;overflow-y:auto;">'+
+        '<div style="font-size:13px;font-weight:800;color:#C9A84C;margin-bottom:16px;letter-spacing:.4px;">YAMA Smart V1 — Rapport de tests</div>'+
+        '<div style="font-family:monospace;font-size:12px;line-height:1.85;color:rgba(240,242,248,.85);">'+
+          lines.map(function(l){ return '<div>'+l+'</div>'; }).join('')+
+        '</div>'+
+        '<div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08);font-size:13px;font-weight:700;color:'+(pass===checks.length?'#52c77f':'#C9A84C')+';">'+
+          pass+'/'+checks.length+' fonctionnalités actives'+
+        '</div>'+
+        '<button onclick="document.getElementById(\'yama-tests-overlay\').remove()" style="margin-top:14px;width:100%;padding:9px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:rgba(180,190,220,.7);cursor:pointer;font-size:13px;">Fermer</button>'+
+      '</div>';
+    document.body.appendChild(ov);
+    return summary;
+  };
+
+  console.log('[YAMA Smart V1] ✅ Chargé — tapez yamaRunTests() dans la console pour vérifier');
+})();
+</script>
 </body>
 </html>
