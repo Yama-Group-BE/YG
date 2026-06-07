@@ -31660,28 +31660,31 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 #app-platform .tabs::after { display: none !important; content: none !important; }
 #app-platform .tabs .tab::after { display: none !important; content: none !important; }
 
-/* Conteneur : 57px (onglet 54px → 3px garantis sous l'onglet) */
+/* Conteneur : hauteur auto comme les nav-tabs CRM — overflow visible (→ auto)
+   ne clippera pas quand le contenu tient exactement dans le conteneur.        */
 #app-platform .tabs {
   contain: layout style !important;
-  height: 57px !important;
-  min-height: 57px !important;
-  max-height: 57px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: visible !important;
   padding: 0 18px !important;
-  align-items: center !important;
+  align-items: stretch !important;
   gap: 6px !important;
-  border-bottom: 1px solid rgba(255,255,255,0.07) !important;
+  border-bottom: 2px solid rgba(255,255,255,0.07) !important;
 }
 
-/* Onglet baseline : police alignée sur les nav-tabs CRM (13px / 500) */
+/* Onglet baseline : padding vertical → hauteur naturelle → indicateur collé au bas
+   du texte (identique aux nav-tabs CRM : padding 12px haut/bas + border-bottom)   */
 #app-platform .tabs .tab {
   position: relative !important;
   box-sizing: border-box !important;
   contain: none !important;
-  height: 54px !important;
-  min-height: 54px !important;
-  max-height: 54px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
   border-bottom: 3px solid transparent !important;
-  padding: 0 22px !important;
+  padding: 14px 22px !important;
   font-size: 13px !important;
   font-weight: 500 !important;
   letter-spacing: 0 !important;
@@ -31691,7 +31694,7 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 /* Onglet ACTIF */
 #app-platform .tabs .tab.active,
 #app-platform .tabs .tab.yama-v23-active {
-  padding: 0 22px !important;
+  padding: 14px 22px !important;
   color: #C9A84C !important;
   background-color: rgba(201,168,76,0.10) !important;
   font-weight: 700 !important;
