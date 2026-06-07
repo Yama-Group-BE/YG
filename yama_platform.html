@@ -31916,6 +31916,221 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
+     YAMA VISUAL SYSTEM — type scale, spacing, neutral CRM, PDF polish
+     ═══════════════════════════════════════════════════════════════════════ -->
+<style id="yama-visual-system">
+
+/* ── 1. Type-scale tokens ───────────────────────────────────────────────── */
+:root {
+  --fs-2xs:  9.5px;
+  --fs-xs:   11px;
+  --fs-sm:   12px;
+  --fs-base: 13px;
+  --fs-md:   14px;
+  --fs-lg:   16px;
+  --fs-xl:   20px;
+  --fs-2xl:  26px;
+}
+
+/* ── 2. Contact rows — refinement universel ─────────────────────────────── */
+.contact-row {
+  padding: 13px 16px !important;
+  gap: 14px !important;
+  align-items: center !important;
+  border-radius: 10px !important;
+}
+.cr-name {
+  font-size: var(--fs-md) !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.15px !important;
+  line-height: 1.35 !important;
+  color: rgba(240,242,248,.95) !important;
+  margin-bottom: 3px !important;
+}
+.cr-meta {
+  font-size: var(--fs-sm) !important;
+  color: rgba(140,155,200,.65) !important;
+  gap: 10px !important;
+  margin-top: 3px !important;
+}
+.cr-date {
+  font-size: var(--fs-xs) !important;
+  color: rgba(140,155,200,.48) !important;
+  line-height: 1.45 !important;
+  margin-bottom: 4px !important;
+}
+.avatar {
+  width: 38px !important;
+  height: 38px !important;
+  font-size: var(--fs-sm) !important;
+  font-weight: 700 !important;
+  flex-shrink: 0 !important;
+  border-radius: 9px !important;
+}
+.cr-actions .btn-sm,
+.crm-follow-actions .btn-sm {
+  font-size: 11px !important;
+  padding: 5px 9px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  border-radius: 7px !important;
+  line-height: 1.3 !important;
+}
+
+/* ── 3. CRM navigation — cohérence globale ──────────────────────────────── */
+.nav-tab {
+  font-size: var(--fs-base) !important;
+  font-weight: 500 !important;
+  padding: 11px 15px !important;
+  letter-spacing: 0 !important;
+}
+.nav-tab.active {
+  font-weight: 700 !important;
+}
+.tab-badge, .tab-count {
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+  min-width: 16px !important;
+}
+
+/* ── 4. KPI cards cockpit ──────────────────────────────────────────────── */
+.v37-kpi-label {
+  font-size: 9.5px !important;
+  letter-spacing: 1.1px !important;
+  font-weight: 700 !important;
+}
+.v37-kpi-val {
+  font-size: 22px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.5px !important;
+}
+.v37-kpi-sub {
+  font-size: 11px !important;
+  opacity: 0.7 !important;
+}
+
+/* ── 5. Titres de sections ──────────────────────────────────────────────── */
+.page-title, h2.page-title {
+  font-size: var(--fs-xl) !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.3px !important;
+  line-height: 1.2 !important;
+}
+.page-sub {
+  font-size: var(--fs-base) !important;
+  color: rgba(140,155,200,.6) !important;
+  font-weight: 400 !important;
+  line-height: 1.55 !important;
+  margin-top: 4px !important;
+}
+
+/* ── 6. CRM v12 cards ──────────────────────────────────────────────────── */
+.yama-v12-kpi-label {
+  font-size: 9.5px !important;
+  letter-spacing: 1.1px !important;
+  text-transform: uppercase !important;
+}
+.yama-v12-kpi-value {
+  font-size: 22px !important;
+  font-weight: 800 !important;
+}
+.yama-v12-kpi-sub {
+  font-size: 11px !important;
+}
+.yama-v12-ch-title {
+  font-size: var(--fs-md) !important;
+  font-weight: 700 !important;
+}
+.yama-v12-ch-meta {
+  font-size: 11px !important;
+  color: rgba(140,155,200,.6) !important;
+  line-height: 1.5 !important;
+}
+
+/* ── 7. PDF — amélioration visuelle ────────────────────────────────────── */
+.pdf-render-area .pdf-info-block {
+  border-left: 3px solid #C9A84C !important;
+  border-radius: 0 3px 3px 0 !important;
+}
+.pdf-render-area .pdf-conditions {
+  border-radius: 0 3px 3px 0 !important;
+}
+.pdf-render-area .pdf-section-title {
+  border-bottom: 1px solid #E8E0CC !important;
+  padding-bottom: 6px !important;
+  margin-bottom: 14px !important;
+}
+.pdf-render-area .pdf-footer {
+  border-top: 1px solid #E8E0CC !important;
+  padding-top: 12px !important;
+  margin-top: 24px !important;
+  font-size: 9.5px !important;
+  color: #888 !important;
+  text-align: center !important;
+  letter-spacing: 0.3px !important;
+}
+.pdf-render-area table.pdf-table tr.tva td {
+  background: #F8F6F0 !important;
+  font-size: 11px !important;
+}
+.pdf-render-area table.pdf-table th {
+  font-size: 9px !important;
+  letter-spacing: 0.8px !important;
+}
+
+/* ── 8. Harmonisation des modales ──────────────────────────────────────── */
+.modal {
+  border-radius: 14px !important;
+}
+.modal-header {
+  padding: 18px 22px 16px !important;
+}
+.modal-header h2 {
+  font-size: var(--fs-lg) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.2px !important;
+}
+.field label {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.3px !important;
+  text-transform: uppercase !important;
+  color: rgba(140,155,200,.7) !important;
+}
+
+/* ── 9. Boutons platform — homogénéité ─────────────────────────────────── */
+.btn-primary {
+  font-size: var(--fs-base) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.2px !important;
+  border-radius: 9px !important;
+}
+.btn-facture {
+  font-size: var(--fs-base) !important;
+  font-weight: 700 !important;
+  border-radius: 9px !important;
+}
+.yama-v12-mini-btn {
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  border-radius: 7px !important;
+}
+
+/* ── 10. Résultats calculateur — lisibilité ─────────────────────────────── */
+.result-card .label {
+  font-size: var(--fs-xs) !important;
+  letter-spacing: 1px !important;
+  text-transform: uppercase !important;
+}
+.result-card .val {
+  font-size: 22px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.3px !important;
+}
+
+</style>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
      YAMA SMART V1 — 8 fonctionnalités avancées
      Guard : window.__YAMA_SMART_V1__
      ═══════════════════════════════════════════════════════════════════════ -->
@@ -31999,23 +32214,28 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   window.yamaShowAutoMessage = yamaShowAutoMessage;
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 1. CRM ANNUAIRE NEUTRE — masquer les badges pipeline dans la vue "tous"
+  // 1. CRM ANNUAIRE NEUTRE — CSS : masquer TOUS les indicateurs de statut
+  //    dans toutes les listes de contacts (badges, pills, pipeline bar)
   // ══════════════════════════════════════════════════════════════════════════
-  (function patchNeutralCRM(){
-    var _orig = window.renderContactList;
-    if (typeof _orig !== 'function') return;
-    window.renderContactList = function(containerId, filterType){
-      _orig.apply(this, arguments);
-      if (!filterType || filterType === 'all') {
-        var el = document.getElementById(containerId);
-        if (!el) return;
-        el.querySelectorAll('.cr-badge').forEach(function(b){
-          if (/^(📋|🔨|⏳)/.test((b.textContent||'').trim())) b.style.display = 'none';
-        });
-      }
-    };
-    F.neutralCRM = true;
-    console.log('[YAMA SV1] ✅ CRM neutre actif');
+  (function injectNeutralCrmCSS(){
+    var sty=document.createElement('style');
+    sty.id='yama-sv1-neutral-crm';
+    var sel=[
+      '#contacts-all','#contacts-devis','#contacts-recontact',
+      '#contacts-waiting','#contacts-finished','#contacts-chantiers'
+    ];
+    var targets=[
+      '.crm-stage-pill','.crm-follow-pill','.crm-waiting-pill',
+      '.crm-finished-pill','.crm-rdv-pill','.crm-devis-pill',
+      '.crm-refused-pill','.cr-badge','.crm-pipeline-bar',
+      '.crm-overdue-chip','.crm-reminder-chip'
+    ];
+    var rules=[];
+    sel.forEach(function(s){ targets.forEach(function(t){ rules.push(s+' '+t); }); });
+    sty.textContent=rules.join(',')+'{display:none!important;}';
+    document.head.appendChild(sty);
+    F.neutralCRM=true;
+    console.log('[YAMA SV1] ✅ CRM neutre actif (CSS global)');
   })();
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -32072,31 +32292,12 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   })();
 
   // ══════════════════════════════════════════════════════════════════════════
-  // 3. AUTO MESSAGE — Devis → Chantier confirmé
+  // 3. AUTO MESSAGE CHANTIER — V42 déjà en charge de ce modal
+  //    (v42ShowChantierModal dans le bloc V42 — client + ST + WhatsApp)
+  //    Pas de doublon : on marque simplement la feature comme active
   // ══════════════════════════════════════════════════════════════════════════
-  (function patchAutoMsgChantier(){
-    var _orig = window.markAsChantier;
-    if (typeof _orig !== 'function') return;
-    window.markAsChantier = function(cid){
-      _orig.apply(this, arguments);
-      setTimeout(function(){
-        var raw=typeof findRawContact==='function'?findRawContact(cid):null;
-        var c=raw&&typeof normalizeContact==='function'?normalizeContact(raw):raw;
-        if (!c) return;
-        var name=((c.civilite||'')+' '+(c.nom||'')).trim();
-        var commune=c.commune||c.ville||'';
-        var msg='Bonjour '+name+',\n\n'+
-          'Nous avons le plaisir de vous confirmer que votre dossier'+
-          (commune?' ('+commune+')':'')+' est désormais en phase de chantier.\n\n'+
-          'Nos équipes vont se coordonner pour programmer le début des travaux dans les meilleurs délais. '+
-          'Nous vous tiendrons informé(e) de l\'avancement et restons joignables à tout moment.\n\n'+
-          'Merci de votre confiance.\nCordialement,\nL\'équipe YAMA Group\n📞 0489 33 77 00';
-        yamaShowAutoMessage('🔨 Chantier confirmé — Message client', msg, cid);
-      }, 1200);
-    };
-    F.autoMsgChantier = true;
-    console.log('[YAMA SV1] ✅ Auto-message chantier actif');
-  })();
+  F.autoMsgChantier = (typeof window.v42ShowChantierModal === 'function');
+  console.log('[YAMA SV1] ✅ Auto-message chantier → géré par V42 :', F.autoMsgChantier);
 
   // ══════════════════════════════════════════════════════════════════════════
   // 4. AUTO MESSAGE — Chantier terminé → Satisfaction client
@@ -32224,7 +32425,7 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     var btn=document.createElement('button');
     btn.id='yama-exec-toggle';
     btn.title='Mode exécutif — couleurs atténuées';
-    btn.style.cssText='position:fixed;bottom:80px;right:18px;z-index:9999;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.1);background:rgba(18,22,36,.92);color:rgba(180,190,220,.65);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .2s;box-shadow:0 2px 8px rgba(0,0,0,.4);';
+    btn.style.cssText='position:fixed;bottom:124px;right:18px;z-index:9999;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.1);background:rgba(18,22,36,.92);color:rgba(180,190,220,.65);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .2s;box-shadow:0 2px 8px rgba(0,0,0,.4);';
     btn.textContent='👔';
     btn.addEventListener('click',function(){
       var on=document.body.classList.toggle('yama-exec-mode');
@@ -32379,12 +32580,12 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   // ══════════════════════════════════════════════════════════════════════════
   window.yamaRunTests=function(){
     var checks=[
-      {name:'1. CRM Annuaire neutre',        ok:F.neutralCRM,                                               desc:'renderContactList patché — badges pipeline masqués'},
+      {name:'1. CRM Annuaire neutre',        ok:F.neutralCRM&&!!document.getElementById('yama-sv1-neutral-crm'), desc:'CSS injecté — badges, pills et pipeline bar masqués'},
       {name:'2. Acompte dans PDF',            ok:F.acompteInPdf,                                             desc:'buildPdfHtml patché — lignes acompte/solde dans le tableau'},
-      {name:'3. Auto-message chantier',       ok:F.autoMsgChantier,                                          desc:'markAsChantier patché — modal message auto'},
+      {name:'3. Auto-message chantier',       ok:typeof window.v42ShowChantierModal==='function',             desc:'V42 en charge — modal client + ST avec WhatsApp'},
       {name:'4. Auto-message satisfaction',   ok:!!(window.saveCrmReportAndFinish&&window.saveCrmReportAndFinish.__yamaSatWrapped), desc:'saveCrmReportAndFinish patché — modal satisfaction'},
       {name:'5. Bannière cockpit',            ok:!!(window.renderCockpit&&window.renderCockpit.__yamaBanner), desc:'renderCockpit patché — bannière priorités en haut'},
-      {name:'6. Mode exécutif',               ok:F.execMode&&!!document.getElementById('yama-exec-toggle'),  desc:'Bouton 👔 présent dans le DOM'},
+      {name:'6. Mode exécutif',               ok:F.execMode&&!!document.getElementById('yama-exec-toggle'),  desc:'Bouton 👔 — bottom:124px (au-dessus du bouton banque)'},
       {name:'7. Marge-temps réelle',          ok:F.margeTempsPatch&&typeof window.yamaGetHeures==='function', desc:'yamaGetHeures/yamaSetHeures disponibles'},
       {name:'8. Export comptable CSV',        ok:F.csvExport&&typeof window.exportComptableCSV==='function',  desc:'exportComptableCSV() disponible'}
     ];
