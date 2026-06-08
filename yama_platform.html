@@ -20670,17 +20670,18 @@ order by table_name;</textarea>
     const bw = (A4.w - A4.m * 2 - gap) / 2;
     const isPlus10 = data.ageBatiment === 'plus10';
     const isFacture = docType === 'facture';
+    function cpVille(cp, v){ cp=(cp||'').trim();v=(v||'').trim();if(cp&&v){var re=new RegExp('(?:^|\\s)'+cp.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?:\\s|$)','g');v=v.replace(re,' ').trim();}return [cp,v].filter(Boolean).join(' '); }
     const client = [
       ['Nom / Societe', data.clientNom],
       ['Adresse', data.clientAdresse],
-      ['CP / Ville', [data.clientCP, data.clientVille].filter(Boolean).join(' ')],
+      ['CP / Ville', cpVille(data.clientCP, data.clientVille)],
       ['Telephone', data.clientTel],
       ['Email', data.clientEmail]
     ];
     const chantier = [
       ['Reference', data.chantierRef],
       ['Adresse travaux', data.chantierAdresse],
-      ['CP / Ville', [data.chantierCP, data.chantierVille].filter(Boolean).join(' ')],
+      ['CP / Ville', cpVille(data.chantierCP, data.chantierVille)],
       ...(!isFacture ? [
         ['Age batiment', '> 10 ans ' + (isPlus10 ? '[x]' : '[ ]') + '    < 10 ans ' + (!isPlus10 ? '[x]' : '[ ]')],
         ['TVA applicable', '6% ' + (isPlus10 ? '[x]' : '[ ]') + '    21% ' + (!isPlus10 ? '[x]' : '[ ]')]
@@ -20746,35 +20747,43 @@ order by table_name;</textarea>
     cols.forEach(c => drawCell(pdf, values[c.key], c, y, h));
     return h;
   }
-  function drawTotals(pdf, y, totals){
-    function line(label, value, dark){
+  function drawTotals(pdf, y, totals, extra){
+    function line(label, value, dark, lColor, vColor){
       const h = 8;
-      // totCol = dernière colonne (total) : x=162, w=36, fin=198
-      // labelW = largeur de la zone libellé : 162-12 = 150
-      const totX = cols[cols.length - 1].x;           // 162
-      const totW = cols[cols.length - 1].w;           // 36
-      const lblW = totX - A4.m;                       // 150
+      const totX = cols[cols.length - 1].x;
+      const totW = cols[cols.length - 1].w;
+      const lblW = totX - A4.m;
       if (dark) {
         pdf.setFillColor(DARK[0], DARK[1], DARK[2]);
         pdf.rect(A4.m, y, lblW, h, 'F');
         pdf.setFillColor(GOLD[0], GOLD[1], GOLD[2]);
         pdf.rect(totX, y, totW, h, 'F');
-        setFont(pdf, 7.4, 'bold', [255,255,255]);
+        setFont(pdf, 7.4, 'bold', lColor || [255,255,255]);
       } else {
         pdf.setFillColor(PAPER[0], PAPER[1], PAPER[2]);
         pdf.rect(A4.m, y, A4.w - A4.m * 2, h, 'F');
-        setFont(pdf, 7.2, 'bold', DARK);
+        setFont(pdf, 7.2, 'bold', lColor || DARK);
       }
       pdf.setDrawColor(212,197,169);
       pdf.rect(A4.m, y, lblW, h);
       pdf.rect(totX, y, totW, h);
-      text(pdf, label, totX - 4,         y + 5.25, { align:'right' });
-      text(pdf, value, totX + totW - 2,  y + 5.25, { align:'right' });
+      text(pdf, label, totX - 4, y + 5.25, { align:'right' });
+      if (vColor) setFont(pdf, dark ? 7.4 : 7.2, 'bold', vColor);
+      text(pdf, value, totX + totW - 2, y + 5.25, { align:'right' });
       y += h;
     }
     line('Sous-total HT', euro(totals.totalHT), false);
     line('TVA - taux applicable : ' + totals.tvaLabel + ' %', euro(totals.tvaTotal), false);
     line('TOTAL TTC', euro(totals.totalTTC), true);
+    if (extra) {
+      if (extra.docType === 'devis' && extra.acompte > 0) {
+        line('Acompte ' + extra.acomptePct + '% a la commande', euro(extra.acompte), false, GOLD, GOLD);
+        line('Solde a payer a la fin des travaux', euro(totals.totalTTC - extra.acompte), false);
+      } else if (extra.docType !== 'devis' && extra.acompteVerse > 0) {
+        line('Acompte deja verse', '- ' + euro(extra.acompteVerse), false, [39,174,96], [39,174,96]);
+        line('SOLDE RESTANT DU', euro(totals.totalTTC - extra.acompteVerse), true);
+      }
+    }
     return y + 6;
   }
   function endingLayout(pdf, docType, data, totals, compact){
@@ -20802,7 +20811,7 @@ order by table_name;</textarea>
     let count = 0;
     texts.forEach(t => { count += split(pdf, '- ' + t, 174).length; });
     const boxH = (compact ? 5.5 : 7) + count * gap;
-    const sigH = compact ? 23 : 27;
+    const sigH = compact ? 27 : 32;
     return { texts, gap, boxH, sigH, h:4.5 + boxH + (compact ? 5 : 7) + sigH };
   }
   function drawEnding(pdf, y, docType, data, totals, compact){
@@ -20828,18 +20837,24 @@ order by table_name;</textarea>
     text(pdf, 'POUR YAMA GROUP', A4.m + w + gap + 4, y + 6);
     setFont(pdf, 6.9, 'normal', DARK);
     text(pdf, docType === 'devis' ? 'Lu et approuve - Bon pour accord' : 'Recu et accepte', A4.m + 4, y + 12);
-    text(pdf, 'Date : _______________________', A4.m + 4, y + h - 5);
+    text(pdf, 'Signature : _______________________', A4.m + 4, y + h - 10);
+    text(pdf, 'Date : _______________________', A4.m + 4, y + h - 4);
     setFont(pdf, 6.9, 'normal', [255,255,255]);
     text(pdf, 'Entreprise Generale de Construction', A4.m + w + gap + 4, y + 12);
-    text(pdf, docType === 'devis' ? 'Date : _______________________' : 'Facture emise le : ' + dateFmt(data.dateEmission), A4.m + w + gap + 4, y + h - 5);
+    text(pdf, 'Signature : _______________________', A4.m + w + gap + 4, y + h - 10);
+    text(pdf, docType === 'devis' ? 'Date : _______________________' : 'Facture emise le : ' + dateFmt(data.dateEmission), A4.m + w + gap + 4, y + h - 4);
     return y + h;
   }
   function addContinuation(pdf, docType, data, meta, label){
     drawFooter(pdf, pdf.internal.getNumberOfPages());
     pdf.addPage();
     let y = drawTop(pdf, docType, data, meta, label || 'detail des prestations');
-    y = drawSectionTitle(pdf, label && label.indexOf('condition') >= 0 ? 'CONDITIONS' : 'DESCRIPTION DES TRAVAUX - SUITE', y);
-    if (!label || label.indexOf('condition') < 0) y = drawTableHeader(pdf, y);
+    const hasCondition = label && label.indexOf('condition') >= 0;
+    const isRecap = label === 'recapitulatif';
+    if (!hasCondition && !isRecap) {
+      y = drawSectionTitle(pdf, 'DESCRIPTION DES TRAVAUX - SUITE', y);
+      y = drawTableHeader(pdf, y);
+    }
     return y;
   }
   function nativePdf(docType, data, meta){
@@ -20877,23 +20892,28 @@ order by table_name;</textarea>
       }
     });
 
-    const totalsNeed = 30;
+    const _acomptePctN = typeof getSetting === 'function' ? (getSetting('financier.acomptePct') || 30) : 30;
+    const _acompteN = totals.totalTTC * _acomptePctN / 100;
+    const _acompteVerseN = parseFloat(data.acompteVerse || 0) || 0;
+    const extra = { docType, acomptePct: _acomptePctN, acompte: _acompteN, acompteVerse: _acompteVerseN };
+    const hasExtraRows = (docType === 'devis' && _acompteN > 0) || (docType !== 'devis' && _acompteVerseN > 0);
+    const totalsNeed = hasExtraRows ? 46 : 30;
     const endingNormal = endingLayout(pdf, docType, data, totals, false);
     const endingCompact = endingLayout(pdf, docType, data, totals, true);
     let compact = false;
     if (y + totalsNeed + endingNormal.h > A4.limitY && y + totalsNeed + endingCompact.h <= A4.limitY) {
       compact = true;
     } else if (y + totalsNeed + endingNormal.h > A4.limitY && y + totalsNeed <= A4.limitY - 2) {
-      y = drawTotals(pdf, y, totals);
+      y = drawTotals(pdf, y, totals, extra);
       y = addContinuation(pdf, docType, data, meta, 'conditions et signatures');
       drawEnding(pdf, y, docType, data, totals, true);
       drawFooter(pdf, pdf.internal.getNumberOfPages());
       return { pdf, totals };
     } else if (y + totalsNeed + endingNormal.h > A4.limitY) {
       y = addContinuation(pdf, docType, data, meta, 'recapitulatif');
-      y = drawSectionTitle(pdf, 'TOTAL ET CONDITIONS', y);
+      y = drawSectionTitle(pdf, 'RECAPITULATIF', y);
     }
-    y = drawTotals(pdf, y, totals);
+    y = drawTotals(pdf, y, totals, extra);
     if (y + endingLayout(pdf, docType, data, totals, compact).h > A4.limitY) {
       y = addContinuation(pdf, docType, data, meta, 'conditions et signatures');
       compact = true;
