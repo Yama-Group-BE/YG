@@ -6559,6 +6559,19 @@ function setSyncStatus(status, label) {
 }
 
 function initSupabase() {
+  // Bootstrap auto : si localStorage vide, utiliser les credentials pré-configurés
+  if (!localStorage.getItem(SUPA_KEYS.url)) {
+    try {
+      const defUrl = (typeof SUPA_URL_DEFAULT !== 'undefined' && SUPA_URL_DEFAULT) ? SUPA_URL_DEFAULT
+                   : (typeof SUPA_CRM_URL !== 'undefined' && SUPA_CRM_URL) ? SUPA_CRM_URL : '';
+      const defKey = (typeof SUPA_KEY_DEFAULT !== 'undefined' && SUPA_KEY_DEFAULT) ? SUPA_KEY_DEFAULT
+                   : (typeof SUPA_CRM_KEY !== 'undefined' && SUPA_CRM_KEY) ? SUPA_CRM_KEY : '';
+      if (defUrl && defKey) {
+        localStorage.setItem(SUPA_KEYS.url, defUrl);
+        localStorage.setItem(SUPA_KEYS.key, defKey);
+      }
+    } catch(e){}
+  }
   const cfg = getSupaConfig();
   if (!cfg.url || !cfg.key) {
     setSyncStatus(null, 'Mode local');
@@ -6615,10 +6628,14 @@ function startYamaRealtime() {
           renderAll();
         }
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'yama_history' }, () => {
+        // Devis/facture modifié sur un autre appareil → sync immédiat
+        try { if (typeof window.syncFullPull === 'function') window.syncFullPull('realtime-history'); } catch(e){}
+      })
       .subscribe(status => {
         if (status === 'SUBSCRIBED') {
           yamaRealtimeStarted = true;
-          console.log('[YAMA] Realtime CRM actif');
+          console.log('[YAMA] Realtime CRM + History actif');
         }
       });
   } catch(e) {
@@ -9238,10 +9255,11 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   if (initSupabase()) {
     await syncFullPull();
+    // Realtime toujours démarré dès que le client est connecté
+    startYamaRealtime();
     // Important : charger aussi le CRM depuis la même base au démarrage.
     if (crmSyncEnabled && (crmSupaClient || supaClient)) {
       await pullAll();
-      startYamaRealtime();
       updateBadges();
       renderContacts();
       crmPopulateSTSelect();
@@ -9250,6 +9268,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     renderDevisTab();
     renderSTTab();
     renderAnalyse();
+  } else {
+    // Pas connecté → montrer le bandeau de setup uniquement si jamais configuré
+    const hasCreds = !!(localStorage.getItem('yama_supabase_url'));
+    if (!hasCreds) {
+      const banner = document.getElementById('supabase-setup-banner');
+      if (banner) banner.style.display = 'flex';
+    }
   }
 
   document.getElementById('syncModal').addEventListener('click', (e) => {
@@ -21326,7 +21351,7 @@ order by table_name;</textarea>
     if (!client) return;
     const reasonText = String(reason || 'background');
     const background = !/manual|force|connect|boot/i.test(reasonText);
-    if (background && state.lastOk && Date.now() - state.lastOk < 30000) return;
+    if (background && state.lastOk && Date.now() - state.lastOk < 12000) return;
     if (state.inFlight) return state.inFlight;
 
     state.inFlight = (async function(){
@@ -21432,13 +21457,18 @@ order by table_name;</textarea>
         const afterHash = historyHash(activeHistory(rawHistory()));
         changed = beforeHash !== afterHash || state.lastHistoryHash !== afterHash;
         state.lastHistoryHash = afterHash;
+        const firstConnect = !state.lastOk;
         state.lastOk = Date.now();
         setCloud('connected', 'Cloud connecté');
+        if (firstConnect) toast('☁️ Cloud synchronisé avec succès', 'success');
         if (changed) {
           try { if (typeof renderHistory === 'function') renderHistory(); } catch(e){}
           try { if (typeof renderDevisTab === 'function') renderDevisTab(); } catch(e){}
           try { if (typeof renderSTTab === 'function') renderSTTab(); } catch(e){}
           try { if (typeof renderAnalyse === 'function') renderAnalyse(); } catch(e){}
+          try { if (typeof renderContacts === 'function') renderContacts(); } catch(e){}
+          try { if (typeof updateBadges === 'function') updateBadges(); } catch(e){}
+          if (!firstConnect) toast('🔄 Données mises à jour depuis le cloud', '');
         } else {
           const c = $('devisCount');
           if (c) c.textContent = quoteList().length;
@@ -21507,6 +21537,8 @@ order by table_name;</textarea>
   window.addEventListener('online',  () => scheduleSync('online',  400), { passive:true });
   window.addEventListener('focus',   () => { updateNumDisplayV32(); scheduleSync('focus',   600); }, { passive:true });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { updateNumDisplayV32(); scheduleSync('visible', 600); } }, { passive:true });
+  // Sync périodique toutes les 45s quand la page est visible
+  setInterval(() => { if (!document.hidden) scheduleSync('periodic', 0); }, 45000);
 
   console.info('[YAMA V32] Synchro stabilisee + numerotation premier numero libre active.');
 })();
