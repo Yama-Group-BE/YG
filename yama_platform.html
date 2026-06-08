@@ -7701,8 +7701,8 @@ function buildPdfHtml(docType, data, meta) {
     rowsHtml += `<tr class="empty"><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
   }
 
-  const clientLine2 = [data.clientCP, data.clientVille].filter(Boolean).join(' ');
-  const chantierLine2 = [data.chantierCP, data.chantierVille].filter(Boolean).join(' ');
+  const clientLine2 = (() => { const cp=(data.clientCP||'').trim(); let v=(data.clientVille||'').trim(); if(cp&&v){const re=new RegExp('(?:^|\\s)'+cp.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?:\\s|$)','g');v=v.replace(re,' ').trim();} return [cp,v].filter(Boolean).join(' '); })();
+  const chantierLine2 = (() => { const cp=(data.chantierCP||'').trim(); let v=(data.chantierVille||'').trim(); if(cp&&v){const re=new RegExp('(?:^|\\s)'+cp.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?:\\s|$)','g');v=v.replace(re,' ').trim();} return [cp,v].filter(Boolean).join(' '); })();
 
   // Remarques saisies — si vides, on met une ligne pour écrire à la main
   const remarquesText = (data.remarques && data.remarques.trim())
@@ -7735,20 +7735,24 @@ function buildPdfHtml(docType, data, meta) {
     <h3>POUR YAMA GROUP</h3>
     <p class="sub">Entreprise Générale de Construction</p>
     <p class="date-line">Date : _________________________</p>
+    <p class="date-line">Signature : _________________________</p>
   ` : `
     <h3>POUR YAMA GROUP</h3>
     <p class="sub">Entreprise Générale de Construction</p>
     <p class="date-line">Facture émise le : ${fmtDate(data.dateEmission)}</p>
+    <p class="date-line">Signature : _________________________</p>
   `;
 
   const sigClient = isDevis ? `
     <h3>SIGNATURE CLIENT</h3>
     <p class="sub">Lu et approuvé — Bon pour accord</p>
     <p class="date-line">Date : _________________________</p>
+    <p class="date-line">Signature : _________________________</p>
   ` : `
     <h3>ACCUSÉ DE RÉCEPTION</h3>
     <p class="sub">Reçu et accepté</p>
     <p class="date-line">Date : _________________________</p>
+    <p class="date-line">Signature : _________________________</p>
   `;
 
   const titleRightHtml = isDevis ? `
@@ -7828,6 +7832,24 @@ function buildPdfHtml(docType, data, meta) {
             <td colspan="5" class="r">TOTAL TTC</td>
             <td class="r amount">${fmt(totalTTC)}</td>
           </tr>
+          ${isDevis && acompte > 0 ? `
+          <tr class="subtotal" style="background:rgba(201,168,76,0.08);">
+            <td colspan="5" class="r" style="color:#c9a84c;">Acompte ${_acomptePct7112}% à la commande</td>
+            <td class="r" style="color:#c9a84c;">${fmt(acompte)}</td>
+          </tr>
+          <tr class="subtotal" style="background:rgba(201,168,76,0.04);">
+            <td colspan="5" class="r"><strong>Solde à payer à la fin des travaux</strong></td>
+            <td class="r"><strong>${fmt(totalTTC - acompte)}</strong></td>
+          </tr>` : ''}
+          ${!isDevis && parseFloat(data.acompteVerse||0) > 0 ? `
+          <tr class="tva" style="color:#27ae60;">
+            <td colspan="5" class="r">Acompte déjà versé</td>
+            <td class="r">- ${fmt(parseFloat(data.acompteVerse))}</td>
+          </tr>
+          <tr class="total" style="background:#0d3320;">
+            <td colspan="5" class="r">SOLDE RESTANT DÛ</td>
+            <td class="r amount">${fmt(totalTTC - parseFloat(data.acompteVerse))}</td>
+          </tr>` : ''}
         </tbody>
       </table>
 
@@ -19833,6 +19855,29 @@ order by table_name;</textarea>
   function yamaPdfTable(rows, opts){
     opts = opts || {};
     const rowsHtml = (rows || []).map(yamaPdfRowHtml).join('') + (opts.emptyRows ? yamaPdfEmptyRows(opts.emptyRows) : '');
+    const acompteAmt = opts.acompteAmt || 0;
+    const acompteVerse = opts.acompteVerse || 0;
+    const acompteRows = opts.includeTotals
+      ? (opts.isDevis && acompteAmt > 0
+          ? `<tr class="subtotal" style="background:rgba(201,168,76,0.08);">
+              <td colspan="5" class="r" style="color:#c9a84c;">Acompte ${opts.acomptePct || 30}% à la commande</td>
+              <td class="r" style="color:#c9a84c;">${fmt(acompteAmt)}</td>
+            </tr>
+            <tr class="subtotal" style="background:rgba(201,168,76,0.04);">
+              <td colspan="5" class="r"><strong>Solde à payer à la fin des travaux</strong></td>
+              <td class="r"><strong>${fmt((opts.totalTTC || 0) - acompteAmt)}</strong></td>
+            </tr>`
+          : (!opts.isDevis && acompteVerse > 0
+              ? `<tr class="tva" style="color:#27ae60;">
+                  <td colspan="5" class="r">Acompte déjà versé</td>
+                  <td class="r">- ${fmt(acompteVerse)}</td>
+                </tr>
+                <tr class="total" style="background:#0d3320;">
+                  <td colspan="5" class="r">SOLDE RESTANT DÛ</td>
+                  <td class="r amount">${fmt((opts.totalTTC || 0) - acompteVerse)}</td>
+                </tr>`
+              : ''))
+      : '';
     const totalsHtml = opts.includeTotals ? `
       <tr class="subtotal">
         <td colspan="5" class="r">Sous-total HT</td>
@@ -19845,7 +19890,8 @@ order by table_name;</textarea>
       <tr class="total">
         <td colspan="5" class="r">TOTAL TTC</td>
         <td class="r amount">${fmt(opts.totalTTC || 0)}</td>
-      </tr>` : '';
+      </tr>
+      ${acompteRows}` : '';
 
     return `
       <table class="pdf-table">
@@ -19882,8 +19928,8 @@ order by table_name;</textarea>
     const uniq = [...new Set(allTva)];
     const tvaLabel = uniq.length === 1 ? (uniq[0] === 0.06 ? '6' : '21') : 'variable';
 
-    const clientLine2 = [data.clientCP, data.clientVille].filter(Boolean).join(' ');
-    const chantierLine2 = [data.chantierCP, data.chantierVille].filter(Boolean).join(' ');
+    const clientLine2 = (() => { const cp=(data.clientCP||'').trim(); let v=(data.clientVille||'').trim(); if(cp&&v){const re=new RegExp('(?:^|\\s)'+cp.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?:\\s|$)','g');v=v.replace(re,' ').trim();} return [cp,v].filter(Boolean).join(' '); })();
+    const chantierLine2 = (() => { const cp=(data.chantierCP||'').trim(); let v=(data.chantierVille||'').trim(); if(cp&&v){const re=new RegExp('(?:^|\\s)'+cp.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?:\\s|$)','g');v=v.replace(re,' ').trim();} return [cp,v].filter(Boolean).join(' '); })();
     const remarquesText = (data.remarques && data.remarques.trim())
       ? escapeHtml(data.remarques.trim()).replace(/\n/g, '<br>')
       : '_____________________________________________________________';
@@ -19908,20 +19954,24 @@ order by table_name;</textarea>
       <h3>POUR YAMA GROUP</h3>
       <p class="sub">Entreprise Générale de Construction</p>
       <p class="date-line">Date : _________________________</p>
+      <p class="date-line">Signature : _________________________</p>
     ` : `
       <h3>POUR YAMA GROUP</h3>
       <p class="sub">Entreprise Générale de Construction</p>
       <p class="date-line">Facture émise le : ${fmtDate(data.dateEmission)}</p>
+      <p class="date-line">Signature : _________________________</p>
     `;
 
     const sigClient = isDevis ? `
       <h3>SIGNATURE CLIENT</h3>
       <p class="sub">Lu et approuvé — Bon pour accord</p>
       <p class="date-line">Date : _________________________</p>
+      <p class="date-line">Signature : _________________________</p>
     ` : `
       <h3>ACCUSÉ DE RÉCEPTION</h3>
       <p class="sub">Reçu et accepté</p>
       <p class="date-line">Date : _________________________</p>
+      <p class="date-line">Signature : _________________________</p>
     `;
 
     const titleRightHtml = isDevis ? `
@@ -19985,7 +20035,8 @@ order by table_name;</textarea>
             ${yamaPdfTable(chunk.rows, {
               includeTotals: includeEnding,
               totalHT, tvaTotal, totalTTC, tvaLabel,
-              emptyRows
+              emptyRows,
+              isDevis, acomptePct: _acomptePct19195, acompteAmt: acompte, acompteVerse
             })}
             ${!isLast ? `<div class="pdf-table-note">Suite du détail des prestations à la page suivante.</div>` : ''}
             ${includeEnding ? `
@@ -20010,9 +20061,9 @@ order by table_name;</textarea>
               <span>Finalisation</span>
             </div>
             <div class="pdf-gold-line" style="margin-bottom:20px;"></div>
-            <div class="pdf-section-title">TOTAL ET CONDITIONS</div>
-            ${yamaPdfTable([], { includeTotals:true, totalHT, tvaTotal, totalTTC, tvaLabel })}
-            <div class="pdf-section-title">CONDITIONS</div>
+            <div class="pdf-section-title">RÉCAPITULATIF</div>
+            ${yamaPdfTable([], { includeTotals:true, totalHT, tvaTotal, totalTTC, tvaLabel, isDevis, acomptePct: _acomptePct19195, acompteAmt: acompte, acompteVerse })}
+            <div class="pdf-section-title">CONDITIONS DE PAIEMENT</div>
             <div class="pdf-conditions">${conditionsHtml}</div>
             <div class="pdf-signatures">
               <div class="pdf-sig pdf-sig-client">${sigClient}</div>
