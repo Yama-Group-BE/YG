@@ -19882,6 +19882,18 @@ order by table_name;</textarea>
     const rowsHtml = (rows || []).map(yamaPdfRowHtml).join('') + (opts.emptyRows ? yamaPdfEmptyRows(opts.emptyRows) : '');
     const acompteAmt = opts.acompteAmt || 0;
     const acompteVerse = opts.acompteVerse || 0;
+    const remiseEurOpt = opts.remiseEur || 0;
+    const remisePctOpt = opts.remisePct || 0;
+    const htBrutOpt = opts.htBrut || opts.totalHT || 0;
+    const remiseRows = (opts.includeTotals && remiseEurOpt > 0) ? `
+      <tr class="tva" style="color:#c0392b;">
+        <td colspan="5" class="r" style="color:#c0392b;">🏷 Remise${opts.remiseMotif ? ' — ' + opts.remiseMotif : ''} (${remisePctOpt > 0 ? remisePctOpt.toFixed(1) + '%' : fmt(remiseEurOpt)})</td>
+        <td class="r" style="color:#c0392b;">- ${fmt(remiseEurOpt)}</td>
+      </tr>
+      <tr class="subtotal">
+        <td colspan="5" class="r">Total HT après remise</td>
+        <td class="r">${fmt(opts.totalHT || 0)}</td>
+      </tr>` : '';
     const acompteRows = opts.includeTotals
       ? (opts.isDevis && acompteAmt > 0
           ? `<tr class="subtotal" style="background:rgba(201,168,76,0.08);">
@@ -19906,8 +19918,9 @@ order by table_name;</textarea>
     const totalsHtml = opts.includeTotals ? `
       <tr class="subtotal">
         <td colspan="5" class="r">Sous-total HT</td>
-        <td class="r">${fmt(opts.totalHT || 0)}</td>
+        <td class="r">${fmt(remiseEurOpt > 0 ? htBrutOpt : (opts.totalHT || 0))}</td>
       </tr>
+      ${remiseRows}
       <tr class="tva">
         <td colspan="5" class="r">TVA  -  taux applicable : ${opts.tvaLabel} %</td>
         <td class="r">${fmt(opts.tvaTotal || 0)}</td>
@@ -19940,12 +19953,17 @@ order by table_name;</textarea>
     const isPlus10 = data.ageBatiment === 'plus10';
     const lignes = data.lignesClient || [];
 
-    let totalHT = 0, tvaTotal = 0;
+    let htBrut19866 = 0, tvaBase19866 = 0;
     lignes.forEach(l => {
       const ht = (parseFloat(l.qte)||0) * (parseFloat(l.pu)||0);
-      totalHT += ht;
-      tvaTotal += ht * (parseFloat(l.tva)||0);
+      htBrut19866 += ht;
+      tvaBase19866 += ht * (parseFloat(l.tva)||0);
     });
+    const remiseEur19866 = parseFloat(data.remiseEur) || 0;
+    const remisePct19866 = parseFloat(data.remisePct) || 0;
+    const remiseMotif19866 = data.remiseMotif || '';
+    const totalHT = Math.max(0, htBrut19866 - remiseEur19866);
+    const tvaTotal = htBrut19866 > 0 ? tvaBase19866 * (totalHT / htBrut19866) : tvaBase19866;
     const totalTTC = totalHT + tvaTotal;
     const _acomptePct19195 = (typeof getSetting==='function' ? (getSetting('financier.acomptePct')||30) : 30);
     const acompte = totalTTC * _acomptePct19195 / 100;
@@ -20059,8 +20077,9 @@ order by table_name;</textarea>
             <div class="pdf-section-title">DESCRIPTION DES TRAVAUX${isFirst ? '' : ' - SUITE'}</div>
             ${yamaPdfTable(chunk.rows, {
               includeTotals: includeEnding,
-              totalHT, tvaTotal, totalTTC, tvaLabel,
+              htBrut: htBrut19866, totalHT, tvaTotal, totalTTC, tvaLabel,
               emptyRows,
+              remiseEur: remiseEur19866, remisePct: remisePct19866, remiseMotif: remiseMotif19866,
               isDevis, acomptePct: _acomptePct19195, acompteAmt: acompte, acompteVerse
             })}
             ${!isLast ? `<div class="pdf-table-note">Suite du détail des prestations à la page suivante.</div>` : ''}
@@ -20087,7 +20106,7 @@ order by table_name;</textarea>
             </div>
             <div class="pdf-gold-line" style="margin-bottom:20px;"></div>
             <div class="pdf-section-title">RÉCAPITULATIF</div>
-            ${yamaPdfTable([], { includeTotals:true, totalHT, tvaTotal, totalTTC, tvaLabel, isDevis, acomptePct: _acomptePct19195, acompteAmt: acompte, acompteVerse })}
+            ${yamaPdfTable([], { includeTotals:true, htBrut: htBrut19866, totalHT, tvaTotal, totalTTC, tvaLabel, remiseEur: remiseEur19866, remisePct: remisePct19866, remiseMotif: remiseMotif19866, isDevis, acomptePct: _acomptePct19195, acompteAmt: acompte, acompteVerse })}
             <div class="pdf-section-title">CONDITIONS DE PAIEMENT</div>
             <div class="pdf-conditions">${conditionsHtml}</div>
             <div class="pdf-signatures">
@@ -20605,17 +20624,22 @@ order by table_name;</textarea>
   function text(pdf, value, x, y, opt){ pdf.text(String(value == null ? '' : value), x, y, opt || {}); }
   function split(pdf, value, width){ return pdf.splitTextToSize(String(value == null ? '' : value), Math.max(8, width)); }
 
-  function totalsFrom(rows){
-    let totalHT = 0, tvaTotal = 0;
+  function totalsFrom(rows, data){
+    let htBrut = 0, tvaBase = 0;
     const rates = [];
     (rows || []).forEach(l => {
       const ht = num(l.qte) * num(l.pu);
       const rate = num(l.tva);
-      totalHT += ht;
-      tvaTotal += ht * rate;
+      htBrut += ht;
+      tvaBase += ht * rate;
       if (rate && !rates.includes(rate)) rates.push(rate);
     });
-    return { totalHT, tvaTotal, totalTTC:totalHT + tvaTotal, tvaLabel:rates.length === 1 ? (rates[0] === 0.06 ? '6' : '21') : 'variable' };
+    const remiseEur = data ? (parseFloat(data.remiseEur) || 0) : 0;
+    const remisePct = data ? (parseFloat(data.remisePct) || 0) : 0;
+    const remiseMotif = data ? (data.remiseMotif || '') : '';
+    const totalHT = Math.max(0, htBrut - remiseEur);
+    const tvaTotal = htBrut > 0 ? tvaBase * (totalHT / htBrut) : tvaBase;
+    return { htBrut, totalHT, tvaTotal, totalTTC:totalHT + tvaTotal, tvaLabel:rates.length === 1 ? (rates[0] === 0.06 ? '6' : '21') : 'variable', remiseEur, remisePct, remiseMotif };
   }
   function drawLogo(pdf){
     try {
@@ -20797,7 +20821,15 @@ order by table_name;</textarea>
       text(pdf, value, totX + totW - 2, y + 5.25, { align:'right' });
       y += h;
     }
-    line('Sous-total HT', euro(totals.totalHT), false);
+    if (totals.remiseEur > 0) {
+      const remiseTxt = totals.remisePct > 0 ? totals.remisePct.toFixed(1) + '%' : euro(totals.remiseEur);
+      const remiseLabel = 'Remise' + (totals.remiseMotif ? ' — ' + totals.remiseMotif : '') + ' (' + remiseTxt + ')';
+      line('Sous-total HT', euro(totals.htBrut), false);
+      line(remiseLabel, '- ' + euro(totals.remiseEur), false, [192,57,43], [192,57,43]);
+      line('Total HT apres remise', euro(totals.totalHT), false);
+    } else {
+      line('Sous-total HT', euro(totals.totalHT), false);
+    }
     line('TVA - taux applicable : ' + totals.tvaLabel + ' %', euro(totals.tvaTotal), false);
     line('TOTAL TTC', euro(totals.totalTTC), true);
     if (extra) {
@@ -20887,7 +20919,7 @@ order by table_name;</textarea>
     if (!jsPDF) throw new Error('Librairie jsPDF non chargee');
     const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4', compress:true });
     const rows = (data.lignesClient || []).filter(l => l && (l.desc || l.qte || l.pu));
-    const totals = totalsFrom(rows);
+    const totals = totalsFrom(rows, data);
     let y = drawTop(pdf, docType, data, meta, '');
     y = drawInfoBlocks(pdf, y, data, docType);
     y = drawSectionTitle(pdf, 'DESCRIPTION DES TRAVAUX', y);
@@ -20922,7 +20954,8 @@ order by table_name;</textarea>
     const _acompteVerseN = parseFloat(data.acompteVerse || 0) || 0;
     const extra = { docType, acomptePct: _acomptePctN, acompte: _acompteN, acompteVerse: _acompteVerseN };
     const hasExtraRows = (docType === 'devis' && _acompteN > 0) || (docType !== 'devis' && _acompteVerseN > 0);
-    const totalsNeed = hasExtraRows ? 46 : 30;
+    const remiseExtraRows = totals.remiseEur > 0 ? 2 : 0;
+    const totalsNeed = 30 + (hasExtraRows ? 16 : 0) + remiseExtraRows * 8;
     const endingNormal = endingLayout(pdf, docType, data, totals, false);
     const endingCompact = endingLayout(pdf, docType, data, totals, true);
     let compact = false;
