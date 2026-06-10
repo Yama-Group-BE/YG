@@ -32753,5 +32753,270 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   console.log('[YAMA Smart V1] ✅ Chargé — tapez yamaRunTests() dans la console pour vérifier');
 })();
 </script>
+
+<!-- ═══════════════════════════════════════════════════════
+     YAMA REFUS-FACTURE — Facturation automatique devis refusés
+     Quand un devis est refusé, propose de générer une facture
+     de frais d'étude (150 € HT) + déplacement (50 € HT) TVA 21%.
+     ════════════════════════════════════════════════════ -->
+<script id="yama-refus-facture">
+(function(){
+  'use strict';
+  if (window.__YAMA_REFUS_FACTURE__) return;
+  window.__YAMA_REFUS_FACTURE__ = true;
+
+  const REFUS_CONFIG = {
+    fraisEtude:       150,
+    fraisDeplacement:  50,
+    tva:             0.21
+  };
+
+  // ── Styles du modal ─────────────────────────────────────
+  (function injectStyles(){
+    const s = document.createElement('style');
+    s.textContent = `
+      #yama-refus-modal-overlay {
+        position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:999999;
+        display:flex;align-items:center;justify-content:center;padding:16px;
+      }
+      #yama-refus-modal {
+        background:#141828;border:1px solid rgba(201,168,76,.3);border-radius:16px;
+        padding:28px 24px 22px;max-width:460px;width:100%;
+        box-shadow:0 24px 64px rgba(0,0,0,.7);
+      }
+      #yama-refus-modal h2 {
+        margin:0 0 6px;font-size:16px;font-weight:800;color:#C9A84C;
+        letter-spacing:.3px;
+      }
+      #yama-refus-modal .refus-subtitle {
+        font-size:12px;color:rgba(240,242,248,.55);margin-bottom:18px;
+      }
+      #yama-refus-modal .refus-lines {
+        background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+        border-radius:10px;padding:14px 16px;margin-bottom:18px;
+      }
+      #yama-refus-modal .refus-line {
+        display:flex;justify-content:space-between;align-items:center;
+        font-size:12.5px;color:rgba(240,242,248,.85);padding:4px 0;
+      }
+      #yama-refus-modal .refus-line.total {
+        border-top:1px solid rgba(255,255,255,.1);margin-top:6px;padding-top:10px;
+        font-weight:700;font-size:13px;color:#fff;
+      }
+      #yama-refus-modal .refus-line .amt { color:#C9A84C;font-weight:700; }
+      #yama-refus-modal .refus-btns {
+        display:flex;flex-direction:column;gap:9px;
+      }
+      #yama-refus-modal .refus-btn {
+        width:100%;padding:11px 16px;border-radius:9px;border:none;cursor:pointer;
+        font-size:13px;font-weight:700;transition:opacity .15s;
+      }
+      #yama-refus-modal .refus-btn:hover { opacity:.88; }
+      #yama-refus-modal .refus-btn-primary {
+        background:linear-gradient(135deg,#C9A84C,#e8c76a);color:#111;
+      }
+      #yama-refus-modal .refus-btn-secondary {
+        background:rgba(224,82,82,.15);border:1px solid rgba(224,82,82,.4);
+        color:#e05252;
+      }
+      #yama-refus-modal .refus-btn-cancel {
+        background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+        color:rgba(200,210,230,.6);font-weight:400;
+      }
+    `;
+    document.head.appendChild(s);
+  })();
+
+  // ── Injecter les 2 articles de refus dans yama_articles_v1 ──
+  function ensureRefusArticles(){
+    const KEY = 'yama_articles_v1';
+    try {
+      const arts = JSON.parse(localStorage.getItem(KEY) || '[]');
+      const ids = new Set(arts.map(a => a.id));
+      const now = new Date().toISOString();
+      let changed = false;
+      const toAdd = [
+        { id:'yama_art_refus_etude', title:"Frais de recherche, d'étude et établissement du devis",
+          description:"Forfait frais d'étude et élaboration du devis", priceHT:REFUS_CONFIG.fraisEtude,
+          tvaRate:Math.round(REFUS_CONFIG.tva*100), active:true, type:'service',
+          category:'Administratif', notes:'Plafond légal', createdAt:now, updatedAt:now },
+        { id:'yama_art_refus_deplacement', title:'Frais de déplacement sur site',
+          description:'Forfait déplacement pour visite et étude sur chantier', priceHT:REFUS_CONFIG.fraisDeplacement,
+          tvaRate:Math.round(REFUS_CONFIG.tva*100), active:true, type:'déplacement',
+          category:'Administratif', notes:'Plafond légal', createdAt:now, updatedAt:now }
+      ];
+      toAdd.forEach(art => { if (!ids.has(art.id)) { arts.push(art); changed = true; } });
+      if (changed) localStorage.setItem(KEY, JSON.stringify(arts));
+    } catch(e){ console.warn('[YAMA REFUS] ensureRefusArticles:', e); }
+  }
+
+  // ── Générer la facture de refus ──────────────────────────
+  function generateRefusInvoice(refusedDocNum){
+    try {
+      const hist = typeof getHistory === 'function' ? getHistory() : [];
+      const src = hist.find(e => String(e.docNum) === String(refusedDocNum)) || {};
+      const factNum = typeof window.getFactureNum === 'function' ? window.getFactureNum() : ('FREF-' + Date.now());
+      const now = new Date().toISOString();
+      const nowDate = now.slice(0,10);
+      const tvaRate = REFUS_CONFIG.tva;
+      const entry = {
+        docNum:          factNum,
+        docType:         'facture',
+        savedAt:         now,
+        dateEmission:    nowDate,
+        clientNom:       src.clientNom       || '',
+        clientTel:       src.clientTel       || '',
+        clientEmail:     src.clientEmail     || '',
+        clientAdresse:   src.clientAdresse   || '',
+        clientCP:        src.clientCP        || '',
+        clientVille:     src.clientVille     || '',
+        chantierRef:     src.chantierRef     || '',
+        chantierAdresse: src.chantierAdresse || '',
+        chantierCP:      src.chantierCP      || '',
+        chantierVille:   src.chantierVille   || '',
+        ageBatiment:     src.ageBatiment     || '',
+        remarques:       'Facturation suite au refus du devis ' + String(refusedDocNum) + '.',
+        lignesClient: [
+          { id:'refus_etude_'+Date.now(),       desc:"Frais de recherche, d'étude et établissement du devis",
+            qte:'1', unit:'Forfait', pu:String(REFUS_CONFIG.fraisEtude),        tva:String(tvaRate) },
+          { id:'refus_deplacement_'+Date.now(), desc:'Frais de déplacement sur site',
+            qte:'1', unit:'Forfait', pu:String(REFUS_CONFIG.fraisDeplacement),  tva:String(tvaRate) }
+        ],
+        lignesST:        [],
+        totalTTC:        (REFUS_CONFIG.fraisEtude + REFUS_CONFIG.fraisDeplacement) * (1 + tvaRate),
+        parentDevisNum:  String(refusedDocNum),
+        autoGenerated:   true
+      };
+
+      // Sauvegarder dans l'historique
+      const KEY = 'yama_history_v3';
+      const all = JSON.parse(localStorage.getItem(KEY) || '[]');
+      all.unshift(entry);
+      localStorage.setItem(KEY, JSON.stringify(all));
+
+      // Incrémenter le compteur facture
+      if (typeof window.incrementFactureNum === 'function') window.incrementFactureNum();
+
+      // Pousser vers le cloud
+      try { if (typeof window.syncPushHistory === 'function') window.syncPushHistory(entry); } catch(e){}
+
+      // Rafraîchir l'UI
+      try { if (typeof renderHistory === 'function') renderHistory(); } catch(e){}
+      try { if (typeof renderDevisTab === 'function') renderDevisTab(); } catch(e){}
+      try { if (typeof updateBadges === 'function') updateBadges(); } catch(e){}
+
+      // Toast de confirmation
+      const toastFn = typeof showToast === 'function' ? showToast : (typeof toast === 'function' ? toast : null);
+      if (toastFn) toastFn('✅ Facture de refus créée — ' + factNum, 'success');
+      console.info('[YAMA REFUS] Facture auto créée :', factNum, '← devis :', refusedDocNum);
+      return factNum;
+    } catch(e){
+      console.error('[YAMA REFUS] generateRefusInvoice:', e);
+      return null;
+    }
+  }
+
+  // ── Modal de confirmation ────────────────────────────────
+  function showRefusModal(docNum, cid){
+    const old = document.getElementById('yama-refus-modal-overlay');
+    if (old) old.remove();
+
+    const etude  = REFUS_CONFIG.fraisEtude;
+    const depl   = REFUS_CONFIG.fraisDeplacement;
+    const tva    = REFUS_CONFIG.tva;
+    const ttcEt  = etude * (1 + tva);
+    const ttcDp  = depl  * (1 + tva);
+    const total  = ttcEt + ttcDp;
+    const fmt = v => v.toFixed(2).replace('.',',') + ' €';
+
+    const overlay = document.createElement('div');
+    overlay.id = 'yama-refus-modal-overlay';
+    overlay.innerHTML = `
+      <div id="yama-refus-modal">
+        <h2>❌ Refus du devis ${docNum}</h2>
+        <div class="refus-subtitle">Ce devis a été refusé par le client.</div>
+        <div class="refus-lines">
+          <div class="refus-line">
+            <span>Frais de recherche &amp; étude</span>
+            <span class="amt">${fmt(ttcEt)} TTC</span>
+          </div>
+          <div class="refus-line">
+            <span>Frais de déplacement sur site</span>
+            <span class="amt">${fmt(ttcDp)} TTC</span>
+          </div>
+          <div class="refus-line total">
+            <span>TOTAL FACTURE</span>
+            <span class="amt">${fmt(total)}</span>
+          </div>
+        </div>
+        <div class="refus-btns">
+          <button class="refus-btn refus-btn-primary" id="yama-refus-btn-facture">
+            ✅ Refuser et générer la facture
+          </button>
+          <button class="refus-btn refus-btn-secondary" id="yama-refus-btn-nofa">
+            ❌ Refuser sans facturer
+          </button>
+          <button class="refus-btn refus-btn-cancel" id="yama-refus-btn-cancel">
+            Annuler
+          </button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+
+    function close(){ overlay.remove(); }
+    document.getElementById('yama-refus-btn-cancel').onclick = close;
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    document.getElementById('yama-refus-btn-nofa').onclick = function(){
+      close();
+      _executeRefusal(docNum, cid, false);
+    };
+    document.getElementById('yama-refus-btn-facture').onclick = function(){
+      close();
+      _executeRefusal(docNum, cid, true);
+    };
+  }
+
+  // ── Exécuter le refus (avec ou sans facture) ─────────────
+  function _executeRefusal(docNum, cid, withInvoice){
+    try { if (typeof setDevisStatus === 'function') setDevisStatus(docNum, 'refused', ''); } catch(e){}
+    try { if (typeof linkDevisRefuseToContactCRM === 'function') linkDevisRefuseToContactCRM(docNum); } catch(e){}
+    try { if (typeof renderDevisTab === 'function') renderDevisTab(); } catch(e){}
+    if (withInvoice) {
+      generateRefusInvoice(docNum);
+    } else {
+      const toastFn = typeof showToast === 'function' ? showToast : (typeof toast === 'function' ? toast : null);
+      if (toastFn) toastFn('❌ Devis refusé — contact archivé dans le CRM', 'error');
+    }
+  }
+
+  // ── Wrapper refuseDevis ──────────────────────────────────
+  window.refuseDevis = function(docNum){
+    showRefusModal(docNum, null);
+  };
+  window.refuseDevis.__yamaRefusWrapped = true;
+
+  // ── Wrapper crmRefuseDevisFromCRM ────────────────────────
+  window.crmRefuseDevisFromCRM = function(cid, docNum){
+    if (!docNum) {
+      const toastFn = typeof showToast === 'function' ? showToast : (typeof toast === 'function' ? toast : null);
+      if (toastFn) toastFn('Aucun devis lié à ce contact', 'error');
+      return;
+    }
+    showRefusModal(docNum, cid);
+  };
+  window.crmRefuseDevisFromCRM.__yamaRefusWrapped = true;
+
+  // ── Bootstrap articles au chargement ────────────────────
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ensureRefusArticles);
+  } else {
+    ensureRefusArticles();
+  }
+
+  console.info('[YAMA REFUS] Facturation automatique devis refusés activée (étude 150€ + déplacement 50€ TVA 21%).');
+})();
+</script>
 </body>
 </html>
