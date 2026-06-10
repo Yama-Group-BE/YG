@@ -2685,6 +2685,7 @@ select:focus { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www
     <div class="cloud-pill" id="cloudPill" onclick="openUnifiedSync()">
       <span class="cloud-dot" id="cloudDot"></span>
       <span id="cloudLabel">☁️ Mode local</span>
+      <span id="syncTime" style="font-size:9px;opacity:.5;margin-left:4px;display:none;"></span>
     </div>
 
     <!-- Platform numbering (platform only) -->
@@ -6658,13 +6659,17 @@ function startYamaRealtime() {
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'yama_history' }, () => {
-        // Devis/facture modifié sur un autre appareil → sync immédiat
+        // Devis/facture modifié sur un autre appareil → sync immédiat (bypass cooldown)
         try { if (typeof window.syncFullPull === 'function') window.syncFullPull('realtime-history'); } catch(e){}
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'yama_devis_status' }, () => {
+        // Statut de devis changé sur un autre appareil → sync immédiat
+        try { if (typeof window.syncFullPull === 'function') window.syncFullPull('realtime-status'); } catch(e){}
       })
       .subscribe(status => {
         if (status === 'SUBSCRIBED') {
           yamaRealtimeStarted = true;
-          console.log('[YAMA] Realtime CRM + History actif');
+          console.log('[YAMA] Realtime actif — CRM + History + Status');
         }
       });
   } catch(e) {
@@ -21329,8 +21334,12 @@ order by table_name;</textarea>
       pill.classList.remove('connected','syncing','error');
       if (status) pill.classList.add(status);
     }
-    if (lbl) lbl.textContent = status === 'connected' ? '☁️ Cloud connecté ✓' : status === 'syncing' ? '⏳ Synchronisation…' : status === 'error' ? '⚠️ Erreur cloud' : '☁️ Mode local';
+    if (lbl) lbl.textContent = status === 'connected' ? '☁️ Sync ✓' : status === 'syncing' ? '⏳ Sync…' : status === 'error' ? '⚠️ Erreur cloud' : '☁️ Local';
     if (dot) dot.style.background = status === 'connected' ? '#3ecf8e' : status === 'error' ? '#e05252' : status === 'syncing' ? '#d8b65e' : '#555';
+    if (status === 'connected') {
+      window.__yamaSyncAt = Date.now();
+      const st = $('syncTime'); if (st) { st.style.display = 'inline'; st.textContent = "à l'instant"; }
+    }
     const sync = $('syncStatus'), syncLbl = $('syncLabel');
     if (sync) {
       sync.classList.remove('connected','syncing','error');
@@ -21442,8 +21451,8 @@ order by table_name;</textarea>
     const client = ensureClient();
     if (!client) return;
     const reasonText = String(reason || 'background');
-    const background = !/manual|force|connect|boot/i.test(reasonText);
-    if (background && state.lastOk && Date.now() - state.lastOk < 12000) return;
+    const background = !/manual|force|connect|boot|realtime/i.test(reasonText);
+    if (background && state.lastOk && Date.now() - state.lastOk < 8000) return;
     if (state.inFlight) return state.inFlight;
 
     state.inFlight = (async function(){
@@ -21562,8 +21571,12 @@ order by table_name;</textarea>
           try { if (typeof updateBadges === 'function') updateBadges(); } catch(e){}
           if (!firstConnect) toast('🔄 Données mises à jour depuis le cloud', '');
         } else {
-          const c = $('devisCount');
-          if (c) c.textContent = quoteList().length;
+          // Toujours resynchroniser les compteurs, même sans nouvelles données cloud
+          const _h = activeHistory(rawHistory());
+          const _dv = _h.filter(h => h.docType !== 'facture');
+          const hEl = $('historyCount'); if (hEl) hEl.textContent = _h.length;
+          const dEl = $('devisCount');   if (dEl) dEl.textContent = _dv.length;
+          try { if (typeof updateBadges === 'function') updateBadges(); } catch(e){}
         }
       } catch(e) {
         setCloud('error', 'Erreur sync');
@@ -21630,7 +21643,14 @@ order by table_name;</textarea>
   window.addEventListener('focus',   () => { updateNumDisplayV32(); scheduleSync('focus',   600); }, { passive:true });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { updateNumDisplayV32(); scheduleSync('visible', 600); } }, { passive:true });
   // Sync périodique toutes les 45s quand la page est visible
-  setInterval(() => { if (!document.hidden) scheduleSync('periodic', 0); }, 45000);
+  setInterval(() => { if (!document.hidden) scheduleSync('periodic', 0); }, 30000);
+  // Compteur "il y a Xs" dans la pastille cloud
+  setInterval(() => {
+    if (!window.__yamaSyncAt) return;
+    const st = document.getElementById('syncTime'); if (!st) return;
+    const s = Math.floor((Date.now() - window.__yamaSyncAt) / 1000);
+    st.textContent = s < 10 ? "à l'instant" : s < 60 ? 'il y a ' + s + 's' : s < 3600 ? 'il y a ' + Math.floor(s/60) + 'min' : 'il y a ' + Math.floor(s/3600) + 'h';
+  }, 5000);
 
   console.info('[YAMA V32] Synchro stabilisee + numerotation premier numero libre active.');
 })();
