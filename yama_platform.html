@@ -32823,6 +32823,23 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
         background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
         color:rgba(200,210,230,.6);font-weight:400;
       }
+      #yama-refus-modal .refus-tva-row {
+        display:flex;align-items:center;gap:10px;margin-bottom:14px;
+      }
+      #yama-refus-modal .refus-tva-label {
+        font-size:12px;color:rgba(240,242,248,.55);flex:1;
+      }
+      #yama-refus-modal .refus-tva-toggle {
+        display:flex;gap:6px;
+      }
+      #yama-refus-modal .refus-tva-btn {
+        padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.15);
+        background:rgba(255,255,255,.05);color:rgba(200,210,230,.7);
+        font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;
+      }
+      #yama-refus-modal .refus-tva-btn.active {
+        background:#C9A84C;border-color:#C9A84C;color:#111;
+      }
     `;
     document.head.appendChild(s);
   })();
@@ -32851,14 +32868,14 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   }
 
   // ── Générer la facture de refus ──────────────────────────
-  function generateRefusInvoice(refusedDocNum){
+  function generateRefusInvoice(refusedDocNum, tvaRate){
     try {
+      if (tvaRate == null) tvaRate = REFUS_CONFIG.tva;
       const hist = typeof getHistory === 'function' ? getHistory() : [];
       const src = hist.find(e => String(e.docNum) === String(refusedDocNum)) || {};
       const factNum = typeof window.getFactureNum === 'function' ? window.getFactureNum() : ('FREF-' + Date.now());
       const now = new Date().toISOString();
       const nowDate = now.slice(0,10);
-      const tvaRate = REFUS_CONFIG.tva;
       const entry = {
         docNum:          factNum,
         docType:         'facture',
@@ -32921,13 +32938,17 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     const old = document.getElementById('yama-refus-modal-overlay');
     if (old) old.remove();
 
-    const etude  = REFUS_CONFIG.fraisEtude;
-    const depl   = REFUS_CONFIG.fraisDeplacement;
-    const tva    = REFUS_CONFIG.tva;
-    const ttcEt  = etude * (1 + tva);
-    const ttcDp  = depl  * (1 + tva);
-    const total  = ttcEt + ttcDp;
-    const fmt = v => v.toFixed(2).replace('.',',') + ' €';
+    // Détecter le taux TVA depuis le devis original (ageBatiment)
+    const hist = typeof getHistory === 'function' ? getHistory() : [];
+    const srcDevis = hist.find(e => String(e.docNum) === String(docNum)) || {};
+    const autoTva = srcDevis.ageBatiment === 'plus10' ? 0.06 : 0.21;
+
+    const etude = REFUS_CONFIG.fraisEtude;
+    const depl  = REFUS_CONFIG.fraisDeplacement;
+    const fmt   = v => v.toFixed(2).replace('.',',') + ' €';
+
+    // État réactif du taux TVA
+    let selectedTva = autoTva;
 
     const overlay = document.createElement('div');
     overlay.id = 'yama-refus-modal-overlay';
@@ -32935,18 +32956,25 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
       <div id="yama-refus-modal">
         <h2>❌ Refus du devis ${docNum}</h2>
         <div class="refus-subtitle">Ce devis a été refusé par le client.</div>
+        <div class="refus-tva-row">
+          <span class="refus-tva-label">Taux TVA applicable :</span>
+          <div class="refus-tva-toggle">
+            <button class="refus-tva-btn${autoTva === 0.06 ? ' active' : ''}" data-tva="0.06">6%</button>
+            <button class="refus-tva-btn${autoTva === 0.21 ? ' active' : ''}" data-tva="0.21">21%</button>
+          </div>
+        </div>
         <div class="refus-lines">
           <div class="refus-line">
             <span>Frais de recherche &amp; étude</span>
-            <span class="amt">${fmt(ttcEt)} TTC</span>
+            <span class="amt" id="yama-refus-amt-etude"></span>
           </div>
           <div class="refus-line">
             <span>Frais de déplacement sur site</span>
-            <span class="amt">${fmt(ttcDp)} TTC</span>
+            <span class="amt" id="yama-refus-amt-depl"></span>
           </div>
           <div class="refus-line total">
             <span>TOTAL FACTURE</span>
-            <span class="amt">${fmt(total)}</span>
+            <span class="amt" id="yama-refus-amt-total"></span>
           </div>
         </div>
         <div class="refus-btns">
@@ -32964,27 +32992,46 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 
     document.body.appendChild(overlay);
 
+    // Mise à jour des montants selon le taux sélectionné
+    function updateAmounts(){
+      const t = selectedTva;
+      document.getElementById('yama-refus-amt-etude').textContent  = fmt(etude * (1 + t)) + ' TTC';
+      document.getElementById('yama-refus-amt-depl').textContent   = fmt(depl  * (1 + t)) + ' TTC';
+      document.getElementById('yama-refus-amt-total').textContent  = fmt((etude + depl) * (1 + t));
+    }
+    updateAmounts();
+
+    // Gestion du toggle TVA
+    overlay.querySelectorAll('.refus-tva-btn').forEach(btn => {
+      btn.onclick = function(){
+        selectedTva = parseFloat(this.dataset.tva);
+        overlay.querySelectorAll('.refus-tva-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        updateAmounts();
+      };
+    });
+
     function close(){ overlay.remove(); }
     document.getElementById('yama-refus-btn-cancel').onclick = close;
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 
     document.getElementById('yama-refus-btn-nofa').onclick = function(){
       close();
-      _executeRefusal(docNum, cid, false);
+      _executeRefusal(docNum, cid, false, selectedTva);
     };
     document.getElementById('yama-refus-btn-facture').onclick = function(){
       close();
-      _executeRefusal(docNum, cid, true);
+      _executeRefusal(docNum, cid, true, selectedTva);
     };
   }
 
   // ── Exécuter le refus (avec ou sans facture) ─────────────
-  function _executeRefusal(docNum, cid, withInvoice){
+  function _executeRefusal(docNum, cid, withInvoice, tvaRate){
     try { if (typeof setDevisStatus === 'function') setDevisStatus(docNum, 'refused', ''); } catch(e){}
     try { if (typeof linkDevisRefuseToContactCRM === 'function') linkDevisRefuseToContactCRM(docNum); } catch(e){}
     try { if (typeof renderDevisTab === 'function') renderDevisTab(); } catch(e){}
     if (withInvoice) {
-      generateRefusInvoice(docNum);
+      generateRefusInvoice(docNum, tvaRate);
     } else {
       const toastFn = typeof showToast === 'function' ? showToast : (typeof toast === 'function' ? toast : null);
       if (toastFn) toastFn('❌ Devis refusé — contact archivé dans le CRM', 'error');
