@@ -1764,7 +1764,7 @@ header {
   .status-badge.invoiced { background:rgba(201,168,76,0.18); border:1px solid rgba(201,168,76,0.5); color:var(--gold2); }
 
   .devis-item-actions {
-    display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;
+    display: flex; gap: 8px; align-items: center; flex-wrap: nowrap; margin-top: 12px;
     padding-top: 12px;
     border-top: 1px solid rgba(255,255,255,0.06);
   }
@@ -1791,6 +1791,35 @@ header {
     background:rgba(201,168,76,0.08); border-color:var(--border); color:var(--gray);
   }
   .btn-action.load:hover { border-color:var(--gold); color:var(--gold); }
+
+  /* ── Overflow menu devis ── */
+  .devis-actions-primary { display:flex; gap:8px; flex-wrap:wrap; flex:1; }
+  .devis-more-wrap { position:relative; flex-shrink:0; }
+  .btn-more {
+    padding:7px 12px; border-radius:2px; cursor:pointer;
+    font-size:15px; font-weight:700; border:1px solid rgba(255,255,255,.12);
+    background:rgba(255,255,255,.05); color:rgba(200,210,230,.7);
+    transition:all .15s; line-height:1;
+  }
+  .btn-more:hover { border-color:rgba(201,168,76,.4); color:#C9A84C; }
+  .devis-more-popup {
+    position:absolute; bottom:calc(100% + 6px); right:0; z-index:300;
+    background:#141828; border:1px solid rgba(255,255,255,.14);
+    border-radius:10px; padding:6px; min-width:190px;
+    box-shadow:0 12px 40px rgba(0,0,0,.6);
+    display:none; flex-direction:column; gap:3px;
+  }
+  .devis-more-popup.open { display:flex; }
+  .devis-more-item {
+    display:block; width:100%; text-align:left;
+    padding:8px 12px; border:none; border-radius:7px;
+    background:transparent; color:rgba(220,225,240,.82);
+    font-size:12px; font-weight:600; cursor:pointer;
+    transition:background .12s;
+  }
+  .devis-more-item:hover { background:rgba(255,255,255,.07); }
+  .devis-more-item.danger { color:#e05252; }
+  .devis-more-item.accept { color:#52c77f; }
 
   /* ═══ SOUS-TRAITANT CARDS ═══ */
   .st-card {
@@ -8532,6 +8561,7 @@ function linkDevisRefuseToContactCRM(docNum) {
 }
 
 function refuseDevis(docNum) {
+  if (typeof window.showYamaRefusModal === 'function') { window.showYamaRefusModal(docNum, null); return; }
   if (!confirm('Marquer ce devis comme refusé ?\n\nLe contact CRM correspondant sera automatiquement archivé avec le statut "Refusé".')) return;
   setDevisStatus(docNum, 'refused', '');
   renderDevisTab();
@@ -8582,6 +8612,7 @@ function linkDevisRevertToCRMWaiting(docNum) {
 // Depuis la carte CRM : refuser directement le devis lié sans aller dans l'onglet Devis
 function crmRefuseDevisFromCRM(cid, docNum) {
   if (!docNum) { showToast('Aucun devis lié à ce contact', 'error'); return; }
+  if (typeof window.showYamaRefusModal === 'function') { window.showYamaRefusModal(docNum, cid); return; }
   if (!confirm(`Marquer le devis ${docNum} comme refusé ?\n\nCe contact sera archivé avec le statut "Refusé".`)) return;
   if (typeof setDevisStatus === 'function') setDevisStatus(docNum, 'refused', '');
   linkDevisRefuseToContactCRM(docNum);
@@ -8803,33 +8834,61 @@ function renderDevisTab() {
     const crmContact = findCRMContactForDevis(h.clientNom);
     const crmBtn = crmContact ? `<button class="btn-action load" onclick="event.stopPropagation();switchApp('crm');setTimeout(()=>{openContactDetail('${escapeHtml(crmContact.id||crmContact.contact_id||'')}')},300);" title="Voir dans CRM" style="background:rgba(91,156,246,.1);border-color:rgba(91,156,246,.4);color:#5b9cf6;">👤 CRM</button>` : '';
 
+    const moreBtn = (items) => items.length === 0 ? '' : `
+      <div class="devis-more-wrap">
+        <button class="btn-more" onclick="event.stopPropagation();yamaToggleMore(this)" title="Plus d'actions">⋯</button>
+        <div class="devis-more-popup">
+          ${items.map(([lbl, fn, cls]) => `<button class="devis-more-item${cls?' '+cls:''}" onclick="event.stopPropagation();${fn}">${lbl}</button>`).join('')}
+        </div>
+      </div>`;
+
     let actions = '';
     if (st.status === 'pending') {
       actions = `
-        <button class="btn-action accept" onclick="acceptDevis('${h.docNum}')">✅ Accepté par le client</button>
-        <button class="btn-action refuse" onclick="refuseDevis('${h.docNum}')">❌ Refusé</button>
-        <button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')">📂 Modifier</button>
-        ${crmBtn}`;
+        <div class="devis-actions-primary">
+          <button class="btn-action accept" onclick="acceptDevis('${h.docNum}')">✅ Accepté</button>
+          <button class="btn-action refuse" onclick="refuseDevis('${h.docNum}')">❌ Refusé</button>
+        </div>
+        ${moreBtn([
+          ['📂 Modifier', `loadFromHistoryByNum('${h.docNum}')`, ''],
+          ...(crmContact ? [['👤 Voir dans CRM', `switchApp('crm');setTimeout(()=>{openContactDetail('${escapeHtml(crmContact.id||crmContact.contact_id||'')}')},300)`, '']] : [])
+        ])}`;
     } else if (st.status === 'accepted') {
       actions = `
-        <button class="btn-action travaux v12-smart-invoice-btn" onclick="openSmartInvoiceModal('${h.docNum}')">🧾 Transformer en facture</button>
-        <button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')">📂 Recharger</button>
-        <button class="btn-action refuse" onclick="refuseDevis('${h.docNum}')" title="Correction — le client a finalement refusé" style="font-size:10px;padding:5px 10px;">❌ Finalement refusé</button>
-        <button class="btn-action load" onclick="revertDevisToPending('${h.docNum}')" style="font-size:10px;padding:5px 10px;color:var(--gray);" title="Remettre en attente de réponse">↩️ Remettre en attente</button>
-        ${crmBtn}`;
+        <div class="devis-actions-primary">
+          <button class="btn-action travaux v12-smart-invoice-btn" onclick="openSmartInvoiceModal('${h.docNum}')">🧾 Transformer en facture</button>
+        </div>
+        ${moreBtn([
+          ['📂 Recharger', `loadFromHistoryByNum('${h.docNum}')`, ''],
+          ['❌ Finalement refusé', `refuseDevis('${h.docNum}')`, 'danger'],
+          ['↩️ Remettre en attente', `revertDevisToPending('${h.docNum}')`, ''],
+          ...(crmContact ? [['👤 Voir dans CRM', `switchApp('crm');setTimeout(()=>{openContactDetail('${escapeHtml(crmContact.id||crmContact.contact_id||'')}')},300)`, '']] : [])
+        ])}`;
     } else if (st.status === 'done') {
       actions = `
-        <button class="btn-action travaux v12-smart-invoice-btn" onclick="openSmartInvoiceModal('${h.docNum}')">🧾 Transformer en facture</button>
-        <button class="btn-action refuse" onclick="refuseDevis('${h.docNum}')" title="Correction statut" style="font-size:10px;padding:5px 10px;">❌ Finalement refusé</button>
-        ${crmBtn}`;
+        <div class="devis-actions-primary">
+          <button class="btn-action travaux v12-smart-invoice-btn" onclick="openSmartInvoiceModal('${h.docNum}')">🧾 Transformer en facture</button>
+        </div>
+        ${moreBtn([
+          ['❌ Finalement refusé', `refuseDevis('${h.docNum}')`, 'danger'],
+          ...(crmContact ? [['👤 Voir dans CRM', `switchApp('crm');setTimeout(()=>{openContactDetail('${escapeHtml(crmContact.id||crmContact.contact_id||'')}')},300)`, '']] : [])
+        ])}`;
     } else if (st.status === 'refused') {
       actions = `
-        <button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')">📂 Modifier et renvoyer</button>
-        <button class="btn-action accept" onclick="acceptDevis('${h.docNum}')">↩️ Finalement accepté</button>
-        <button class="btn-action load" onclick="revertDevisToPending('${h.docNum}')" style="font-size:10px;padding:5px 10px;" title="Remettre en attente">🔄 En attente</button>
-        ${crmBtn}`;
+        <div class="devis-actions-primary">
+          <button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')">📂 Modifier</button>
+          <button class="btn-action accept" onclick="acceptDevis('${h.docNum}')">↩️ Accepté</button>
+        </div>
+        ${moreBtn([
+          ['🔄 Remettre en attente', `revertDevisToPending('${h.docNum}')`, ''],
+          ...(crmContact ? [['👤 Voir dans CRM', `switchApp('crm');setTimeout(()=>{openContactDetail('${escapeHtml(crmContact.id||crmContact.contact_id||'')}')},300)`, '']] : [])
+        ])}`;
     } else if (st.status === 'invoiced') {
-      actions = `<button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')">📂 Voir</button>${crmBtn}`;
+      actions = `
+        <div class="devis-actions-primary">
+          <button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')">📂 Voir</button>
+          ${crmContact ? `<button class="btn-action load" onclick="event.stopPropagation();switchApp('crm');setTimeout(()=>{openContactDetail('${escapeHtml(crmContact.id||crmContact.contact_id||'')}')},300);" style="background:rgba(91,156,246,.1);border-color:rgba(91,156,246,.4);color:#5b9cf6;">👤 CRM</button>` : ''}
+        </div>`;
     }
 
     return `
@@ -32754,6 +32813,33 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 })();
 </script>
 
+<!-- ── Overflow menu devis actions ── -->
+<script>
+(function(){
+  'use strict';
+  if (window.__YAMA_MORE_MENU__) return;
+  window.__YAMA_MORE_MENU__ = true;
+
+  window.yamaToggleMore = function(btn){
+    const popup = btn.nextElementSibling;
+    if (!popup) return;
+    const isOpen = popup.classList.contains('open');
+    // Fermer tous les autres popups ouverts
+    document.querySelectorAll('.devis-more-popup.open').forEach(p => p.classList.remove('open'));
+    if (!isOpen) {
+      popup.classList.add('open');
+      // Fermer si clic hors du popup
+      setTimeout(function(){
+        document.addEventListener('click', function close(){
+          popup.classList.remove('open');
+          document.removeEventListener('click', close);
+        }, { once:true });
+      }, 0);
+    }
+  };
+})();
+</script>
+
 <!-- ═══════════════════════════════════════════════════════
      YAMA REFUS-FACTURE — Facturation automatique devis refusés
      Quand un devis est refusé, propose de générer une facture
@@ -33038,22 +33124,10 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     }
   }
 
-  // ── Wrapper refuseDevis ──────────────────────────────────
-  window.refuseDevis = function(docNum){
-    showRefusModal(docNum, null);
-  };
-  window.refuseDevis.__yamaRefusWrapped = true;
-
-  // ── Wrapper crmRefuseDevisFromCRM ────────────────────────
-  window.crmRefuseDevisFromCRM = function(cid, docNum){
-    if (!docNum) {
-      const toastFn = typeof showToast === 'function' ? showToast : (typeof toast === 'function' ? toast : null);
-      if (toastFn) toastFn('Aucun devis lié à ce contact', 'error');
-      return;
-    }
-    showRefusModal(docNum, cid);
-  };
-  window.crmRefuseDevisFromCRM.__yamaRefusWrapped = true;
+  // ── Exposer showRefusModal globalement ──────────────────
+  // refuseDevis et crmRefuseDevisFromCRM appellent window.showYamaRefusModal directement
+  window.showYamaRefusModal = showRefusModal;
+  window.__yamaRefusWrapped = true;
 
   // ── Bootstrap articles au chargement ────────────────────
   if (document.readyState === 'loading') {
