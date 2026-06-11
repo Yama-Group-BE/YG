@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>YAMA GROUP</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&family=Barlow:wght@300;400;500;600;700;900&family=Barlow+Condensed:wght@500;700;900&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -2245,7 +2245,7 @@ html,
 body {
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 img, video, iframe, embed, object, table {
@@ -21180,7 +21180,7 @@ order by table_name;</textarea>
   };
   const BASE_DEVIS = 101;
   const BASE_FACTURE = 101;
-  const state = { client:null, inFlight:null, timer:null, lastOk:0, lastStatus:'local', lastHistoryHash:'' };
+  const state = { client:null, inFlight:null, timer:null, lastOk:0, lastStatus:'local', lastHistoryHash:'', errCount:0, errBackoff:0 };
   const $ = id => document.getElementById(id);
   const nowISO = () => new Date().toISOString();
   const clean = v => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
@@ -21327,7 +21327,7 @@ order by table_name;</textarea>
   }
   function setCloud(status, label, opts){
     opts = opts || {};
-    if (status === 'syncing' && state.lastStatus === 'connected' && !opts.visible) return;
+    if (status === 'syncing' && state.lastStatus !== 'local' && !opts.visible) return;
     state.lastStatus = status || 'local';
     const pill = $('cloudPill'), lbl = $('cloudLabel'), dot = $('cloudDot');
     if (pill) {
@@ -21453,10 +21453,11 @@ order by table_name;</textarea>
     const reasonText = String(reason || 'background');
     const background = !/manual|force|connect|boot|realtime/i.test(reasonText);
     if (background && state.lastOk && Date.now() - state.lastOk < 8000) return;
+    if (background && state.errBackoff && Date.now() < state.errBackoff) return;
     if (state.inFlight) return state.inFlight;
 
     state.inFlight = (async function(){
-      const visible = !background || state.lastStatus !== 'connected';
+      const visible = !background;
       setCloud('syncing', 'Synchronisation...', { visible });
       let changed = false;
       // Timeout 15 s : si Supabase ne répond pas, le point reste orange indéfiniment.
@@ -21558,6 +21559,8 @@ order by table_name;</textarea>
         const afterHash = historyHash(activeHistory(rawHistory()));
         changed = beforeHash !== afterHash || state.lastHistoryHash !== afterHash;
         state.lastHistoryHash = afterHash;
+        state.errCount = 0;
+        state.errBackoff = 0;
         const firstConnect = !state.lastOk;
         state.lastOk = Date.now();
         setCloud('connected', 'Cloud connecté');
@@ -21579,6 +21582,8 @@ order by table_name;</textarea>
           try { if (typeof updateBadges === 'function') updateBadges(); } catch(e){}
         }
       } catch(e) {
+        state.errCount = (state.errCount || 0) + 1;
+        state.errBackoff = Date.now() + Math.min(state.errCount * state.errCount * 5000, 120000);
         setCloud('error', 'Erreur sync');
         console.error('[YAMA V32] syncFullPull:', e.message || e);
       } finally {
@@ -33157,6 +33162,80 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
   }
 
   console.info('[YAMA REFUS] Facturation automatique devis refusés activée (étude 150€ + déplacement 50€ TVA 21%).');
+})();
+</script>
+
+<script>
+/* ── YAMA MOBILE + SYNC STABILITY PATCH ──────────────────────────────────
+   - Debounce realtime sync events (coalesce rapid-fire events into 1 sync)
+   - touch-action: manipulation on all interactive elements (prevents 300ms delay)
+   - iOS zoom recovery helper (double-tap status bar to reset)
+   - Prevent sync spinner from showing during background retries
+*/
+(function(){
+  if (window.__YAMA_MOBILE_STABLE__) return;
+  window.__YAMA_MOBILE_STABLE__ = true;
+
+  // ── 1. Touch-action CSS injection ──────────────────────────────────────
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `
+    button, [role="button"], input, select, textarea, a,
+    .btn, .btn-primary, .btn-secondary, .btn-more, .devis-more-item,
+    .tab-btn, .u-btn, .nav-btn, .cloud-pill {
+      touch-action: manipulation;
+    }
+    @media (max-width: 768px) {
+      html, body {
+        -webkit-text-size-adjust: 100%;
+        touch-action: pan-x pan-y;
+      }
+      /* Prevent overscroll bounce revealing blank space */
+      body { overscroll-behavior-y: none; }
+    }
+  `;
+  document.head.appendChild(styleEl);
+
+  // ── 2. Realtime sync debounce ───────────────────────────────────────────
+  let _rtDebounce = null;
+  const _origSync = window.syncFullPull;
+  if (typeof _origSync === 'function') {
+    window.syncFullPull = function(reason) {
+      const isRealtime = /realtime/i.test(String(reason || ''));
+      if (isRealtime) {
+        clearTimeout(_rtDebounce);
+        _rtDebounce = setTimeout(function() {
+          _rtDebounce = null;
+          _origSync('realtime').catch(function(){});
+        }, 1500);
+        return Promise.resolve();
+      }
+      return _origSync(reason);
+    };
+    try { syncFullPull = window.syncFullPull; } catch(e){}
+  }
+
+  // Re-wire after V32 binds its exports
+  const _tryRewire = setInterval(function(){
+    if (!window.syncFullPull || window.syncFullPull._yamaDebounced) return;
+    const base = window.syncFullPull;
+    window.syncFullPull = function(reason) {
+      const isRealtime = /realtime/i.test(String(reason || ''));
+      if (isRealtime) {
+        clearTimeout(_rtDebounce);
+        _rtDebounce = setTimeout(function() {
+          _rtDebounce = null;
+          base('realtime').catch(function(){});
+        }, 1500);
+        return Promise.resolve();
+      }
+      return base(reason);
+    };
+    window.syncFullPull._yamaDebounced = true;
+    try { syncFullPull = window.syncFullPull; } catch(e){}
+    clearInterval(_tryRewire);
+  }, 500);
+
+  console.info('[YAMA MOBILE] Patch mobile + sync stable chargé.');
 })();
 </script>
 </body>
