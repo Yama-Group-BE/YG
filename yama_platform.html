@@ -6669,7 +6669,22 @@ function startYamaRealtime() {
       .subscribe(status => {
         if (status === 'SUBSCRIBED') {
           yamaRealtimeStarted = true;
+          window.__yamaRtRetry = 0;
           console.log('[YAMA] Realtime actif — CRM + History + Status');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          /* Canal perdu (coupure réseau, veille mobile, proxy) : sans reconnexion
+             explicite l'app reste "connectée" en apparence mais ne reçoit plus
+             rien → longue désynchronisation silencieuse. Backoff n²×2s, max 60s. */
+          yamaRealtimeStarted = false;
+          try { client.removeChannel(yamaRealtimeChannel); } catch(e){}
+          yamaRealtimeChannel = null;
+          const n = (window.__yamaRtRetry = (window.__yamaRtRetry || 0) + 1);
+          const delay = Math.min(n * n * 2000, 60000);
+          console.warn('[YAMA] Realtime perdu (' + status + ') — reconnexion dans ' + Math.round(delay / 1000) + 's');
+          setTimeout(() => {
+            try { startYamaRealtime(); } catch(e){}
+            try { if (typeof window.syncFullPull === 'function') window.syncFullPull('rt-restore'); } catch(e){}
+          }, delay);
         }
       });
   } catch(e) {
@@ -8862,6 +8877,7 @@ function renderDevisTab() {
       actions = `
         <div class="devis-actions-primary">
           <button class="btn-action travaux v12-smart-invoice-btn" onclick="openSmartInvoiceModal('${h.docNum}')">🧾 Transformer en facture</button>
+          <button class="btn-action load" onclick="showYamaAvenantModal('${h.docNum}')" title="Le client demande des travaux en plus — créer un avenant lié à ce devis" style="background:rgba(232,160,32,.12);border-color:rgba(232,160,32,.45);color:var(--accent);">➕ Rajout</button>
         </div>
         ${moreBtn([
           ['📂 Recharger', `loadFromHistoryByNum('${h.docNum}')`, ''],
@@ -8873,6 +8889,7 @@ function renderDevisTab() {
       actions = `
         <div class="devis-actions-primary">
           <button class="btn-action travaux v12-smart-invoice-btn" onclick="openSmartInvoiceModal('${h.docNum}')">🧾 Transformer en facture</button>
+          <button class="btn-action load" onclick="showYamaAvenantModal('${h.docNum}')" title="Le client demande des travaux en plus — créer un avenant lié à ce devis" style="background:rgba(232,160,32,.12);border-color:rgba(232,160,32,.45);color:var(--accent);">➕ Rajout</button>
         </div>
         ${moreBtn([
           ['❌ Finalement refusé', `refuseDevis('${h.docNum}')`, 'danger'],
@@ -8892,6 +8909,7 @@ function renderDevisTab() {
       actions = `
         <div class="devis-actions-primary">
           <button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')">📂 Voir</button>
+          <button class="btn-action load" onclick="showYamaAvenantModal('${h.docNum}')" title="Le client demande des travaux en plus — créer un avenant lié à ce devis" style="background:rgba(232,160,32,.12);border-color:rgba(232,160,32,.45);color:var(--accent);">➕ Rajout</button>
           ${crmContact ? `<button class="btn-action load" onclick="event.stopPropagation();switchApp('crm');setTimeout(()=>{openContactDetail('${escapeHtml(crmContact.id||crmContact.contact_id||'')}')},300);" style="background:rgba(91,156,246,.1);border-color:rgba(91,156,246,.4);color:#5b9cf6;">👤 CRM</button>` : ''}
         </div>`;
     }
@@ -8902,7 +8920,7 @@ function renderDevisTab() {
           <div class="devis-item-num">${escapeHtml(h.docNum || '—')}</div>
           <div class="devis-item-info">
             <div class="di-client">${escapeHtml(h.clientNom || 'Client')}</div>
-            <div class="di-sub">${escapeHtml(h.chantierRef || h.chantierVille || '')} · ${fmtDate(h.dateEmission) || new Date(h.savedAt).toLocaleDateString('fr-BE')}</div>
+            <div class="di-sub">${h.isAvenant && h.parentDevisNum ? `<span style="color:var(--accent);font-weight:600;">↳ Rajout sur ${escapeHtml(h.parentDevisNum)}</span> · ` : ''}${escapeHtml(h.chantierRef || h.chantierVille || '')} · ${fmtDate(h.dateEmission) || new Date(h.savedAt).toLocaleDateString('fr-BE')}</div>
           </div>
           <div class="devis-item-amount">${fmt(h.totalTTC || 0)}</div>
           <div class="status-badge ${statusInfo.cls}">${statusInfo.label}</div>
@@ -33197,28 +33215,8 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 
   // ── 2. Realtime sync debounce ───────────────────────────────────────────
   let _rtDebounce = null;
-  const _origSync = window.syncFullPull;
-  if (typeof _origSync === 'function') {
-    window.syncFullPull = function(reason) {
-      const isRealtime = /realtime/i.test(String(reason || ''));
-      if (isRealtime) {
-        clearTimeout(_rtDebounce);
-        _rtDebounce = setTimeout(function() {
-          _rtDebounce = null;
-          _origSync('realtime').catch(function(){});
-        }, 1500);
-        return Promise.resolve();
-      }
-      return _origSync(reason);
-    };
-    try { syncFullPull = window.syncFullPull; } catch(e){}
-  }
-
-  // Re-wire after V32 binds its exports
-  const _tryRewire = setInterval(function(){
-    if (!window.syncFullPull || window.syncFullPull._yamaDebounced) return;
-    const base = window.syncFullPull;
-    window.syncFullPull = function(reason) {
+  function wrapSync(base){
+    const wrapped = function(reason) {
       const isRealtime = /realtime/i.test(String(reason || ''));
       if (isRealtime) {
         clearTimeout(_rtDebounce);
@@ -33230,12 +33228,313 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
       }
       return base(reason);
     };
-    window.syncFullPull._yamaDebounced = true;
+    wrapped._yamaDebounced = true;
+    return wrapped;
+  }
+  function ensureWrapped(){
+    if (typeof window.syncFullPull !== 'function' || window.syncFullPull._yamaDebounced) return;
+    window.syncFullPull = wrapSync(window.syncFullPull);
     try { syncFullPull = window.syncFullPull; } catch(e){}
-    clearInterval(_tryRewire);
-  }, 500);
+  }
+  ensureWrapped();
+  // Si un autre script remplace syncFullPull plus tard, re-wrapper (jamais en double : flag)
+  setInterval(ensureWrapped, 2000);
+
+  // ── 3. Resync au retour de l'onglet/app au premier plan ──────────────────
+  // Sur mobile, l'app passe en veille → realtime coupé → données périmées.
+  // Au réveil : pull silencieux (sans spinner) + relance du canal realtime.
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden) return;
+    try { if (typeof window.syncFullPull === 'function') window.syncFullPull('visibility'); } catch(e){}
+    try { if (typeof startYamaRealtime === 'function') startYamaRealtime(); } catch(e){}
+  });
+  window.addEventListener('online', function(){
+    try { if (typeof window.syncFullPull === 'function') window.syncFullPull('online-back'); } catch(e){}
+    try { if (typeof startYamaRealtime === 'function') startYamaRealtime(); } catch(e){}
+  });
 
   console.info('[YAMA MOBILE] Patch mobile + sync stable chargé.');
+})();
+</script>
+
+<script id="yama-avenant">
+/* ── YAMA AVENANT / RAJOUT CLIENT ────────────────────────────────────────
+   En cours de chantier, le client demande des travaux supplémentaires.
+   Ce module crée un AVENANT lié au devis d'origine :
+   - Numérotation : YG-26-012 → YG-26-012-A1, -A2, ...
+   - Reprend automatiquement client + chantier + TVA du devis parent
+   - L'avenant suit le flux normal : en attente → accepté → facturé
+   - Visible dans l'onglet Devis avec le marqueur "↳ Rajout sur YG-..."
+*/
+(function(){
+  if (window.__YAMA_AVENANT__) return;
+  window.__YAMA_AVENANT__ = true;
+
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmtEur = v => (Math.round(v * 100) / 100).toFixed(2).replace('.', ',') + ' €';
+
+  // ── Styles ───────────────────────────────────────────────
+  (function injectStyles(){
+    const s = document.createElement('style');
+    s.textContent = `
+      #yama-avenant-overlay {
+        position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:999999;
+        display:flex;align-items:center;justify-content:center;padding:16px;
+      }
+      #yama-avenant-modal {
+        background:#141828;border:1px solid rgba(201,168,76,.3);border-radius:16px;
+        padding:26px 22px 20px;max-width:620px;width:100%;max-height:92vh;
+        overflow-y:auto;-webkit-overflow-scrolling:touch;
+        box-shadow:0 24px 64px rgba(0,0,0,.7);
+      }
+      #yama-avenant-modal h2 {
+        margin:0 0 4px;font-size:16px;font-weight:800;color:#C9A84C;letter-spacing:.3px;
+      }
+      #yama-avenant-modal .av-subtitle {
+        font-size:12px;color:rgba(240,242,248,.55);margin-bottom:16px;
+      }
+      #yama-avenant-modal .av-tva-row {
+        display:flex;align-items:center;gap:10px;margin-bottom:14px;
+      }
+      #yama-avenant-modal .av-tva-label { font-size:12px;color:rgba(240,242,248,.55);flex:1; }
+      #yama-avenant-modal .av-tva-btn {
+        padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.15);
+        background:rgba(255,255,255,.05);color:rgba(200,210,230,.7);
+        font-size:12px;font-weight:700;cursor:pointer;transition:all .15s;
+      }
+      #yama-avenant-modal .av-tva-btn.active { background:#C9A84C;border-color:#C9A84C;color:#111; }
+      #yama-avenant-modal .av-lines { display:flex;flex-direction:column;gap:8px;margin-bottom:10px; }
+      #yama-avenant-modal .av-line {
+        display:grid;grid-template-columns:1fr 64px 86px 92px 30px;gap:6px;align-items:center;
+        background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+        border-radius:9px;padding:8px;
+      }
+      #yama-avenant-modal .av-line input, #yama-avenant-modal .av-line select {
+        width:100%;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.12);
+        border-radius:6px;color:#f0f2f8;font-size:12.5px;padding:7px 8px;outline:none;
+      }
+      #yama-avenant-modal .av-line input:focus { border-color:rgba(201,168,76,.55); }
+      #yama-avenant-modal .av-line .av-del {
+        background:rgba(224,82,82,.12);border:1px solid rgba(224,82,82,.35);color:#e05252;
+        border-radius:6px;cursor:pointer;font-size:13px;height:30px;width:30px;line-height:1;
+      }
+      #yama-avenant-modal .av-add {
+        background:transparent;border:1px dashed rgba(201,168,76,.45);color:#C9A84C;
+        border-radius:8px;padding:8px;width:100%;cursor:pointer;font-size:12.5px;font-weight:600;
+        margin-bottom:14px;
+      }
+      #yama-avenant-modal .av-totals {
+        background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+        border-radius:10px;padding:12px 16px;margin-bottom:16px;
+      }
+      #yama-avenant-modal .av-trow {
+        display:flex;justify-content:space-between;font-size:12.5px;
+        color:rgba(240,242,248,.85);padding:3px 0;
+      }
+      #yama-avenant-modal .av-trow.ttc {
+        border-top:1px solid rgba(255,255,255,.1);margin-top:6px;padding-top:9px;
+        font-weight:700;font-size:13.5px;color:#fff;
+      }
+      #yama-avenant-modal .av-trow .amt { color:#C9A84C;font-weight:700; }
+      #yama-avenant-modal .av-btns { display:flex;flex-direction:column;gap:9px; }
+      #yama-avenant-modal .av-btn {
+        width:100%;padding:11px 16px;border-radius:9px;border:none;cursor:pointer;
+        font-size:13px;font-weight:700;transition:opacity .15s;
+      }
+      #yama-avenant-modal .av-btn:hover { opacity:.88; }
+      #yama-avenant-modal .av-btn-primary { background:linear-gradient(135deg,#C9A84C,#e8c76a);color:#111; }
+      #yama-avenant-modal .av-btn-primary:disabled { opacity:.4;cursor:not-allowed; }
+      #yama-avenant-modal .av-btn-cancel {
+        background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+        color:rgba(200,210,230,.6);font-weight:400;
+      }
+      @media (max-width: 540px) {
+        #yama-avenant-modal .av-line { grid-template-columns:1fr 30px;grid-auto-rows:auto; }
+        #yama-avenant-modal .av-line input[data-f="desc"] { grid-column:1/2; }
+        #yama-avenant-modal .av-line .av-del { grid-row:1; grid-column:2; }
+        #yama-avenant-modal .av-line input[data-f="qte"],
+        #yama-avenant-modal .av-line select,
+        #yama-avenant-modal .av-line input[data-f="pu"] { grid-column:1/3; }
+      }
+    `;
+    document.head.appendChild(s);
+  })();
+
+  // ── Numérotation : YG-26-012 → YG-26-012-A1, A2, ... ─────
+  function nextAvenantNum(parentNum){
+    const hist = typeof getHistory === 'function' ? getHistory() : [];
+    const escRe = String(parentNum).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('^' + escRe + '-A(\\d+)$', 'i');
+    let max = 0;
+    hist.forEach(e => {
+      const m = String(e.docNum || '').match(re);
+      if (m) max = Math.max(max, parseInt(m[1], 10) || 0);
+    });
+    return parentNum + '-A' + (max + 1);
+  }
+
+  // ── Création de l'avenant dans l'historique ──────────────
+  function createAvenant(parent, lines, tvaRate){
+    const num = nextAvenantNum(parent.docNum);
+    const now = new Date().toISOString();
+    let totalHT = 0;
+    const lignes = lines.map((l, i) => {
+      const qte = parseFloat(String(l.qte).replace(',', '.')) || 1;
+      const pu  = parseFloat(String(l.pu).replace(',', '.'))  || 0;
+      totalHT += qte * pu;
+      return { id:'avenant_' + Date.now() + '_' + i, desc:l.desc, qte:String(qte), unit:l.unit || 'Forfait', pu:String(pu), tva:String(tvaRate) };
+    });
+    const entry = {
+      docNum:          num,
+      docType:         'devis',
+      savedAt:         now,
+      dateEmission:    now.slice(0, 10),
+      clientNom:       parent.clientNom       || '',
+      clientTel:       parent.clientTel       || '',
+      clientEmail:     parent.clientEmail     || '',
+      clientAdresse:   parent.clientAdresse   || '',
+      clientCP:        parent.clientCP        || '',
+      clientVille:     parent.clientVille     || '',
+      chantierRef:     parent.chantierRef     || '',
+      chantierAdresse: parent.chantierAdresse || '',
+      chantierCP:      parent.chantierCP      || '',
+      chantierVille:   parent.chantierVille   || '',
+      ageBatiment:     parent.ageBatiment     || '',
+      remarques:       'Avenant au devis ' + String(parent.docNum) + ' — travaux supplémentaires demandés par le client.',
+      lignesClient:    lignes,
+      lignesST:        [],
+      totalTTC:        totalHT * (1 + tvaRate),
+      parentDevisNum:  String(parent.docNum),
+      isAvenant:       true
+    };
+    const KEY = 'yama_history_v3';
+    try {
+      const all = JSON.parse(localStorage.getItem(KEY) || '[]');
+      all.unshift(entry);
+      localStorage.setItem(KEY, JSON.stringify(all));
+    } catch(e){ console.error('[YAMA AVENANT] save:', e); return null; }
+
+    try { if (typeof window.syncPushHistory === 'function') window.syncPushHistory(entry); } catch(e){}
+    try { if (typeof renderHistory === 'function') renderHistory(); } catch(e){}
+    try { if (typeof renderDevisTab === 'function') renderDevisTab(); } catch(e){}
+    try { if (typeof updateBadges === 'function') updateBadges(); } catch(e){}
+    return num;
+  }
+
+  // ── Modal ────────────────────────────────────────────────
+  function showAvenantModal(parentDocNum){
+    const old = document.getElementById('yama-avenant-overlay');
+    if (old) old.remove();
+
+    const hist = typeof getHistory === 'function' ? getHistory() : [];
+    const parent = hist.find(e => String(e.docNum) === String(parentDocNum));
+    if (!parent) {
+      const t = typeof showToast === 'function' ? showToast : (typeof toast === 'function' ? toast : null);
+      if (t) t('Devis ' + parentDocNum + ' introuvable', 'error');
+      return;
+    }
+    let tvaRate = parent.ageBatiment === 'plus10' ? 0.06 : 0.21;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'yama-avenant-overlay';
+    overlay.innerHTML = `
+      <div id="yama-avenant-modal">
+        <h2>➕ Rajout client — avenant au devis ${esc(parentDocNum)}</h2>
+        <div class="av-subtitle">${esc(parent.clientNom || 'Client')} · ${esc(parent.chantierRef || parent.chantierVille || 'Chantier')} — les coordonnées sont reprises automatiquement du devis d'origine.</div>
+        <div class="av-tva-row">
+          <span class="av-tva-label">Taux TVA applicable :</span>
+          <button type="button" class="av-tva-btn" data-tva="0.06">6%</button>
+          <button type="button" class="av-tva-btn" data-tva="0.21">21%</button>
+        </div>
+        <div class="av-lines"></div>
+        <button type="button" class="av-add">＋ Ajouter une ligne</button>
+        <div class="av-totals">
+          <div class="av-trow"><span>Total HT</span><span class="amt" data-t="ht">0,00 €</span></div>
+          <div class="av-trow"><span>TVA <span data-t="rate">21</span>%</span><span class="amt" data-t="tva">0,00 €</span></div>
+          <div class="av-trow ttc"><span>Total TTC</span><span class="amt" data-t="ttc">0,00 €</span></div>
+        </div>
+        <div class="av-btns">
+          <button type="button" class="av-btn av-btn-primary" disabled>✅ Créer l'avenant</button>
+          <button type="button" class="av-btn av-btn-cancel">Annuler</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const linesEl  = overlay.querySelector('.av-lines');
+    const btnOk    = overlay.querySelector('.av-btn-primary');
+    const units    = ['Forfait', 'm²', 'm', 'm³', 'h', 'pièce', 'jour'];
+
+    function addLine(){
+      const row = document.createElement('div');
+      row.className = 'av-line';
+      row.innerHTML = `
+        <input type="text" data-f="desc" placeholder="Description du travail supplémentaire">
+        <input type="text" data-f="qte" inputmode="decimal" placeholder="Qté" value="1">
+        <select data-f="unit">${units.map(u => `<option>${u}</option>`).join('')}</select>
+        <input type="text" data-f="pu" inputmode="decimal" placeholder="PU HT €">
+        <button type="button" class="av-del" title="Supprimer la ligne">✕</button>`;
+      row.querySelector('.av-del').addEventListener('click', () => { row.remove(); recompute(); });
+      row.addEventListener('input', recompute);
+      linesEl.appendChild(row);
+      row.querySelector('[data-f="desc"]').focus();
+    }
+
+    function readLines(){
+      return Array.from(linesEl.querySelectorAll('.av-line')).map(row => ({
+        desc: row.querySelector('[data-f="desc"]').value.trim(),
+        qte:  row.querySelector('[data-f="qte"]').value,
+        unit: row.querySelector('[data-f="unit"]').value,
+        pu:   row.querySelector('[data-f="pu"]').value
+      }));
+    }
+
+    function recompute(){
+      let ht = 0;
+      let valid = 0;
+      readLines().forEach(l => {
+        const q = parseFloat(String(l.qte).replace(',', '.')) || 0;
+        const p = parseFloat(String(l.pu).replace(',', '.')) || 0;
+        ht += q * p;
+        if (l.desc && p > 0) valid++;
+      });
+      overlay.querySelector('[data-t="ht"]').textContent  = fmtEur(ht);
+      overlay.querySelector('[data-t="tva"]').textContent = fmtEur(ht * tvaRate);
+      overlay.querySelector('[data-t="ttc"]').textContent = fmtEur(ht * (1 + tvaRate));
+      overlay.querySelector('[data-t="rate"]').textContent = Math.round(tvaRate * 100);
+      btnOk.disabled = valid === 0;
+    }
+
+    overlay.querySelectorAll('.av-tva-btn').forEach(b => {
+      if (parseFloat(b.dataset.tva) === tvaRate) b.classList.add('active');
+      b.addEventListener('click', () => {
+        tvaRate = parseFloat(b.dataset.tva);
+        overlay.querySelectorAll('.av-tva-btn').forEach(x => x.classList.toggle('active', x === b));
+        recompute();
+      });
+    });
+    overlay.querySelector('.av-add').addEventListener('click', addLine);
+    overlay.querySelector('.av-btn-cancel').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    btnOk.addEventListener('click', () => {
+      const lines = readLines().filter(l => l.desc && (parseFloat(String(l.pu).replace(',', '.')) || 0) > 0);
+      if (!lines.length) return;
+      const num = createAvenant(parent, lines, tvaRate);
+      overlay.remove();
+      const t = typeof showToast === 'function' ? showToast : (typeof toast === 'function' ? toast : null);
+      if (num) {
+        if (t) t('✅ Avenant ' + num + ' créé — en attente d\'acceptation client', 'success');
+      } else if (t) {
+        t('Erreur lors de la création de l\'avenant', 'error');
+      }
+    });
+
+    addLine();
+    recompute();
+  }
+
+  window.showYamaAvenantModal = showAvenantModal;
+  console.info('[YAMA AVENANT] Rajouts client (avenants liés aux devis) activés.');
 })();
 </script>
 </body>
