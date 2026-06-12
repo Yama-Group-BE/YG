@@ -7836,7 +7836,7 @@ function buildPdfHtml(docType, data, meta) {
         <div class="pdf-header-info">
           Entreprise Générale de Construction<br>
           <span class="gold">info@yama-group.be</span><br>
-          0489 33 77 00  |  Budasteenweg 32, 1830 Machelen
+          0489 33 77 00
         </div>
       </div>
 
@@ -17681,7 +17681,7 @@ order by table_name;</textarea>
   const PHONE = '0489 33 77 00';
   const EMAIL = 'info@yama-group.be';
   const COMPANY = 'YAMA Group';
-  const COMPANY_ADDRESS = 'Budasteenweg 32, 1830 Machelen';
+  const COMPANY_ADDRESS = '';
   const LS_CONTACTS = 'yama_crm_v2';
   const LS_HISTORY = 'yama_history_v3';
   const LS_CHANTIERS = 'yama_chantiers_v12';
@@ -19903,7 +19903,7 @@ order by table_name;</textarea>
         <div class="pdf-header-info">
           Entreprise Générale de Construction<br>
           <span class="gold">info@yama-group.be</span><br>
-          0489 33 77 00  |  Budasteenweg 32, 1830 Machelen
+          0489 33 77 00
         </div>
       </div>`;
   }
@@ -20750,7 +20750,7 @@ order by table_name;</textarea>
     setFont(pdf, 7.8, 'bold', GOLD);
     text(pdf, 'info@yama-group.be', A4.w - A4.m, 17, { align:'right' });
     setFont(pdf, 7.8, 'normal', MID);
-    text(pdf, '0489 33 77 00 | Budasteenweg 32, 1830 Machelen', A4.w - A4.m, 22, { align:'right' });
+    text(pdf, '0489 33 77 00', A4.w - A4.m, 22, { align:'right' });
     pdf.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
     pdf.setLineWidth(.55);
     pdf.line(A4.m, 33, A4.w - A4.m, 33);
