@@ -2688,6 +2688,9 @@ select:focus { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www
       <span id="syncTime" style="font-size:9px;opacity:.5;margin-left:4px;display:none;"></span>
     </div>
 
+    <!-- Paramètres Société -->
+    <button id="yama-company-btn" onclick="window.openYamaCompanySettings&&window.openYamaCompanySettings()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(200,210,230,.75);border-radius:8px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;letter-spacing:.3px;" title="Paramètres de la société">⚙️ <span class="yama-settings-label">Paramètres</span></button>
+
     <!-- Platform numbering (platform only) -->
     <div id="numDisplay" onclick="editNums()" style="display:none;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:#C9A84C;letter-spacing:1px;background:rgba(201,168,76,.08);padding:4px 10px;border:1px solid rgba(201,168,76,.25);border-radius:2px;cursor:pointer;">YG-26-101</div>
   </div>
@@ -7834,9 +7837,9 @@ function buildPdfHtml(docType, data, meta) {
       <div class="pdf-header">
         <img src="${YAMA_LOGO}" class="pdf-logo" alt="Yama Group">
         <div class="pdf-header-info">
-          Entreprise Générale de Construction<br>
-          <span class="gold">info@yama-group.be</span><br>
-          0489 33 77 00
+          ${(window.getCompany&&window.getCompany().type)||'Entreprise Générale de Construction'}<br>
+          <span class="gold">${(window.getCompany&&window.getCompany().email)||'info@yama-group.be'}</span><br>
+          ${(window.getCompany&&window.getCompany().telephone)||'0489 33 77 00'}
         </div>
       </div>
 
@@ -7934,7 +7937,7 @@ function buildPdfHtml(docType, data, meta) {
       </div>
 
       <div class="pdf-footer">
-        YAMA GROUP  •  Entreprise Générale de Construction  •  Belgique
+        ${(function(){ const _cf=window.getCompany?window.getCompany():{};return [(_cf.nom||'YAMA GROUP').toUpperCase(),(_cf.type||'Entreprise Générale de Construction'),(_cf.ville||'Belgique')].join('  •  ');})()}
       </div>
     </div>
   `;
@@ -19901,9 +19904,9 @@ order by table_name;</textarea>
       <div class="pdf-header">
         <img src="${YAMA_LOGO}" class="pdf-logo" alt="Yama Group">
         <div class="pdf-header-info">
-          Entreprise Générale de Construction<br>
-          <span class="gold">info@yama-group.be</span><br>
-          0489 33 77 00
+          ${(window.getCompany&&window.getCompany().type)||'Entreprise Générale de Construction'}<br>
+          <span class="gold">${(window.getCompany&&window.getCompany().email)||'info@yama-group.be'}</span><br>
+          ${(window.getCompany&&window.getCompany().telephone)||'0489 33 77 00'}
         </div>
       </div>`;
   }
@@ -20069,20 +20072,23 @@ order by table_name;</textarea>
     ` : `
       <p>•  Facture à régler par <strong>paiement immédiat</strong> à réception de la présente facture.</p>
       ${acompteVerse > 0 ? `<p class="bold">•  Acompte déjà versé : ${fmt(acompteVerse)}  —  Solde restant dû : ${fmt(totalTTC - acompteVerse)}.</p>` : ''}
-      <p>•  Paiement par virement bancaire — merci de mentionner le numéro de facture en communication.</p>
+      ${(function(){ const _ci = window.getCompany ? window.getCompany() : {}; return _ci.iban ? `<p>•  Paiement par virement bancaire sur <strong>${_ci.iban}</strong>${_ci.bic?' (BIC : '+_ci.bic+')':''} — communication : numéro de facture.</p>` : '<p>•  Paiement par virement bancaire — merci de mentionner le numéro de facture en communication.</p>'; })()}
       <p class="bold">•  Après 5 jours ouvrables sans règlement : frais administratifs forfaitaires de <strong>50,00 €</strong>.</p>
       <p class="bold">•  Au-delà de 10 jours ouvrables : majoration de <strong>5 % du montant TTC</strong> s'applique de plein droit.</p>
       <p>•  <strong>Remarques :</strong> ${remarquesText}</p>
     `;
 
+    const _cSig = window.getCompany ? window.getCompany() : {};
+    const _cNom = (_cSig.nom || 'YAMA GROUP').toUpperCase();
+    const _cType = _cSig.type || 'Entreprise Générale de Construction';
     const sigYama = isDevis ? `
-      <h3>POUR YAMA GROUP</h3>
-      <p class="sub">Entreprise Générale de Construction</p>
+      <h3>POUR ${_cNom}</h3>
+      <p class="sub">${_cType}</p>
       <p class="date-line">Date : _________________________</p>
       <p class="date-line">Signature : _________________________</p>
     ` : `
-      <h3>POUR YAMA GROUP</h3>
-      <p class="sub">Entreprise Générale de Construction</p>
+      <h3>POUR ${_cNom}</h3>
+      <p class="sub">${_cType}</p>
       <p class="date-line">Facture émise le : ${fmtDate(data.dateEmission)}</p>
       <p class="date-line">Signature : _________________________</p>
     `;
@@ -20739,18 +20745,21 @@ order by table_name;</textarea>
     pdf.setLineWidth(.42);
     pdf.line(A4.m, A4.footerY - 5, A4.w - A4.m, A4.footerY - 5);
     setFont(pdf, 7.2, 'normal', [132,132,138]);
-    text(pdf, 'YAMA GROUP - Entreprise Generale de Construction - Belgique', A4.w / 2, A4.footerY, { align:'center' });
+    const _co = window.getCompany ? window.getCompany() : {};
+    const _footerTxt = [(_co.nom||'YAMA GROUP'), (_co.type||'Entreprise Generale de Construction'), (_co.ville||'Belgique')].filter(Boolean).join(' - ');
+    text(pdf, _footerTxt, A4.w / 2, A4.footerY, { align:'center' });
     setFont(pdf, 6.8, 'normal', [160,160,166]);
     text(pdf, String(pageNo || pdf.internal.getNumberOfPages()), A4.w - A4.m, A4.footerY, { align:'right' });
   }
   function drawTop(pdf, docType, data, meta, continuation){
     drawLogo(pdf);
+    const _c = window.getCompany ? window.getCompany() : {};
     setFont(pdf, 7.8, 'normal', MID);
-    text(pdf, 'Entreprise Generale de Construction', A4.w - A4.m, 12, { align:'right' });
+    text(pdf, _c.type || 'Entreprise Generale de Construction', A4.w - A4.m, 12, { align:'right' });
     setFont(pdf, 7.8, 'bold', GOLD);
-    text(pdf, 'info@yama-group.be', A4.w - A4.m, 17, { align:'right' });
+    text(pdf, _c.email || 'info@yama-group.be', A4.w - A4.m, 17, { align:'right' });
     setFont(pdf, 7.8, 'normal', MID);
-    text(pdf, '0489 33 77 00', A4.w - A4.m, 22, { align:'right' });
+    text(pdf, _c.telephone || '0489 33 77 00', A4.w - A4.m, 22, { align:'right' });
     pdf.setDrawColor(GOLD[0], GOLD[1], GOLD[2]);
     pdf.setLineWidth(.55);
     pdf.line(A4.m, 33, A4.w - A4.m, 33);
@@ -33535,6 +33544,398 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
 
   window.showYamaAvenantModal = showAvenantModal;
   console.info('[YAMA AVENANT] Rajouts client (avenants liés aux devis) activés.');
+})();
+</script>
+
+<script id="yama-company-settings">
+/* ── YAMA COMPANY SETTINGS ───────────────────────────────────────────────
+   Paramètres de la société stockés dans yama_company_v1.
+   Propagés automatiquement dans les 3 chemins PDF, le header,
+   les signatures et les coordonnées bancaires sur factures.
+*/
+(function(){
+  if (window.__YAMA_COMPANY_SETTINGS__) return;
+  window.__YAMA_COMPANY_SETTINGS__ = true;
+
+  const KEY = 'yama_company_v1';
+  const DEFAULTS = {
+    nom:       'YAMA Group',
+    type:      'Entreprise Générale de Construction',
+    tva:       '',
+    gerant:    '',
+    telephone: '0489 33 77 00',
+    email:     'info@yama-group.be',
+    adresse:   '',
+    cp:        '',
+    ville:     '',
+    iban:      '',
+    bic:       '',
+  };
+
+  function load(){ try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch(e){ return Object.assign({}, DEFAULTS); } }
+  function save(data){ localStorage.setItem(KEY, JSON.stringify(data)); }
+
+  window.getCompany = function(){ return load(); };
+
+  // ── Mise à jour du logo/nom dans le header ──────────────────────────────
+  function applyHeaderName(){
+    const c = load();
+    const nameEl = document.querySelector('.u-logo-name');
+    if (nameEl && c.nom) nameEl.textContent = c.nom.toUpperCase();
+    const iconEl = document.querySelector('.u-logo-icon');
+    if (iconEl && c.nom) {
+      const words = c.nom.trim().split(/\s+/);
+      iconEl.textContent = words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : c.nom.slice(0,2).toUpperCase();
+    }
+  }
+
+  // ── Styles du panneau ────────────────────────────────────────────────────
+  (function(){
+    const s = document.createElement('style');
+    s.textContent = `
+      #yama-co-overlay {
+        position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:999990;
+        display:flex;align-items:flex-start;justify-content:center;
+        padding:20px 16px;overflow-y:auto;
+      }
+      #yama-co-modal {
+        background:#0f1322;border:1px solid rgba(201,168,76,.28);border-radius:18px;
+        padding:0;max-width:580px;width:100%;margin:auto;
+        box-shadow:0 32px 80px rgba(0,0,0,.75);
+      }
+      #yama-co-modal .co-head {
+        display:flex;align-items:center;justify-content:space-between;
+        padding:20px 24px 16px;border-bottom:1px solid rgba(255,255,255,.07);
+      }
+      #yama-co-modal .co-head h2 {
+        margin:0;font-size:16px;font-weight:800;color:#C9A84C;letter-spacing:.3px;
+      }
+      #yama-co-modal .co-close {
+        background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);
+        color:rgba(200,210,230,.7);border-radius:8px;width:32px;height:32px;
+        cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;
+      }
+      #yama-co-modal .co-body { padding:20px 24px 24px; }
+      #yama-co-modal .co-section {
+        font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+        color:rgba(201,168,76,.65);margin:18px 0 10px;
+      }
+      #yama-co-modal .co-section:first-child { margin-top:0; }
+      #yama-co-modal .co-grid {
+        display:grid;grid-template-columns:1fr 1fr;gap:10px;
+      }
+      #yama-co-modal .co-grid.co-1 { grid-template-columns:1fr; }
+      #yama-co-modal .co-grid.co-3 { grid-template-columns:1fr 1fr 1fr; }
+      #yama-co-modal .co-field { display:flex;flex-direction:column;gap:5px; }
+      #yama-co-modal .co-field label {
+        font-size:11px;font-weight:600;color:rgba(200,210,230,.55);letter-spacing:.3px;
+      }
+      #yama-co-modal .co-field input {
+        background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+        border-radius:8px;color:#f0f2f8;font-size:13px;padding:9px 12px;outline:none;
+        transition:border-color .15s;width:100%;box-sizing:border-box;
+        font-family:inherit;
+      }
+      #yama-co-modal .co-field input:focus { border-color:rgba(201,168,76,.55); }
+      #yama-co-modal .co-field input::placeholder { color:rgba(200,210,230,.28); }
+      #yama-co-modal .co-hint {
+        font-size:10.5px;color:rgba(200,210,230,.38);margin-top:2px;
+      }
+      #yama-co-modal .co-footer {
+        display:flex;gap:10px;margin-top:22px;
+      }
+      #yama-co-modal .co-save {
+        flex:1;padding:12px;border:none;border-radius:10px;cursor:pointer;
+        background:linear-gradient(135deg,#C9A84C,#e8c76a);color:#111;
+        font-size:13px;font-weight:800;letter-spacing:.5px;transition:opacity .15s;
+      }
+      #yama-co-modal .co-save:hover { opacity:.88; }
+      #yama-co-modal .co-cancel {
+        padding:12px 20px;border:1px solid rgba(255,255,255,.1);border-radius:10px;
+        background:rgba(255,255,255,.04);color:rgba(200,210,230,.6);
+        font-size:13px;cursor:pointer;
+      }
+      #yama-co-modal .co-integrations {
+        display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;
+      }
+      #yama-co-modal .co-int-btn {
+        display:flex;align-items:center;gap:8px;padding:10px 12px;
+        background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);
+        border-radius:10px;color:rgba(200,210,230,.7);font-size:12px;font-weight:600;
+        cursor:pointer;transition:all .15s;text-decoration:none;
+      }
+      #yama-co-modal .co-int-btn:hover { background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18); }
+      #yama-co-modal .co-int-btn .co-int-icon { font-size:18px;line-height:1; }
+      #yama-co-modal .co-int-btn .co-int-text { display:flex;flex-direction:column;gap:1px; }
+      #yama-co-modal .co-int-btn .co-int-title { font-size:12px;font-weight:700;color:#f0f2f8; }
+      #yama-co-modal .co-int-btn .co-int-sub { font-size:10px;color:rgba(200,210,230,.45);font-weight:400; }
+      .yama-settings-label { display:inline; }
+      @media (max-width: 640px) {
+        #yama-co-modal .co-grid { grid-template-columns:1fr!important; }
+        .yama-settings-label { display:none; }
+        #yama-company-btn { padding:5px 9px; }
+      }
+    `;
+    document.head.appendChild(s);
+  })();
+
+  // ── CSS mobile global amélioré ───────────────────────────────────────────
+  (function(){
+    const s = document.createElement('style');
+    s.textContent = `
+      /* ─ Responsive header ─ */
+      @media (max-width: 640px) {
+        .u-header { gap:6px!important; padding:0 8px!important; }
+        .u-logo-name { display:none!important; }
+        .u-search-wrap { max-width:120px!important; }
+        .u-search { font-size:12px!important; }
+      }
+      @media (max-width: 480px) {
+        .u-search-wrap { display:none!important; }
+      }
+      /* ─ Modals : toujours dans le viewport ─ */
+      @media (max-width: 600px) {
+        .overlay.show > div,
+        .modal-overlay.show > div,
+        #yama-refus-modal,
+        #yama-avenant-modal,
+        #yama-co-modal {
+          max-height:88vh!important;
+          overflow-y:auto!important;
+          -webkit-overflow-scrolling:touch!important;
+        }
+        .overlay.show,
+        .modal-overlay.show,
+        #yama-refus-modal-overlay,
+        #yama-avenant-overlay,
+        #yama-co-overlay {
+          align-items:flex-start!important;
+          padding-top:12px!important;
+        }
+      }
+      /* ─ Calculateur : formulaire en 1 colonne sous 700px ─ */
+      @media (max-width: 700px) {
+        .calc-grid, .form-grid, .pdf-info-grid {
+          grid-template-columns:1fr!important;
+        }
+        .section-body { padding:14px!important; }
+        .pdf-table { font-size:11px!important; }
+        .pdf-table th, .pdf-table td { padding:4px 5px!important; }
+      }
+      /* ─ Boutons actions devis: wrap propre ─ */
+      @media (max-width: 560px) {
+        .devis-item-actions { flex-wrap:wrap!important; gap:6px!important; }
+        .devis-actions-primary { flex-wrap:wrap!important; gap:6px!important; }
+        .btn-action { flex:1!important; min-width:100px!important; font-size:11px!important; }
+        .devis-item-header { flex-wrap:wrap!important; gap:6px!important; }
+        .devis-item-amount { width:100%!important; text-align:left!important; font-size:18px!important; }
+      }
+      /* ─ Onglets platform : scroll horizontal propre ─ */
+      .tabs {
+        overflow-x:auto!important; overflow-y:hidden!important;
+        flex-wrap:nowrap!important; -webkit-overflow-scrolling:touch!important;
+        scrollbar-width:none!important; scroll-snap-type:x mandatory;
+      }
+      .tabs .tab { scroll-snap-align:start; white-space:nowrap!important; }
+      /* ─ Éviter le blanc sous le contenu sur iOS ─ */
+      @media (max-width: 768px) {
+        #app-platform, #app-crm { min-height:calc(100vh - 56px); }
+      }
+    `;
+    document.head.appendChild(s);
+  })();
+
+  // ── Ouverture du panneau ─────────────────────────────────────────────────
+  function openSettings(){
+    const old = document.getElementById('yama-co-overlay');
+    if (old) { old.remove(); return; }
+    const c = load();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'yama-co-overlay';
+    overlay.innerHTML = `
+      <div id="yama-co-modal">
+        <div class="co-head">
+          <h2>⚙️ Paramètres de la société</h2>
+          <button class="co-close" onclick="document.getElementById('yama-co-overlay').remove()">✕</button>
+        </div>
+        <div class="co-body">
+
+          <div class="co-section">Identité de la société</div>
+          <div class="co-grid">
+            <div class="co-field">
+              <label>Nom de la société *</label>
+              <input id="co-nom" value="${esc(c.nom)}" placeholder="Ex : YAMA Group">
+            </div>
+            <div class="co-field">
+              <label>Type / Activité</label>
+              <input id="co-type" value="${esc(c.type)}" placeholder="Ex : Entreprise Générale de Construction">
+            </div>
+          </div>
+          <div class="co-grid" style="margin-top:10px;">
+            <div class="co-field">
+              <label>Numéro TVA</label>
+              <input id="co-tva" value="${esc(c.tva)}" placeholder="Ex : BE0789.123.456">
+            </div>
+            <div class="co-field">
+              <label>Gérant / Prénom (optionnel)</label>
+              <input id="co-gerant" value="${esc(c.gerant)}" placeholder="Ex : Ali">
+            </div>
+          </div>
+
+          <div class="co-section">Coordonnées</div>
+          <div class="co-grid">
+            <div class="co-field">
+              <label>Téléphone</label>
+              <input id="co-tel" value="${esc(c.telephone)}" placeholder="Ex : 0489 33 77 00">
+            </div>
+            <div class="co-field">
+              <label>Email professionnel</label>
+              <input id="co-email" value="${esc(c.email)}" placeholder="Ex : info@masociete.be">
+            </div>
+          </div>
+          <div class="co-grid co-1" style="margin-top:10px;">
+            <div class="co-field">
+              <label>Adresse (rue + numéro)</label>
+              <input id="co-adresse" value="${esc(c.adresse)}" placeholder="Ex : Rue de la Construction 12">
+            </div>
+          </div>
+          <div class="co-grid co-3" style="margin-top:10px;">
+            <div class="co-field">
+              <label>Code postal</label>
+              <input id="co-cp" value="${esc(c.cp)}" placeholder="Ex : 1000">
+            </div>
+            <div class="co-field" style="grid-column:span 2;">
+              <label>Ville</label>
+              <input id="co-ville" value="${esc(c.ville)}" placeholder="Ex : Bruxelles">
+            </div>
+          </div>
+
+          <div class="co-section">Coordonnées bancaires (affichées sur les factures)</div>
+          <div class="co-grid">
+            <div class="co-field">
+              <label>IBAN</label>
+              <input id="co-iban" value="${esc(c.iban)}" placeholder="Ex : BE68 5390 0754 7034">
+            </div>
+            <div class="co-field">
+              <label>BIC / SWIFT</label>
+              <input id="co-bic" value="${esc(c.bic)}" placeholder="Ex : TRIOBEBB">
+            </div>
+          </div>
+          <div class="co-hint" style="margin-top:6px;">L'IBAN s'affichera automatiquement dans le pied de page de vos factures.</div>
+
+          <div class="co-section">Intégrations rapides</div>
+          <div class="co-integrations">
+            <a class="co-int-btn" id="co-int-gmail" href="#" onclick="event.preventDefault();openYamaGmailLink()">
+              <span class="co-int-icon">📧</span>
+              <span class="co-int-text">
+                <span class="co-int-title">Gmail</span>
+                <span class="co-int-sub">Ouvrir la boîte mail</span>
+              </span>
+            </a>
+            <a class="co-int-btn" id="co-int-banque" href="#" onclick="event.preventDefault();openYamaBankLink()">
+              <span class="co-int-icon">🏦</span>
+              <span class="co-int-text">
+                <span class="co-int-title">Banque en ligne</span>
+                <span class="co-int-sub">Accès virement</span>
+              </span>
+            </a>
+            <a class="co-int-btn" id="co-int-tel" href="#" onclick="event.preventDefault();openYamaTelLink()">
+              <span class="co-int-icon">📞</span>
+              <span class="co-int-text">
+                <span class="co-int-title">Appeler</span>
+                <span class="co-int-sub" id="co-int-tel-num">—</span>
+              </span>
+            </a>
+            <a class="co-int-btn" id="co-int-maps" href="#" onclick="event.preventDefault();openYamaMapsLink()">
+              <span class="co-int-icon">📍</span>
+              <span class="co-int-text">
+                <span class="co-int-title">Google Maps</span>
+                <span class="co-int-sub">Localisation société</span>
+              </span>
+            </a>
+          </div>
+
+          <div class="co-footer">
+            <button class="co-save" onclick="window._yamaCoSave()">✅ Enregistrer</button>
+            <button class="co-cancel" onclick="document.getElementById('yama-co-overlay').remove()">Annuler</button>
+          </div>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    // Mettre à jour le sous-titre du bouton téléphone
+    const telSub = overlay.querySelector('#co-int-tel-num');
+    if (telSub && c.telephone) telSub.textContent = c.telephone;
+  }
+
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  window._yamaCoSave = function(){
+    const get = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    const data = {
+      nom:       get('co-nom')     || DEFAULTS.nom,
+      type:      get('co-type')    || DEFAULTS.type,
+      tva:       get('co-tva'),
+      gerant:    get('co-gerant'),
+      telephone: get('co-tel')     || DEFAULTS.telephone,
+      email:     get('co-email')   || DEFAULTS.email,
+      adresse:   get('co-adresse'),
+      cp:        get('co-cp'),
+      ville:     get('co-ville'),
+      iban:      get('co-iban'),
+      bic:       get('co-bic'),
+    };
+    save(data);
+    applyHeaderName();
+    const ol = document.getElementById('yama-co-overlay');
+    if (ol) ol.remove();
+    const t = typeof showToast === 'function' ? showToast : (typeof toast === 'function' ? toast : null);
+    if (t) t('✅ Paramètres société enregistrés', 'success');
+    // Pousser vers Supabase si connecté (clé yama_settings)
+    try {
+      if (typeof window.syncFullPull === 'function') window.syncFullPull('manual-company');
+    } catch(e){}
+  };
+
+  // ── Intégrations rapides ─────────────────────────────────────────────────
+  window.openYamaGmailLink = function(){
+    const c = load();
+    const email = c.email || '';
+    if (email) window.open('https://mail.google.com/mail/?view=cm&to=&from=' + encodeURIComponent(email), '_blank');
+    else window.open('https://mail.google.com/', '_blank');
+  };
+  window.openYamaBankLink = function(){
+    const c = load();
+    if (c.iban) {
+      // Ouvrir un virement pré-rempli via lien générique
+      window.open('https://www.ing.be/fr/private/pay-receive/transfers/bank-transfer.html', '_blank');
+    } else {
+      window.open('https://www.ing.be/', '_blank');
+    }
+  };
+  window.openYamaTelLink = function(){
+    const c = load();
+    if (c.telephone) window.location.href = 'tel:' + c.telephone.replace(/\s/g,'');
+  };
+  window.openYamaMapsLink = function(){
+    const c = load();
+    const addr = [c.adresse, c.cp, c.ville].filter(Boolean).join(' ');
+    if (addr) window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr), '_blank');
+  };
+
+  window.openYamaCompanySettings = openSettings;
+
+  // ── Init au chargement ───────────────────────────────────────────────────
+  function init(){
+    applyHeaderName();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+
+  console.info('[YAMA COMPANY] Paramètres société chargés →', load().nom);
 })();
 </script>
 </body>
