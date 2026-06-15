@@ -34514,6 +34514,69 @@ _L('Restructure V1 loaded — dashboard merge · delete on devis · facture dire
 .contact-row { border-radius:9px!important; }
 .cr-badge   { border-radius:6px!important; }
 
+/* ── EN-TÊTE DE CARTE — montant + badge STABLES ─────────────────────
+   Annule tous les wraps/grid précédents. Le client info se tronque
+   plutôt que de pousser le montant hors écran. ───────────────────── */
+.devis-item-header {
+  display:flex!important;
+  flex-wrap:nowrap!important;
+  align-items:center!important;
+  gap:10px!important;
+  min-width:0!important;
+  overflow:hidden!important;
+}
+.devis-item-num {
+  flex-shrink:0!important;
+  min-width:80px!important;
+}
+/* Le bloc info (nom client + sous-titre) s'étire mais se tronque */
+.devis-item-info {
+  flex:1 1 0!important;
+  min-width:0!important;
+  overflow:hidden!important;
+}
+.devis-item-info .di-client {
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+  font-size:14px!important;
+  font-weight:600!important;
+}
+.devis-item-info .di-sub {
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+  font-size:11px!important;
+}
+/* Montant et badge : fixés à droite, ne bougent jamais */
+.devis-item-amount {
+  flex-shrink:0!important;
+  white-space:nowrap!important;
+  font-size:18px!important;
+  font-weight:800!important;
+  color:rgba(240,242,248,.92)!important;
+  text-align:right!important;
+}
+/* Badge statut : toujours collé au montant */
+.devis-item-header > .status-badge {
+  flex-shrink:0!important;
+  white-space:nowrap!important;
+  margin-left:2px!important;
+}
+
+/* Mobile < 620px : montant + badge passent sur la 2e ligne
+   mais restent ENSEMBLE à droite, le client reste en première ligne */
+@media (max-width:620px) {
+  .devis-item-header {
+    flex-wrap:wrap!important;
+    row-gap:6px!important;
+  }
+  .devis-item-num { order:1!important; }
+  .devis-item-info { order:2!important; flex-basis:calc(100% - 90px)!important; }
+  .devis-item-amount { order:3!important; flex-basis:auto!important; margin-left:auto!important; }
+  .devis-item-header > .status-badge { order:4!important; }
+}
+
 </style>
 </body>
 </html>
