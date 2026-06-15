@@ -34362,5 +34362,158 @@ _poll(function(){
 _L('Restructure V1 loaded — dashboard merge · delete on devis · facture directe · archive');
 })();
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     YAMA VISUAL V2 — Polish global + stabilisation layout Documents
+     ═══════════════════════════════════════════════════════════════════ -->
+<style id="yama-visual-v2">
+
+/* ── CARTES DEVIS ─────────────────────────────────────────────────── */
+.devis-item {
+  border-radius:10px!important;
+  background:rgba(255,255,255,.022)!important;
+  border:1px solid rgba(255,255,255,.07)!important;
+  padding:16px 20px!important;
+  box-shadow:0 1px 6px rgba(0,0,0,.28)!important;
+  transition:background .18s,border-color .18s,box-shadow .18s!important;
+}
+.devis-item:hover {
+  background:rgba(255,255,255,.034)!important;
+  border-color:rgba(201,168,76,.3)!important;
+  box-shadow:0 4px 20px rgba(0,0,0,.4)!important;
+}
+.devis-item.accepted {
+  background:rgba(82,199,127,.025)!important;
+  border-color:rgba(82,199,127,.28)!important;
+}
+.devis-item.refused {
+  background:rgba(231,76,60,.02)!important;
+  border-color:rgba(231,76,60,.18)!important;
+}
+
+/* ── BARRE D'ACTIONS — hauteur minimale pour éviter le saut de layout ── */
+.devis-item-actions {
+  min-height:40px!important;
+  flex-wrap:wrap!important;
+  gap:6px!important;
+  align-items:center!important;
+  padding-top:12px!important;
+}
+.devis-actions-primary {
+  display:flex!important;
+  flex-wrap:wrap!important;
+  gap:6px!important;
+  flex:1!important;
+  align-items:center!important;
+}
+
+/* ── BOUTONS ACTION — hauteur uniforme, pas de majuscules ─────────── */
+.btn-action {
+  border-radius:7px!important;
+  text-transform:none!important;
+  letter-spacing:.1px!important;
+  font-size:12px!important;
+  font-weight:600!important;
+  padding:0 13px!important;
+  min-height:32px!important;
+  line-height:1!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  gap:5px!important;
+  white-space:nowrap!important;
+  flex-shrink:0!important;
+}
+/* Bouton "⋯" — même hauteur que les autres boutons */
+.btn-more {
+  border-radius:7px!important;
+  min-height:32px!important;
+  width:34px!important;
+  padding:0!important;
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  font-size:17px!important;
+  line-height:1!important;
+  border:1px solid rgba(255,255,255,.1)!important;
+  background:rgba(255,255,255,.04)!important;
+  color:rgba(200,210,230,.6)!important;
+  flex-shrink:0!important;
+}
+.btn-more:hover {
+  border-color:rgba(201,168,76,.4)!important;
+  color:#C9A84C!important;
+  background:rgba(201,168,76,.07)!important;
+}
+.devis-more-popup { border-radius:10px!important; }
+.devis-more-item  { border-radius:6px!important; font-size:12px!important; }
+
+/* ── BADGES STATUT — police plus lisible ─────────────────────────── */
+.status-badge {
+  font-size:10.5px!important;
+  letter-spacing:.5px!important;
+  padding:4px 11px!important;
+  border-radius:20px!important;
+  white-space:nowrap!important;
+}
+
+/* ── BARRE DE NAVIGATION TABS ────────────────────────────────────── */
+#app-platform .tabs {
+  background:rgba(6,9,20,.97)!important;
+  border-bottom:1px solid rgba(255,255,255,.06)!important;
+  padding:0 20px!important;
+  gap:0!important;
+}
+#app-platform .tab {
+  font-size:11.5px!important;
+  letter-spacing:.8px!important;
+  padding:13px 16px!important;
+  border-radius:0!important;
+}
+#app-platform .tab-count {
+  background:rgba(201,168,76,.14)!important;
+  color:#C9A84C!important;
+  border-radius:7px!important;
+  padding:1px 6px!important;
+  font-size:10px!important;
+  font-weight:800!important;
+}
+
+/* ── SECTIONS CALCULATEUR ────────────────────────────────────────── */
+.section        { border-radius:10px!important; overflow:hidden!important; }
+.section-header { border-radius:0!important; }
+.result-card, .actions-card { border-radius:10px!important; }
+
+/* ── CHAMPS FORMULAIRE ───────────────────────────────────────────── */
+.field input,.field select,.field textarea { border-radius:7px!important; }
+
+/* ── MONTANT DEVIS ───────────────────────────────────────────────── */
+.devis-item-amount {
+  font-size:18px!important;
+  font-weight:800!important;
+  color:rgba(240,242,248,.92)!important;
+}
+.devis-item-num {
+  font-size:13.5px!important;
+  letter-spacing:.2px!important;
+}
+
+/* ── COCKPIT KPI CARDS ───────────────────────────────────────────── */
+.v37-kpi { border-radius:10px!important; }
+
+/* ── BOUTONS PRIMAIRES ───────────────────────────────────────────── */
+.btn-primary {
+  border-radius:8px!important;
+  letter-spacing:.3px!important;
+  text-transform:none!important;
+  font-size:13px!important;
+  font-weight:700!important;
+}
+
+/* ── CARTES CHANTIER & CRM ───────────────────────────────────────── */
+.v37-ch-row { border-radius:9px!important; }
+.contact-row { border-radius:9px!important; }
+.cr-badge   { border-radius:6px!important; }
+
+</style>
 </body>
 </html>
