@@ -15304,7 +15304,7 @@ order by table_name;</textarea>
 
     const platformMap = {
       calculator:'📊 Calculateur',
-      devis:'📋 Devis',
+      devis:'📄 Documents',
       articles:'📦 Catalogue articles',
       priorites:'🚨 Tableau de bord',
       history:'📁 Historique',
@@ -18818,7 +18818,7 @@ order by table_name;</textarea>
       const tab = q(`.tab[data-tab="${name}"]`, bar);
       if (tab) bar.appendChild(tab);
     });
-    const labels = {priorites:'🚨 Tableau de bord', calculator:'📊 Calculateur', devis:'📋 Devis', chantiers:'🔨 Suivi chantiers', history:'📁 Historique', soustraitants:'🔧 Sous-traitants', articles:'📦 Catalogue articles', analyse:'📈 Analyse'};
+    const labels = {priorites:'🚨 Tableau de bord', calculator:'📊 Calculateur', devis:'📄 Documents', chantiers:'🔨 Suivi chantiers', history:'📁 Historique', soustraitants:'🔧 Sous-traitants', articles:'📦 Catalogue articles', analyse:'📈 Analyse'};
     Object.entries(labels).forEach(([name,label]) => {
       const tab = q(`#app-platform .tab[data-tab="${name}"]`); if (!tab) return;
       const count = tab.querySelector('.tab-count');
@@ -19060,7 +19060,7 @@ order by table_name;</textarea>
     cockpit:'💰 Cockpit',
     priorites:'🚨 Tableau de bord',
     calculator:'📊 Calculateur',
-    devis:'📋 Devis',
+    devis:'📄 Documents',
     chantiers:'🔨 Suivi chantiers',
     history:'📁 Historique',
     soustraitants:'🔧 Sous-traitants',
