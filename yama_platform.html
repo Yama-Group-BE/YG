@@ -3260,7 +3260,7 @@ if (token && window.opener) {
 
 <div class="tabs">
   <div class="tab" data-tab="calculator">📊 Calculateur</div>
-  <div class="tab" data-tab="devis">📋 Devis <span class="tab-count" id="devisCount">0</span></div>
+  <div class="tab" data-tab="devis">📄 Documents <span class="tab-count" id="devisCount">0</span></div>
   <div class="tab" data-tab="chantiers">🔨 Suivi chantier <span class="tab-count" id="chantiersCount">0</span></div>
   <div class="tab" data-tab="history">📁 Historique <span class="tab-count" id="historyCount">0</span></div>
   <div class="tab" data-tab="articles">📦 Catalogue articles <span class="tab-count" id="articlesCount">0</span></div>
@@ -3582,7 +3582,7 @@ if (token && window.opener) {
   <div class="container" style="max-width:1000px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
       <div style="font-size:12px;color:var(--gray);">
-        Suivi de tes devis envoyés aux clients. Seules les <strong style="color:#52c77f;">factures générées</strong> alimentent l'Analyse et le suivi Sous-traitants.
+        Tous tes documents au même endroit : <strong style="color:var(--accent);">devis</strong>, <strong style="color:#52c77f;">factures</strong> et <strong style="color:var(--accent);">avenants</strong>. Utilise les onglets ci-dessous pour filtrer.
       </div>
     </div>
     <div id="devisList"></div>
@@ -8761,27 +8761,92 @@ async function generateFactureFromDevis() {
 window._devisFilter = window._devisFilter || 'all';
 function setDevisFilter(f){ window._devisFilter = f; renderDevisTab(); }
 
+// Onglet Documents : type de document affiché (devis | factures | avenants)
+window._docType = window._docType || 'devis';
+function setDocType(t){ window._docType = t; window._devisFilter = 'all'; renderDevisTab(); }
+
 function renderDevisTab() {
   const hist = getHistory();
   const statuses = getDevisStatuses();
-  const allDevis = hist.filter(h => h.docType !== 'facture').sort((a, b) => {
-    const n = d => { const m = String(d.docNum || '').match(/(\d+)$/); return m ? parseInt(m[1]) : 0; };
-    return n(b) - n(a);
-  });
+  const sortNum = (a, b) => { const n = d => { const m = String(d.docNum || '').match(/(\d+)$/); return m ? parseInt(m[1]) : 0; }; return n(b) - n(a); };
 
-  document.getElementById('devisCount').textContent = allDevis.length;
+  const docType = window._docType || 'devis';
+  const devisAll    = hist.filter(h => h.docType !== 'facture' && !h.isAvenant);
+  const avenantsAll = hist.filter(h => h.docType !== 'facture' && h.isAvenant);
+  const facturesAll = hist.filter(h => h.docType === 'facture');
 
   const listEl = document.getElementById('devisList');
   if (!listEl) return;
 
+  const cntEl = document.getElementById('devisCount');
+  if (cntEl) cntEl.textContent = hist.length;
+
+  // ── Sélecteur de type de document (Devis / Factures / Avenants) ──────────
+  const typeBtn = (key, label, n) => {
+    const active = docType === key;
+    return `<button onclick="setDocType('${key}')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid;transition:all .15s;${active ? 'background:rgba(232,160,32,.16);border-color:rgba(232,160,32,.5);color:var(--accent);' : 'background:transparent;border-color:var(--border2);color:var(--text2);'}">${label} <span style="background:rgba(255,255,255,.1);border-radius:10px;padding:1px 8px;font-size:11px;">${n}</span></button>`;
+  };
+  const typeBar = `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;border-bottom:1px solid var(--border);padding-bottom:16px;">
+      ${typeBtn('devis', '📋 Devis', devisAll.length)}
+      ${typeBtn('factures', '🧾 Factures', facturesAll.length)}
+      ${typeBtn('avenants', '➕ Avenants', avenantsAll.length)}
+    </div>`;
+
+  // ── BRANCHE FACTURES ─────────────────────────────────────────────────────
+  if (docType === 'factures') {
+    let pmts = {}; try { pmts = JSON.parse(localStorage.getItem('yama_paiements_v1') || '{}'); } catch(e){}
+    const isPaid = h => (pmts[h.docNum] || {}).statutPaiement === 'paye';
+    // Impayées d'abord, payées (archivées) en bas
+    const facts = facturesAll.slice().sort((a, b) => {
+      const pa = isPaid(a) ? 1 : 0, pb = isPaid(b) ? 1 : 0;
+      return pa !== pb ? pa - pb : sortNum(a, b);
+    });
+    if (facts.length === 0) {
+      listEl.innerHTML = typeBar + `<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px;">Aucune facture pour l'instant.<br><span style="font-size:12px;">Transforme un devis accepté en facture, ou crée une facture directe.</span></div>`;
+      return;
+    }
+    listEl.innerHTML = typeBar + facts.map(h => {
+      const p = pmts[h.docNum] || {};
+      const paid = p.statutPaiement === 'paye';
+      const partial = p.statutPaiement === 'partiel';
+      const badge = paid ? { label:'✅ Payée', cls:'accepted' } : partial ? { label:'🟡 Partiel', cls:'pending' } : { label:'💶 Impayée', cls:'refused' };
+      const ttc = parseFloat(h.totalTTC) || 0;
+      const safeNom = String(h.clientNom || 'Client').replace(/['"\\]/g, ' ');
+      const payBtn = paid ? '' : `<button class="btn-action travaux" onclick="event.stopPropagation();v37OpenPaiementModal('${h.docNum}','${escapeHtml(safeNom)}',${ttc})" title="Enregistrer un paiement">💳 Paiement</button>`;
+      return `
+      <div class="devis-item" style="${paid ? 'opacity:.6;' : ''}">
+        <div class="devis-item-header">
+          <div class="devis-item-num">${escapeHtml(h.docNum || '—')}</div>
+          <div class="devis-item-info">
+            <div class="di-client">${escapeHtml(h.clientNom || 'Client')}</div>
+            <div class="di-sub">${h.isDirectFacture ? '<span style="color:var(--accent);font-weight:600;">⚡ Facture directe</span> · ' : ''}${escapeHtml(h.chantierRef || h.chantierVille || '')} · ${fmtDate(h.dateEmission) || new Date(h.savedAt).toLocaleDateString('fr-BE')}</div>
+          </div>
+          <div class="devis-item-amount">${fmt(ttc)}</div>
+          <div class="status-badge ${badge.cls}">${badge.label}</div>
+        </div>
+        <div class="devis-item-actions">
+          <div class="devis-actions-primary">
+            <button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')">📂 Voir / Modifier</button>
+            ${payBtn}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    return;
+  }
+
+  // ── BRANCHE DEVIS / AVENANTS ─────────────────────────────────────────────
+  const allDevis = (docType === 'avenants' ? avenantsAll : devisAll).slice().sort(sortNum);
+
   if (allDevis.length === 0) {
-    listEl.innerHTML = `
+    listEl.innerHTML = typeBar + `
       <div class="history-empty">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v12a2 2 0 01-2 2z"/>
         </svg>
-        <p>Aucun devis envoyé pour l'instant.</p>
-        <p style="font-size:12px;margin-top:8px;">Génère un devis dans l'onglet Calculateur pour le voir apparaître ici.</p>
+        <p>${docType === 'avenants' ? 'Aucun avenant pour l\'instant.' : 'Aucun devis envoyé pour l\'instant.'}</p>
+        <p style="font-size:12px;margin-top:8px;">${docType === 'avenants' ? 'Les rajouts créés depuis un devis accepté apparaîtront ici.' : 'Génère un devis dans l\'onglet Calculateur pour le voir apparaître ici.'}</p>
       </div>`;
     return;
   }
@@ -8817,7 +8882,7 @@ function renderDevisTab() {
 
   const filterBtnStyle = (key) => `display:inline-flex;align-items:center;gap:5px;padding:6px 13px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid;transition:all .15s;${f===key ? 'background:rgba(232,160,32,.18);border-color:rgba(232,160,32,.5);color:var(--accent);' : 'background:transparent;border-color:var(--border2);color:var(--text2);'}`;
 
-  const filtersHtml = `
+  const filtersHtml = typeBar + `
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
       <button style="${filterBtnStyle('all')}" onclick="setDevisFilter('all')">Tous <span style="background:rgba(255,255,255,.1);border-radius:10px;padding:1px 7px;font-size:11px;">${counts.all}</span></button>
       <button style="${filterBtnStyle('pending')}" onclick="setDevisFilter('pending')">⏳ En attente <span style="background:rgba(255,255,255,.1);border-radius:10px;padding:1px 7px;font-size:11px;">${counts.pending}</span></button>
@@ -34067,7 +34132,7 @@ _poll(function(){
 
 /* ── 5. DELETE BUTTON ON DEVIS CARDS ────────────────────────────────────── */
 function _delDevis(num){
-  if(!confirm('Supprimer le devis ' + num + ' ?\nCette action est irréversible.')) return;
+  if(!confirm('Supprimer le document ' + num + ' ?\nCette action est irréversible.')) return;
   try{
     var hist = JSON.parse(localStorage.getItem('yama_history_v3')||'[]');
     var idx  = hist.findIndex(function(h){ return h && h.docNum === num; });
@@ -34224,6 +34289,7 @@ window._fdSave = function(){
   localStorage.setItem('yama_history_v3', JSON.stringify(hist));
   try{ if(typeof window.syncPushHistory==='function') window.syncPushHistory(entry); }catch(e){}
   document.getElementById('yama-fd-modal').style.display = 'none';
+  window._docType = 'factures'; // basculer la vue Documents sur les factures
   if(typeof window.renderHistory==='function') window.renderHistory();
   if(typeof window.renderDevisTab==='function') window.renderDevisTab();
   if(typeof window.renderAnalyse==='function') window.renderAnalyse();
