@@ -3259,7 +3259,6 @@ if (token && window.opener) {
 
 
 <div class="tabs">
-  <div class="tab active" data-tab="priorites">🚨 Tableau de bord</div>
   <div class="tab" data-tab="calculator">📊 Calculateur</div>
   <div class="tab" data-tab="devis">📋 Devis <span class="tab-count" id="devisCount">0</span></div>
   <div class="tab" data-tab="chantiers">🔨 Suivi chantier <span class="tab-count" id="chantiersCount">0</span></div>
@@ -3269,13 +3268,9 @@ if (token && window.opener) {
   <div class="tab" data-tab="analyse">📈 Analyse</div>
 </div>
 
-<!-- TAB : TABLEAU DE BORD -->
-<div class="tab-content active" id="tab-priorites">
+<!-- TABLEAU DE BORD : fusionné dans le Cockpit. Conteneur masqué qui alimente le Cockpit en données. -->
+<div class="tab-content active" id="tab-priorites" aria-hidden="true">
   <div class="container" style="max-width:1200px;">
-    <div class="yama-v12-title">
-      <div><h2>Tableau de bord</h2><p>Ce tableau te montre ce qui demande une action immédiate : devis à suivre, factures ouvertes, dossiers en retard, relances et chiffre potentiel.</p></div>
-      <div class="yama-v12-btnbar"><button class="yama-v12-mini-btn" onclick="toggleYamaCompactUI()">↕ Interface compacte</button><button class="yama-v12-mini-btn" onclick="renderPriorityDashboard()">↻ Actualiser</button></div>
-    </div>
     <div class="yama-v12-grid" id="v12PriorityKpis"></div>
     <div class="yama-v12-two">
       <div class="yama-v12-card"><div class="yama-v12-kpi-label">Actions prioritaires</div><div class="yama-v12-list" id="v12PriorityActions"></div></div>
@@ -33972,11 +33967,6 @@ var _L = function(m){ console.info('[YAMA-R]', m); };
     +'.y-arch-tog:hover{color:rgba(82,199,127,.85);}'
     +'.devis-item.y-arch.y-arch-open{opacity:1;}'
     +'.devis-item.y-arch.y-arch-open .devis-item-actions{display:flex!important;}'
-    /* Financial board in priorites tab */
-    +'#yama-board-financial{margin-top:28px;}'
-    +'#yama-board-financial .v37-cockpit{padding:0;}'
-    +'#yama-board-financial-hdr{font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:rgba(140,155,200,.5);margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:10px;}'
-    +'#yama-board-financial-hdr::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.05);}'
     /* Facture directe modal inputs */
     +'.fd-inp{width:100%;padding:9px 12px;background:#0d1421;border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e4e9f7;font-size:13px;box-sizing:border-box;outline:none;}'
     +'.fd-inp:focus{border-color:rgba(201,168,76,.5);}'
@@ -33995,71 +33985,70 @@ function _poll(fn, iv, maxMs){
   setTimeout(function(){ clearInterval(h); }, maxMs);
 }
 
-/* ── 1. SUPPRESS v37 DUPLICATE BUTTONS ─────────────────────────────────── */
+/* ── 1. SUPPRESS DUPLICATE SETTINGS BUTTON ──────────────────────────────
+   Le bouton ⚙️ Paramètres unifié (header) remplace le doublon v37.
+   On garde l'onglet Cockpit : c'est le tableau de bord unique. ─────────── */
 function _suppressV37(){
   var btn = document.getElementById('v37-settings-btn');
-  if(btn){ btn.remove(); _L('v37-settings-btn suppressed'); }
-  var nav = document.querySelector('#app-platform .tabs .tab[data-tab="cockpit"]');
-  if(nav){ nav.remove(); _L('cockpit nav tab suppressed'); }
+  if(btn){ btn.remove(); }
 }
+_poll(function(){ _suppressV37(); return false; }, 220, 12000);
+
+/* ── 2. INDICATEURS COMMERCIAUX DANS LE COCKPIT ─────────────────────────
+   Le Cockpit est le tableau de bord unique. On y ajoute, sous les KPI
+   financiers, une ligne d'indicateurs commerciaux (devis en attente,
+   à facturer, chantiers actifs), calculée depuis le stockage local pour
+   être toujours à jour. ────────────────────────────────────────────────── */
+function _eur0(n){ return (Number(n)||0).toLocaleString('fr-BE',{minimumFractionDigits:0,maximumFractionDigits:0})+' €'; }
+
+function _businessKpis(){
+  var hist=[], st={}, ch=[];
+  try{ hist=JSON.parse(localStorage.getItem('yama_history_v3')||'[]'); }catch(e){}
+  try{ st=JSON.parse(localStorage.getItem('yama_devis_status_v1')||'{}'); }catch(e){}
+  try{ ch=JSON.parse(localStorage.getItem('yama_chantiers_v12')||'[]'); }catch(e){}
+  var devis=hist.filter(function(h){ return h && h.docType!=='facture'; });
+  var statusOf=function(h){ return (st[h.docNum]&&st[h.docNum].status)||'pending'; };
+  var pending=devis.filter(function(h){ return statusOf(h)==='pending'; });
+  var potential=pending.reduce(function(s,h){ return s+(parseFloat(h.totalTTC)||0); },0);
+  var accepted=devis.filter(function(h){ var s=statusOf(h); return s==='accepted'||s==='done'; });
+  var chantiers=(Array.isArray(ch)?ch:[]).filter(function(c){ return c && c.status!=='closed'; }).length;
+  return { pending:pending.length, potential:potential, accepted:accepted.length, chantiers:chantiers };
+}
+
+function _injectBusinessKpis(){
+  var cockpit=document.getElementById('tab-cockpit');
+  if(!cockpit) return;
+  var inner=cockpit.querySelector('.v37-cockpit');
+  if(!inner || inner.querySelector('[data-ybiz]')) return;
+  var grid=inner.querySelector('.v37-kpi-grid');
+  if(!grid) return;
+  var k=_businessKpis();
+  var wrap=document.createElement('div');
+  wrap.setAttribute('data-ybiz','1');
+  wrap.className='v37-kpi-grid';
+  wrap.style.marginTop='12px';
+  wrap.innerHTML=
+    '<div class="v37-kpi gold"><div class="v37-kpi-label">DEVIS EN ATTENTE</div><div class="v37-kpi-val">'+k.pending+'</div><div class="v37-kpi-sub">Potentiel : '+_eur0(k.potential)+'</div></div>'
+   +'<div class="v37-kpi blue"><div class="v37-kpi-label">À FACTURER</div><div class="v37-kpi-val">'+k.accepted+'</div><div class="v37-kpi-sub">devis accepté(s)</div></div>'
+   +'<div class="v37-kpi blue"><div class="v37-kpi-label">CHANTIERS ACTIFS</div><div class="v37-kpi-val">'+k.chantiers+'</div><div class="v37-kpi-sub">en cours</div></div>';
+  grid.insertAdjacentElement('afterend', wrap);
+}
+
+/* Hook renderCockpit pour ré-injecter à chaque rendu (innerHTML reconstruit) */
 _poll(function(){
-  if(document.getElementById('v37-settings-btn') || document.querySelector('[data-tab="cockpit"]')){
-    _suppressV37(); return true;
-  }
-  return false;
-}, 180, 9000);
-
-/* ── 2. FINANCIAL BOARD — cockpit data inside tab-priorites ────────────── */
-function _ensureBoard(){
-  if(document.getElementById('yama-board-financial')) return;
-  var c = document.querySelector('#tab-priorites .container');
-  if(!c) return;
-  var div = document.createElement('div');
-  div.id = 'yama-board-financial';
-  div.innerHTML = '<div id="yama-board-financial-hdr">💰 Vue financière</div><div id="yama-board-financial-body"></div>';
-  c.appendChild(div);
-}
-
-function _syncFinancialBoard(){
-  try{
-    _ensureBoard();
-    var body = document.getElementById('yama-board-financial-body');
-    if(!body) return;
-    var tc = document.getElementById('tab-cockpit');
-    if(!tc){
-      tc = document.createElement('div');
-      tc.id = 'tab-cockpit';
-      tc.className = 'tab-content';
-      tc.style.display = 'none';
-      document.body.appendChild(tc);
-    }
-    if(typeof window.renderCockpit === 'function'){
-      window.renderCockpit();
-      body.innerHTML = tc.innerHTML;
-    }
-  }catch(e){ console.warn('[YAMA-R] syncFinancialBoard:', e); }
-}
-
-/* ── 3. PATCH switchTab → redirect cockpit + refresh financial board ─────── */
-function _patchSwitchTab(){
-  if(typeof window.switchTab !== 'function') return false;
-  if(window.switchTab._yamaR) return true;
-  var _st = window.switchTab;
-  window.switchTab = function(name){
-    var n = (name === 'cockpit') ? 'priorites' : name;
-    _st.call(this, n);
-    if(n === 'priorites') setTimeout(_syncFinancialBoard, 340);
+  if(typeof window.renderCockpit!=='function') return false;
+  if(window.renderCockpit._yamaBiz) return true;
+  var _orig=window.renderCockpit;
+  window.renderCockpit=function(){
+    _orig.apply(this, arguments);
+    setTimeout(_injectBusinessKpis, 140);
   };
-  window.switchTab._yamaR = true;
-  window.switchTab._v37patched = true;
-  _L('switchTab patched (cockpit→priorites + financial board)');
+  window.renderCockpit._yamaBiz=true;
+  _L('renderCockpit hooked (indicateurs commerciaux)');
   return true;
-}
-_poll(_patchSwitchTab, 200, 9000);
+}, 200, 12000);
 
-setTimeout(_syncFinancialBoard, 1600);
-
-/* ── 4. PATCH v37SavePaiement → instant full refresh ────────────────────── */
+/* ── 3. PATCH v37SavePaiement → instant full refresh ────────────────────── */
 _poll(function(){
   if(typeof window.v37SavePaiement !== 'function') return false;
   if(window.v37SavePaiement._yamaR) return true;
@@ -34068,9 +34057,8 @@ _poll(function(){
     _orig.apply(this, arguments);
     setTimeout(function(){
       try{ if(typeof window.renderDevisTab==='function') window.renderDevisTab(); }catch(e){}
-      try{ if(typeof window.renderPriorityDashboard==='function') window.renderPriorityDashboard(); }catch(e){}
-      setTimeout(_syncFinancialBoard, 320);
-    }, 80);
+      try{ if(typeof window.renderCockpit==='function') window.renderCockpit(); }catch(e){}
+    }, 60);
   };
   window.v37SavePaiement._yamaR = true;
   _L('v37SavePaiement patched (instant refresh)');
