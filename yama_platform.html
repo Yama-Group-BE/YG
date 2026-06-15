@@ -8813,9 +8813,9 @@ function renderDevisTab() {
       const badge = paid ? { label:'✅ Payée', cls:'accepted' } : partial ? { label:'🟡 Partiel', cls:'pending' } : { label:'💶 Impayée', cls:'refused' };
       const ttc = parseFloat(h.totalTTC) || 0;
       const safeNom = String(h.clientNom || 'Client').replace(/['"\\]/g, ' ');
-      const payBtn = paid ? '' : `<button class="btn-action travaux" onclick="event.stopPropagation();v37OpenPaiementModal('${h.docNum}','${escapeHtml(safeNom)}',${ttc})" title="Enregistrer un paiement">💳 Paiement</button>`;
+      const payBtn = paid ? '' : `<button class="btn-action yama-pmt-btn" onclick="event.stopPropagation();v37OpenPaiementModal('${h.docNum}','${escapeHtml(safeNom)}',${ttc})" title="Enregistrer un paiement">💳 Paiement</button>`;
       return `
-      <div class="devis-item" style="${paid ? 'opacity:.6;' : ''}">
+      <div class="devis-item yama-facture-item" data-doctype="facture" style="${paid ? 'opacity:.6;' : ''}">
         <div class="devis-item-header">
           <div class="devis-item-num">${escapeHtml(h.docNum || '—')}</div>
           <div class="devis-item-info">
@@ -32714,36 +32714,8 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     [400,1200,3000].forEach(function(ms){ setTimeout(wrapCockpit,ms); });
   })();
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // 6. MODE EXÉCUTIF — couleurs atténuées, bouton flottant
-  // ══════════════════════════════════════════════════════════════════════════
-  (function setupExecMode(){
-    var sty=document.createElement('style');
-    sty.textContent=
-      'body.yama-exec-mode #app-platform .tabs .tab.active,'+
-      'body.yama-exec-mode #app-platform .tabs .tab.yama-v23-active{'+
-        'color:#8899BB!important;border-bottom-color:#8899BB!important;background:rgba(136,153,187,.09)!important;}'+
-      'body.yama-exec-mode .v37-kpi{filter:saturate(.25)!important;}'+
-      'body.yama-exec-mode .crm-follow-pill{filter:saturate(.2)!important;}'+
-      'body.yama-exec-mode .cr-badge{filter:saturate(.2)!important;}'+
-      'body.yama-exec-mode .btn-primary{filter:saturate(.3)!important;}'+
-      'body.yama-exec-mode .yama-v12-mini-btn.green{filter:saturate(.25)!important;}';
-    document.head.appendChild(sty);
-    var btn=document.createElement('button');
-    btn.id='yama-exec-toggle';
-    btn.title='Mode exécutif — couleurs atténuées';
-    btn.style.cssText='position:fixed;bottom:124px;right:18px;z-index:9999;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.1);background:rgba(18,22,36,.92);color:rgba(180,190,220,.65);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .2s;box-shadow:0 2px 8px rgba(0,0,0,.4);';
-    btn.textContent='👔';
-    btn.addEventListener('click',function(){
-      var on=document.body.classList.toggle('yama-exec-mode');
-      btn.style.borderColor=on?'rgba(136,153,187,.5)':'rgba(255,255,255,.1)';
-      btn.style.background=on?'rgba(136,153,187,.18)':'rgba(18,22,36,.92)';
-      if (typeof showToast==='function') showToast(on?'👔 Mode exécutif activé':'🎨 Mode normal','info');
-    });
-    document.body.appendChild(btn);
-    F.execMode=true;
-    console.log('[YAMA SV1] ✅ Mode exécutif prêt');
-  })();
+  // MODE EXÉCUTIF — supprimé (bouton retiré sur demande utilisateur)
+  F.execMode = false;
 
   // ══════════════════════════════════════════════════════════════════════════
   // 7. MARGE-TEMPS RÉELLE — champ heures dans la fiche chantier
@@ -32892,7 +32864,7 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
       {name:'3. Auto-message chantier',       ok:typeof window.v42ShowChantierModal==='function',             desc:'V42 en charge — modal client + ST avec WhatsApp'},
       {name:'4. Auto-message satisfaction',   ok:!!(window.saveCrmReportAndFinish&&window.saveCrmReportAndFinish.__yamaSatWrapped), desc:'saveCrmReportAndFinish patché — modal satisfaction'},
       {name:'5. Bannière cockpit',            ok:!!(window.renderCockpit&&window.renderCockpit.__yamaBanner), desc:'renderCockpit patché — bannière priorités en haut'},
-      {name:'6. Mode exécutif',               ok:F.execMode&&!!document.getElementById('yama-exec-toggle'),  desc:'Bouton 👔 — bottom:124px (au-dessus du bouton banque)'},
+      {name:'6. Mode exécutif',               ok:true,  desc:'Supprimé sur demande — bouton retiré'},
       {name:'7. Marge-temps réelle',          ok:F.margeTempsPatch&&typeof window.yamaGetHeures==='function', desc:'yamaGetHeures/yamaSetHeures disponibles'},
       {name:'8. Export comptable CSV',        ok:F.csvExport&&typeof window.exportComptableCSV==='function',  desc:'exportComptableCSV() disponible'}
     ];
@@ -34024,6 +33996,11 @@ var _L = function(m){ console.info('[YAMA-R]', m); };
     /* Delete btn — fade in on card hover */
     '.yama-del-dv{opacity:0;transition:opacity .18s,background .15s,color .15s;}'
     +'.devis-item:hover .yama-del-dv{opacity:1;}'
+    /* Facture items: suppress transform/invoice buttons injected by older layers */
+    +'.yama-facture-item .v12-smart-invoice-btn,.yama-facture-item .btn-action.travaux{display:none!important;}'
+    /* Payment button for factures (same green style as travaux) */
+    +'.btn-action.yama-pmt-btn{background:linear-gradient(135deg,rgba(82,199,127,.15),rgba(52,152,219,.15));border-color:rgba(82,199,127,.5);color:#6DEAA7;}'
+    +'.btn-action.yama-pmt-btn:hover{background:rgba(82,199,127,.28);}'
     /* Compact archived (invoiced) devis cards */
     +'.devis-item.y-arch{opacity:.55;background:rgba(82,199,127,.025)!important;border-color:rgba(82,199,127,.1)!important;transition:opacity .2s,border-color .2s;}'
     +'.devis-item.y-arch:hover{opacity:.8;}'
