@@ -2692,7 +2692,7 @@ select:focus { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www
     <button id="yama-company-btn" onclick="window.openYamaCompanySettings&&window.openYamaCompanySettings()" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(200,210,230,.75);border-radius:8px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;letter-spacing:.3px;" title="Paramètres de la société">⚙️ <span class="yama-settings-label">Paramètres</span></button>
 
     <!-- Platform numbering (platform only) -->
-    <div id="numDisplay" onclick="editNums()" style="display:none;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:#C9A84C;letter-spacing:1px;background:rgba(201,168,76,.08);padding:4px 10px;border:1px solid rgba(201,168,76,.25);border-radius:2px;cursor:pointer;">YG-26-101</div>
+    <div id="numDisplay" onclick="editNums()" style="display:none;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:#C9A84C;letter-spacing:1px;background:rgba(201,168,76,.08);padding:4px 10px;border:1px solid rgba(201,168,76,.25);border-radius:2px;cursor:pointer;">D-26-101</div>
   </div>
 </div>
 
@@ -3610,7 +3610,7 @@ if (token && window.opener) {
           <div><label style="font-size:11px;color:var(--text2);">Prénom ST</label><input id="pst-prenom" type="text" placeholder="ex: Karim" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
           <div><label style="font-size:11px;color:var(--text2);">Nom client</label><input id="pst-client" type="text" placeholder="ex: M. Dupont" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
           <div><label style="font-size:11px;color:var(--text2);">Adresse chantier</label><input id="pst-adresse" type="text" placeholder="ex: Rue du Progrès 44" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
-          <div><label style="font-size:11px;color:var(--text2);">Réf. devis</label><input id="pst-ref" type="text" placeholder="ex: YG-26-101" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+          <div><label style="font-size:11px;color:var(--text2);">Réf. devis</label><input id="pst-ref" type="text" placeholder="ex: D-26-101" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
         </div>
         <div style="position:relative;">
           <div id="pst-msg" contenteditable="true" spellcheck="false" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:14px;font-size:13px;line-height:1.65;color:var(--text);white-space:pre-wrap;min-height:70px;outline:none;font-family:'DM Sans',sans-serif;"></div>
@@ -3627,7 +3627,7 @@ if (token && window.opener) {
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px;">
           <div><label style="font-size:11px;color:var(--text2);">Civilité + Nom client</label><input id="rdev-nom" type="text" placeholder="ex: M. Dupont" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
-          <div><label style="font-size:11px;color:var(--text2);">Réf. devis</label><input id="rdev-ref" type="text" placeholder="ex: YG-26-101" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
+          <div><label style="font-size:11px;color:var(--text2);">Réf. devis</label><input id="rdev-ref" type="text" placeholder="ex: D-26-101" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
           <div><label style="font-size:11px;color:var(--text2);">Montant (€)</label><input id="rdev-montant" type="text" placeholder="ex: 4 850,00" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
           <div><label style="font-size:11px;color:var(--text2);">Validité jusqu'au</label><input id="rdev-validite" type="text" placeholder="ex: 15/06/2026" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
           <div><label style="font-size:11px;color:var(--text2);">Tél. client (opt.)</label><input id="rdev-tel" type="tel" placeholder="ex: 0472 12 34 56" style="width:100%;margin-top:4px;background:var(--input-bg);border:1px solid var(--input-bd);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;"></div>
@@ -7231,11 +7231,11 @@ const fmtDate = d => {
 function getAppYear() { return String(new Date().getFullYear()).slice(2); }
 function getDevisNum() {
   const n = parseInt(localStorage.getItem(LS.devisCounter) || '101');
-  return 'YG-' + getAppYear() + '-' + n;
+  return 'D-' + getAppYear() + '-' + n;
 }
 function getFactureNum() {
   const n = parseInt(localStorage.getItem(LS.factureCounter) || '101');
-  return 'FYG-' + getAppYear() + '-' + n;
+  return 'F-' + getAppYear() + '-' + n;
 }
 function incrementDevisNum() {
   const n = parseInt(localStorage.getItem(LS.devisCounter) || '101');
@@ -7258,7 +7258,7 @@ function openYearClose() {
   const nextYear = currentYear + 1;
   const nextY2 = String(nextYear).slice(2);
   const histCount = getHistory().length;
-  if (!confirm("Cloture annee " + currentYear + " ?\n" + histCount + " documents archives.\nNumerotation YG-" + nextY2 + "-101 / FYG-" + nextY2 + "-101.\nConfirmer ?")) return;
+  if (!confirm("Cloture annee " + currentYear + " ?\n" + histCount + " documents archives.\nNumerotation D-" + nextY2 + "-101 / F-" + nextY2 + "-101.\nConfirmer ?")) return;
   const hist = getHistory();
   const archiveKey = 'yama_history_archive_' + currentYear;
   const prev = JSON.parse(localStorage.getItem(archiveKey) || '[]');
@@ -7285,8 +7285,8 @@ function editNums() {
       hist.forEach(h => {
         const id = String(h.docNum || '');
         let m = type === 'facture'
-          ? id.match(/^FYG-(\d{2})-(\d+)$/i)
-          : id.match(/^YG-(\d{2})-(\d+)$/i);
+          ? id.match(/^(?:FYG|F)-(\d{2})-(\d+)$/i)
+          : id.match(/^(?:YG|D)-(\d{2})-(\d+)$/i);
         if (m && m[1] === yy) used.add(Number(m[2]));
       });
       const floor = parseInt(localStorage.getItem('yama_num_floor_' + type) || '0') || 0;
@@ -7320,12 +7320,12 @@ function editNums() {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
           <div style="background:rgba(91,156,246,.08);border:1px solid rgba(91,156,246,.25);border-radius:10px;padding:14px;text-align:center;">
             <div style="font-size:11px;color:#5b9cf6;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">📄 Prochain Devis</div>
-            <div id="yen-auto-devis" style="font-size:22px;font-weight:800;color:#5b9cf6;letter-spacing:1px;">YG-${yy}-${dAuto}</div>
+            <div id="yen-auto-devis" style="font-size:22px;font-weight:800;color:#5b9cf6;letter-spacing:1px;">D-${yy}-${dAuto}</div>
             <div style="font-size:10px;color:var(--text2);margin-top:4px;">Calculé automatiquement</div>
           </div>
           <div style="background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.25);border-radius:10px;padding:14px;text-align:center;">
             <div style="font-size:11px;color:var(--gold,#c9a84c);font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">🧾 Prochaine Facture</div>
-            <div id="yen-auto-facture" style="font-size:22px;font-weight:800;color:var(--gold,#c9a84c);letter-spacing:1px;">FYG-${yy}-${fAuto}</div>
+            <div id="yen-auto-facture" style="font-size:22px;font-weight:800;color:var(--gold,#c9a84c);letter-spacing:1px;">F-${yy}-${fAuto}</div>
             <div style="font-size:10px;color:var(--text2);margin-top:4px;">Calculé automatiquement</div>
           </div>
         </div>
@@ -7343,28 +7343,28 @@ function editNums() {
           <div>
             <label style="font-size:11px;color:#5b9cf6;font-weight:700;text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:8px;">📄 Départ Devis</label>
             <div style="display:flex;align-items:center;background:var(--input-bg,rgba(255,255,255,.05));border:1px solid rgba(91,156,246,.3);border-radius:8px;overflow:hidden;">
-              <span style="padding:0 10px;font-size:12px;color:#5b9cf6;font-weight:700;white-space:nowrap;border-right:1px solid rgba(91,156,246,.2);">YG-${yy}-</span>
+              <span style="padding:0 10px;font-size:12px;color:#5b9cf6;font-weight:700;white-space:nowrap;border-right:1px solid rgba(91,156,246,.2);">D-${yy}-</span>
               <input id="yen-devis-n" type="number" min="101" step="1" placeholder="${dFloor}"
                 style="flex:1;background:transparent;border:none;padding:10px 10px;color:var(--text);font-size:15px;font-weight:700;outline:none;min-width:0;"
                 oninput="yenPreview()">
             </div>
-            <div style="margin-top:5px;font-size:11px;color:var(--text2);">→ Sera : <strong id="yen-preview-devis" style="color:#5b9cf6;">YG-${yy}-${dFloor}</strong></div>
+            <div style="margin-top:5px;font-size:11px;color:var(--text2);">→ Sera : <strong id="yen-preview-devis" style="color:#5b9cf6;">D-${yy}-${dFloor}</strong></div>
           </div>
           <div>
             <label style="font-size:11px;color:var(--gold,#c9a84c);font-weight:700;text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:8px;">🧾 Départ Facture</label>
             <div style="display:flex;align-items:center;background:var(--input-bg,rgba(255,255,255,.05));border:1px solid rgba(201,168,76,.3);border-radius:8px;overflow:hidden;">
-              <span style="padding:0 10px;font-size:12px;color:var(--gold,#c9a84c);font-weight:700;white-space:nowrap;border-right:1px solid rgba(201,168,76,.2);">FYG-${yy}-</span>
+              <span style="padding:0 10px;font-size:12px;color:var(--gold,#c9a84c);font-weight:700;white-space:nowrap;border-right:1px solid rgba(201,168,76,.2);">F-${yy}-</span>
               <input id="yen-facture-n" type="number" min="101" step="1" placeholder="${fFloor}"
                 style="flex:1;background:transparent;border:none;padding:10px 10px;color:var(--text);font-size:15px;font-weight:700;outline:none;min-width:0;"
                 oninput="yenPreview()">
             </div>
-            <div style="margin-top:5px;font-size:11px;color:var(--text2);">→ Sera : <strong id="yen-preview-facture" style="color:var(--gold,#c9a84c);">FYG-${yy}-${fFloor}</strong></div>
+            <div style="margin-top:5px;font-size:11px;color:var(--text2);">→ Sera : <strong id="yen-preview-facture" style="color:var(--gold,#c9a84c);">F-${yy}-${fFloor}</strong></div>
           </div>
         </div>
 
         <div style="background:rgba(201,168,76,.07);border:1px solid rgba(201,168,76,.2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text2);line-height:1.65;margin-bottom:18px;">
           ℹ️ Si le numéro que vous entrez est déjà utilisé, la plateforme <strong>saute automatiquement</strong> au suivant disponible.<br>
-          Ex: si FYG-${yy}-103 existe déjà → la prochaine facture sera FYG-${yy}-104.
+          Ex: si F-${yy}-103 existe déjà → la prochaine facture sera F-${yy}-104.
         </div>
 
         <div style="display:flex;gap:10px;justify-content:flex-end;">
@@ -7386,8 +7386,8 @@ function yenPreview() {
   const f = parseInt(document.getElementById('yen-facture-n')?.value) || 0;
   const pd = document.getElementById('yen-preview-devis');
   const pf = document.getElementById('yen-preview-facture');
-  if (pd) pd.textContent = d >= 101 ? 'YG-' + yy + '-' + d : (d > 0 ? '⚠ Min. 101' : '—');
-  if (pf) pf.textContent = f >= 101 ? 'FYG-' + yy + '-' + f : (f > 0 ? '⚠ Min. 101' : '—');
+  if (pd) pd.textContent = d >= 101 ? 'D-' + yy + '-' + d : (d > 0 ? '⚠ Min. 101' : '—');
+  if (pf) pf.textContent = f >= 101 ? 'F-' + yy + '-' + f : (f > 0 ? '⚠ Min. 101' : '—');
 }
 
 function yenSave() {
@@ -7414,7 +7414,7 @@ function yenSave() {
   }
   if (changed) {
     if (typeof updateNumDisplay === 'function') updateNumDisplay();
-    showToast('✓ Numérotation mise à jour — Devis: YG-' + getAppYear() + '-' + d + '  Facture: FYG-' + getAppYear() + '-' + f, 'success');
+    showToast('✓ Numérotation mise à jour — Devis: D-' + getAppYear() + '-' + d + '  Facture: F-' + getAppYear() + '-' + f, 'success');
   }
   document.getElementById('yama-editnums-modal')?.classList.remove('show');
 }
@@ -10371,7 +10371,7 @@ order by table_name;</textarea>
     const df      = (typeof fmtDateFR === 'function') ? fmtDateFR(c.date) : c.date || '[Date]';
     const hf      = (typeof fmtTime === 'function') ? fmtTime(c.heure) : c.heure || '[Heure]';
     const adresse = [c.adresse, commune].filter(Boolean).join(', ') || '[Adresse]';
-    const ref     = c.devisRef || c.docNum || 'YG-26-XXX';
+    const ref     = c.devisRef || c.docNum || 'D-26-XXX';
     const noteLine = c.note ? '\n\n⚠️ ' + c.note + '.' : '';
 
     const stage = (typeof crmStageLabel === 'function') ? crmStageLabel(c).name : '';
@@ -17292,7 +17292,7 @@ order by table_name;</textarea>
     var prenom  = (document.getElementById('pst-prenom')?.value || '[Prénom]').trim();
     var client  = (document.getElementById('pst-client')?.value || '[Nom Client]').trim();
     var adresse = (document.getElementById('pst-adresse')?.value || '[Adresse]').trim();
-    var ref     = (document.getElementById('pst-ref')?.value || 'YG-26-XXX').trim();
+    var ref     = (document.getElementById('pst-ref')?.value || 'D-26-XXX').trim();
     if (step === 1) return `Bonjour ${prenom},\nJe reviens vers toi concernant le devis pour le dossier de ${client} — ${adresse}.\nPeux-tu me confirmer où en est le devis et si tout est clair de ton côté ?\nMerci, Ali | YAMA Group — 📞 0489 33 77 00`;
     if (step === 2) return `Bonjour ${prenom},\nJe me permets de te relancer concernant le devis pour ${client} — ${adresse}.\nCe dossier est toujours en attente. Merci de me faire un retour dès que possible.\nAli | YAMA Group — 📞 0489 33 77 00`;
     return `Bonjour ${prenom},\nTroisième rappel concernant le devis ${ref} pour ${client} — ${adresse}.\nJ'ai besoin d'une réponse aujourd'hui pour ne pas bloquer ce dossier. Merci de me contacter rapidement.\nAli — 📞 0489 33 77 00`;
@@ -17973,7 +17973,7 @@ order by table_name;</textarea>
     const prenom = pstVal('pst-prenom','[Prénom]');
     const client = pstVal('pst-client','[Nom Client]');
     const adresse = pstVal('pst-adresse','[Adresse]');
-    const ref = pstVal('pst-ref','YG-26-XXX');
+    const ref = pstVal('pst-ref','D-26-XXX');
     const whatsapp = step === 1
       ? `Bonjour ${prenom},\nJe reviens vers toi concernant le devis pour le dossier de ${client} — ${adresse}.\nPeux-tu me confirmer où en est le devis et si tout est clair de ton côté ?\nMerci, Ali | ${COMPANY} — 📞 ${PHONE}`
       : step === 2
@@ -18096,7 +18096,7 @@ order by table_name;</textarea>
     }).catch(()=>toast('Photo non ajoutée', 'error'));
   };
   function chantierReminder(ch){
-    return `⚠️ Rappel chantier — ${ch.clientName || '[Nom Client]'} | ${ch.adresse || '[Adresse]'}\nLe chantier ${ch.devisNum || ch.chantierRef || 'YG-26-XXX'} est en cours. Statut actuel : ${statusLabel(ch.status)}.\nAction à effectuer : ${ch.progressNotes || '[à compléter]'} Échéance : ${ch.nextDueDate || '[Date]'}\nAli | ${COMPANY} — 📞 ${PHONE}`;
+    return `⚠️ Rappel chantier — ${ch.clientName || '[Nom Client]'} | ${ch.adresse || '[Adresse]'}\nLe chantier ${ch.devisNum || ch.chantierRef || 'D-26-XXX'} est en cours. Statut actuel : ${statusLabel(ch.status)}.\nAction à effectuer : ${ch.progressNotes || '[à compléter]'} Échéance : ${ch.nextDueDate || '[Date]'}\nAli | ${COMPANY} — 📞 ${PHONE}`;
   }
   function statusLabel(s){ return ({waiting:'En attente',active:'En cours',closed:'Terminé',issue:'Problème','en_attente':'En attente','en_cours':'En cours','termine':'Terminé'})[s] || 'En attente'; }
   function renderChantiersTabSafe(){
@@ -18290,7 +18290,7 @@ order by table_name;</textarea>
   function firstNameFromSt(v){ return txt(v).split(/\s+/)[0] || '[Prénom]'; }
   function clientName(c){ const n=normContact(c); return [n.civilite,n.nom].filter(Boolean).join(' ').trim() || n.nom || '[Nom Client]'; }
   function addressOf(c){ const n=normContact(c); return [n.adresse,n.commune||n.ville].filter(Boolean).join(', ') || '[Adresse]'; }
-  function refOf(c){ const n=normContact(c); return n.devisRef || n.docNum || n.devisNum || 'YG-26-XXX'; }
+  function refOf(c){ const n=normContact(c); return n.devisRef || n.docNum || n.devisNum || 'D-26-XXX'; }
 
   function ensureCorrectTabOrder(){
     const bar = q('#app-platform .tabs'); if (!bar) return;
@@ -21416,9 +21416,9 @@ order by table_name;</textarea>
   }
   function appYear(){ return String(new Date().getFullYear()).slice(2); }
   function docParts(docNum){
-    let m = String(docNum || '').match(/^YG-(\d{2})-(\d+)$/i);
+    let m = String(docNum || '').match(/^(?:YG|D)-(\d{2})-(\d+)$/i);
     if (m) return { type:'devis', year:m[1], n:Number(m[2]) };
-    m = String(docNum || '').match(/^FYG-(\d{2})-(\d+)$/i);
+    m = String(docNum || '').match(/^(?:FYG|F)-(\d{2})-(\d+)$/i);
     if (m) return { type:'facture', year:m[1], n:Number(m[2]) };
     return null;
   }
@@ -21460,8 +21460,8 @@ order by table_name;</textarea>
     localStorage.setItem(K.factureCounter, String(facture));
     return { devis, facture };
   }
-  function devisLabel(n){ return 'YG-' + appYear() + '-' + n; }
-  function factureLabel(n){ return 'FYG-' + appYear() + '-' + n; }
+  function devisLabel(n){ return 'D-' + appYear() + '-' + n; }
+  function factureLabel(n){ return 'F-' + appYear() + '-' + n; }
   function updateNumDisplayV32(){
     const c = recomputeCounters();
     const el = $('numDisplay');
@@ -21469,7 +21469,7 @@ order by table_name;</textarea>
     return c;
   }
   function quoteList(){
-    return activeHistory(rawHistory()).filter(h => h && h.docType !== 'facture' && /^YG-\d{2}-\d+$/i.test(docNumOf(h)));
+    return activeHistory(rawHistory()).filter(h => h && h.docType !== 'facture' && /^(?:YG|D)-\d{2}-\d+$/i.test(docNumOf(h)));
   }
   function cleanStatuses(){
     const statuses = readJSON(K.devisStatus, {});
@@ -24847,7 +24847,7 @@ window.copyTextFromChantierReminder = function(id){
     var company = v41S('entreprise.nom','YAMA Group');
     var addrLine = ch.adresse || '[Adresse]';
     var txt = '⚠️ Rappel chantier — '+(ch.clientName||'[Nom Client]')+' | '+addrLine
-      +'\nChantier : '+(ch.devisNum||ch.chantierRef||'YG-26-XXX')
+      +'\nChantier : '+(ch.devisNum||ch.chantierRef||'D-26-XXX')
       +' — Statut : '+(ch.status==='active'?'En cours':ch.status==='closed'?'Terminé':'En attente')
       +'\nAction : '+(ch.progressNotes||'[à compléter]')
       +(ch.nextDueDate ? '\nÉchéance : '+ch.nextDueDate : '')
@@ -30461,7 +30461,7 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     });
     return txs.map(tx=>{
       // Match by doc_num in communication
-      const m = tx.desc.match(/(?:F?YG[-_]?\d{2}[-_]\d{3,})/i);
+      const m = tx.desc.match(/(?:(?:FYG|F|YG|D)[-_]?\d{2}[-_]\d{3,})/i);
       if(m){
         const dn=m[0].replace(/_/g,'-').toUpperCase();
         const inv=unpaid.find(f=>f.docNum===dn||(f.data?.docNum||'').toUpperCase()===dn);
@@ -34954,6 +34954,376 @@ poll(function(){
 }, 300, 12000);
 
 L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
+})();
+</script>
+
+<script id="yama-platform-v3">
+/* ── YAMA PLATFORM V3 ─────────────────────────────────────────────────────
+   1. Avenant V2  : docType:'avenant' · acceptation/refus client intégré
+   2. Paiement V3 : modal simplifié — boutons rapides (Payé/Partiel/Impayé)
+   3. Archive CRM : section refusés/inactifs masquée dans onglet Contacts
+*/
+(function(){
+  if(window.__YAMA_PLATFORM_V3__) return;
+  window.__YAMA_PLATFORM_V3__ = true;
+
+  function e(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];}); }
+  function fe(v){ return (Math.round(v*100)/100).toFixed(2).replace('.',',')+' €'; }
+  function poll(fn,d,mx){ var t=0,i=setInterval(function(){ t+=d; if(fn()||t>=mx) clearInterval(i); },d); }
+  function toast(msg){ try{ var t=document.getElementById('toast'); if(t){ t.textContent=msg; t.style.opacity='1'; setTimeout(function(){ t.style.opacity='0'; },3000); } }catch(x){} }
+
+  // ══════════════════════════════════════════════════
+  // CSS
+  // ══════════════════════════════════════════════════
+  (function(){
+    if(document.getElementById('yama-v3-styles')) return;
+    var s=document.createElement('style'); s.id='yama-v3-styles';
+    s.textContent=[
+      '.yama-av-card{border-left:3px solid rgba(201,168,76,.45)!important;background:rgba(201,168,76,.02)!important;}',
+      '.yama-av-card .devis-item-num{font-size:11px!important;color:rgba(201,168,76,.85)!important;}',
+      '.yama-av-pending .status-badge{background:rgba(232,160,32,.14)!important;color:#e8a020!important;border-color:rgba(232,160,32,.4)!important;}',
+      '.yama-av-accepted .status-badge{background:rgba(62,207,142,.12)!important;color:#3ecf8e!important;border-color:rgba(62,207,142,.35)!important;}',
+      '.yama-av-refused .status-badge{background:rgba(224,82,82,.1)!important;color:#e05252!important;border-color:rgba(224,82,82,.3)!important;}',
+      '.pmt-quick-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;}',
+      '.pmt-q-btn{padding:12px 6px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:rgba(200,210,230,.7);font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;text-align:center;line-height:1.35;}',
+      '.pmt-q-btn:hover{background:rgba(255,255,255,.09);}',
+      '.pmt-q-full{border-color:rgba(62,207,142,.45)!important;color:#3ecf8e!important;}',
+      '.pmt-q-full:hover{background:rgba(62,207,142,.09)!important;}',
+      '.pmt-q-part{border-color:rgba(201,168,76,.45)!important;color:#C9A84C!important;}',
+      '.pmt-q-part:hover{background:rgba(201,168,76,.09)!important;}',
+      '.pmt-q-unpaid{border-color:rgba(224,82,82,.4)!important;color:#e05252!important;}',
+      '.pmt-q-unpaid:hover{background:rgba(224,82,82,.07)!important;}',
+      '.pmt-mode-wrap{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}',
+      '.pmt-mode-btn{padding:6px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:rgba(200,210,230,.6);font-size:12px;cursor:pointer;transition:all .15s;}',
+      '.pmt-mode-btn.active{background:rgba(91,156,246,.14);border-color:rgba(91,156,246,.45);color:#5b9cf6;font-weight:700;}',
+      '.yama-refused-wrap{margin-top:18px;border:1px solid rgba(224,82,82,.2);border-radius:10px;overflow:hidden;}',
+      '.yama-refused-tog{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;cursor:pointer;background:rgba(224,82,82,.05);user-select:none;}',
+      '.yama-refused-tog:hover{background:rgba(224,82,82,.09);}',
+      '.yrt-title{font-size:12px;font-weight:700;color:#e05252;}',
+      '.yrt-arrow{font-size:11px;color:rgba(224,82,82,.5);transition:transform .2s;}',
+      '.yrt-arrow.open{transform:rotate(180deg);}',
+      '.yama-refused-body{display:none;}',
+      '.yama-refused-body.open{display:block;}'
+    ].join('\n');
+    document.head.appendChild(s);
+  })();
+
+  // ══════════════════════════════════════════════════
+  // AVENANT V2
+  // ══════════════════════════════════════════════════
+  function getHist(){ var r=[]; try{ r=JSON.parse(localStorage.getItem('yama_history_v3')||'[]'); }catch(x){} return r; }
+  function saveHist(a){ try{ localStorage.setItem('yama_history_v3',JSON.stringify(a)); }catch(x){} }
+
+  function nextAvNum(pNum){
+    var h=getHist(), re=new RegExp('^'+pNum.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'-A(\\d+)$','i'), max=0;
+    h.forEach(function(x){ var m=String(x.docNum||'').match(re); if(m) max=Math.max(max,parseInt(m[1],10)); });
+    return pNum+'-A'+(max+1);
+  }
+
+  function createAvenantV3(parent, lines, tvr){
+    var num=nextAvNum(parent.docNum), now=new Date().toISOString(), ht=0;
+    var lignes=lines.map(function(l,i){
+      var q=parseFloat(String(l.qte).replace(',','.'))||1, p=parseFloat(String(l.pu).replace(',','.'))||0;
+      ht+=q*p;
+      return {id:'av_'+Date.now()+'_'+i,desc:l.desc,qte:String(q),unit:l.unit||'Forfait',pu:String(p),tva:String(tvr)};
+    });
+    var entry={
+      docNum:num,docType:'avenant',savedAt:now,dateEmission:now.slice(0,10),
+      clientNom:parent.clientNom||'',clientTel:parent.clientTel||'',clientEmail:parent.clientEmail||'',
+      clientAdresse:parent.clientAdresse||'',clientCP:parent.clientCP||'',clientVille:parent.clientVille||'',
+      chantierRef:parent.chantierRef||'',chantierAdresse:parent.chantierAdresse||'',
+      chantierCP:parent.chantierCP||'',chantierVille:parent.chantierVille||'',
+      ageBatiment:parent.ageBatiment||'',remarques:'Avenant au devis '+String(parent.docNum),
+      lignesClient:lignes,lignesST:[],totalHT:ht,totalTTC:ht*(1+tvr),tvaRate:tvr,
+      parentDocNum:String(parent.docNum),parentDevisNum:String(parent.docNum),
+      isAvenant:true,statutAvenant:'pending'
+    };
+    var all=getHist(); all.unshift(entry); saveHist(all);
+    try{if(typeof window.syncPushHistory==='function') window.syncPushHistory(entry);}catch(x){}
+    try{if(typeof renderHistory==='function') renderHistory();}catch(x){}
+    try{if(typeof renderDevisTab==='function') renderDevisTab();}catch(x){}
+    try{if(typeof updateBadges==='function') updateBadges();}catch(x){}
+    return num;
+  }
+
+  window.acceptAvenant = function(docNum){
+    var all=getHist(), idx=all.findIndex(function(h){return h&&String(h.docNum)===String(docNum);});
+    if(idx<0) return;
+    all[idx].statutAvenant='accepted'; all[idx].acceptedAt=new Date().toISOString();
+    saveHist(all);
+    try{if(typeof renderDevisTab==='function') renderDevisTab();}catch(x){}
+    toast('✅ Avenant '+docNum+' — accepté par le client');
+  };
+  window.refuseAvenant = function(docNum){
+    var all=getHist(), idx=all.findIndex(function(h){return h&&String(h.docNum)===String(docNum);});
+    if(idx<0) return;
+    all[idx].statutAvenant='refused'; all[idx].refusedAt=new Date().toISOString();
+    saveHist(all);
+    try{if(typeof renderDevisTab==='function') renderDevisTab();}catch(x){}
+    toast('❌ Avenant '+docNum+' — refusé par le client');
+  };
+
+  // New showYamaAvenantModal (overrides the old one)
+  window.showYamaAvenantModal = function(parentDocNum){
+    var old=document.getElementById('yama-avenant-overlay'); if(old) old.remove();
+    var hist=getHist(), parent=hist.find(function(x){return String(x.docNum)===String(parentDocNum);});
+    if(!parent){ try{if(typeof window.getHistory==='function') parent=window.getHistory().find(function(x){return String(x.docNum)===String(parentDocNum);});}catch(x){} }
+    if(!parent){ toast('Document '+parentDocNum+' introuvable'); return; }
+    var tvr=parent.ageBatiment==='plus10'?0.06:0.21;
+    var units=['Forfait','m²','m','m³','h','pièce','jour'];
+    var ov=document.createElement('div'); ov.id='yama-avenant-overlay';
+    ov.innerHTML=
+      '<div id="yama-avenant-modal">'+
+        '<h2>➕ Avenant — '+e(parentDocNum)+'</h2>'+
+        '<div class="av-subtitle">'+e(parent.clientNom||'Client')+' · '+e(parent.chantierRef||parent.chantierVille||'Chantier')+
+          '<br><span style="color:rgba(200,210,230,.5);font-size:11px;">Travaux supplémentaires — sera soumis à acceptation client.</span></div>'+
+        '<div class="av-tva-row">'+
+          '<span class="av-tva-label">TVA :</span>'+
+          '<button type="button" class="av-tva-btn" data-tva="0.06">6%</button>'+
+          '<button type="button" class="av-tva-btn" data-tva="0.21">21%</button>'+
+        '</div>'+
+        '<div class="av-lines"></div>'+
+        '<button type="button" class="av-add">＋ Ajouter une ligne</button>'+
+        '<div class="av-totals">'+
+          '<div class="av-trow"><span>Total HT</span><span class="amt" data-t="ht">0,00 €</span></div>'+
+          '<div class="av-trow"><span>TVA <span data-t="rate">21</span>%</span><span class="amt" data-t="tva">0,00 €</span></div>'+
+          '<div class="av-trow ttc"><span>Total TTC</span><span class="amt" data-t="ttc">0,00 €</span></div>'+
+        '</div>'+
+        '<div class="av-btns">'+
+          '<button type="button" class="av-btn av-btn-primary" disabled>✅ Créer — en attente acceptation client</button>'+
+          '<button type="button" class="av-btn av-btn-cancel">Annuler</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(ov);
+    var linesEl=ov.querySelector('.av-lines'), btnOk=ov.querySelector('.av-btn-primary');
+    function addLine(){
+      var row=document.createElement('div'); row.className='av-line';
+      row.innerHTML=
+        '<input type="text" data-f="desc" placeholder="Description travaux supplémentaires">'+
+        '<input type="text" data-f="qte" inputmode="decimal" placeholder="Qté" value="1">'+
+        '<select data-f="unit">'+units.map(function(u){return '<option>'+u+'</option>';}).join('')+'</select>'+
+        '<input type="text" data-f="pu" inputmode="decimal" placeholder="PU HT €">'+
+        '<button type="button" class="av-del">✕</button>';
+      row.querySelector('.av-del').addEventListener('click',function(){row.remove();calc();});
+      row.addEventListener('input',calc); linesEl.appendChild(row); row.querySelector('[data-f="desc"]').focus();
+    }
+    function readL(){ return Array.from(linesEl.querySelectorAll('.av-line')).map(function(r){return{desc:r.querySelector('[data-f="desc"]').value.trim(),qte:r.querySelector('[data-f="qte"]').value,unit:r.querySelector('[data-f="unit"]').value,pu:r.querySelector('[data-f="pu"]').value};}); }
+    function calc(){
+      var ht=0,v=0; readL().forEach(function(l){var q=parseFloat(String(l.qte).replace(',','.'))||0,p=parseFloat(String(l.pu).replace(',','.'))||0;ht+=q*p;if(l.desc&&p>0)v++;});
+      ov.querySelector('[data-t="ht"]').textContent=fe(ht); ov.querySelector('[data-t="tva"]').textContent=fe(ht*tvr);
+      ov.querySelector('[data-t="ttc"]').textContent=fe(ht*(1+tvr)); ov.querySelector('[data-t="rate"]').textContent=Math.round(tvr*100);
+      btnOk.disabled=v===0;
+    }
+    ov.querySelectorAll('.av-tva-btn').forEach(function(b){
+      if(parseFloat(b.dataset.tva)===tvr) b.classList.add('active');
+      b.addEventListener('click',function(){tvr=parseFloat(b.dataset.tva);ov.querySelectorAll('.av-tva-btn').forEach(function(x){x.classList.toggle('active',x===b);});calc();});
+    });
+    ov.querySelector('.av-add').addEventListener('click',addLine);
+    ov.querySelector('.av-btn-cancel').addEventListener('click',function(){ov.remove();});
+    ov.addEventListener('click',function(x){if(x.target===ov) ov.remove();});
+    btnOk.addEventListener('click',function(){
+      var ls=readL().filter(function(l){return l.desc&&(parseFloat(String(l.pu).replace(',','.'))||0)>0;});
+      if(!ls.length) return;
+      var n=createAvenantV3(parent,ls,tvr); ov.remove();
+      if(n) toast('✅ Avenant '+n+' créé — en attente acceptation client');
+    });
+    addLine(); calc();
+  };
+
+  // Enhance avenants tab: render docType:'avenant' items
+  function enhanceAvenantTab(){
+    var listEl=document.getElementById('devisList'); if(!listEl) return;
+    var hist=getHist();
+    var newAvs=hist.filter(function(h){return h&&h.docType==='avenant'&&h.isAvenant;});
+    if(!newAvs.length) return;
+    newAvs.forEach(function(av){
+      if(listEl.querySelector('[data-avnum="'+av.docNum+'"]')) return;
+      var stMap={pending:{l:'⏳ En attente client',c:'pending'},accepted:{l:'✅ Accepté',c:'accepted'},refused:{l:'❌ Refusé',c:'refused'}};
+      var st=stMap[av.statutAvenant||'pending']||stMap.pending;
+      var pn=av.parentDocNum||av.parentDevisNum||'';
+      var acts=av.statutAvenant==='pending'?
+        '<div class="devis-item-actions"><div class="devis-actions-primary">'+
+          '<button class="btn-action accept" onclick="acceptAvenant(\''+e(av.docNum)+'\')">✅ Client a accepté</button>'+
+          '<button class="btn-action refuse" onclick="refuseAvenant(\''+e(av.docNum)+'\')">❌ Client a refusé</button>'+
+        '</div></div>':'';
+      var wrap=document.createElement('div'); wrap.setAttribute('data-avnum',av.docNum);
+      wrap.innerHTML='<div class="devis-item yama-av-card yama-av-'+st.c+'">'+
+        '<div class="devis-item-header">'+
+          '<div class="devis-item-num">'+e(av.docNum)+'</div>'+
+          '<div class="devis-item-info">'+
+            '<div class="di-client">'+e(av.clientNom||'Client')+'</div>'+
+            '<div class="di-sub"><span style="color:var(--accent);font-weight:600;">↳ Avenant · '+e(pn)+'</span> · '+e(av.chantierRef||av.chantierVille||'')+'</div>'+
+          '</div>'+
+          '<div class="devis-item-amount">'+fe(av.totalTTC||0)+'</div>'+
+          '<div class="status-badge '+st.c+'">'+st.l+'</div>'+
+        '</div>'+acts+
+      '</div>';
+      listEl.appendChild(wrap);
+    });
+  }
+
+  poll(function(){
+    if(typeof window.renderDevisTab!=='function') return false;
+    if(window.renderDevisTab.__avV3) return true;
+    var orig=window.renderDevisTab;
+    window.renderDevisTab=function(){
+      var r=orig.apply(this,arguments);
+      try{if((window._docType||'devis')==='avenants') enhanceAvenantTab();}catch(x){}
+      return r;
+    };
+    window.renderDevisTab.__avV3=true; return true;
+  },200,8000);
+
+  // ══════════════════════════════════════════════════
+  // PAYMENT MODAL V3 — simplified, Pipeline V2 compat
+  // ══════════════════════════════════════════════════
+  var _v3PmtMode='Virement';
+
+  poll(function(){
+    if(typeof window.v37OpenPaiementModal!=='function') return false;
+    if(window.v37OpenPaiementModal.__v3pmt) return true;
+    window.v37OpenPaiementModal = function(docNum, clientNom, totalTTC){
+      window.__pipePmtDoc=docNum; window._v37PmtDocNum=docNum; window._v37PmtTTC=totalTTC;
+      var pmts={}; try{pmts=JSON.parse(localStorage.getItem('yama_paiements_v1')||'{}');}catch(x){}
+      var p=pmts[docNum]||{}, deja=p.montantPaye||0, rest=Math.max(0,totalTTC-deja);
+      _v3PmtMode=p.modePaiement||'Virement';
+      var modes=['Virement','Chèque','Espèces','Bancontact','PayConiq'];
+      try{var cfg=JSON.parse(localStorage.getItem('yama_settings_v2')||'{}');if(cfg.financier&&Array.isArray(cfg.financier.modesPaiement)) modes=cfg.financier.modesPaiement;}catch(x){}
+      var el=document.getElementById('v37-pmt-form-content'); if(!el) return;
+      el.innerHTML=
+        '<div style="font-size:13px;color:rgba(180,190,220,.8);margin-bottom:14px;">'+
+          '<strong>'+e(clientNom)+'</strong> · Facture <strong>'+e(docNum)+'</strong><br>'+
+          'Total TTC : <strong style="color:#fff;">'+fe(totalTTC)+'</strong>'+
+          (deja>0?' &nbsp;·&nbsp; Déjà payé : '+fe(deja)+' &nbsp;·&nbsp; <strong style="color:#C9A84C">Restant : '+fe(rest)+'</strong>':'')+
+        '</div>'+
+        '<div class="pmt-quick-btns">'+
+          '<button class="pmt-q-btn pmt-q-full" onclick="pmtV3Q(\'full\','+totalTTC+')">💯 Payé intégral<br><small style="opacity:.7;font-weight:400;">'+fe(totalTTC)+'</small></button>'+
+          '<button class="pmt-q-btn pmt-q-part" onclick="pmtV3Q(\'part\','+rest+')">💳 Paiement partiel<br><small style="opacity:.7;font-weight:400;">Montant libre</small></button>'+
+          '<button class="pmt-q-btn pmt-q-unpaid" onclick="pmtV3Q(\'unpaid\',0)">⚠️ Impayé<br><small style="opacity:.7;font-weight:400;">Remettre à zéro</small></button>'+
+        '</div>'+
+        '<div id="v3-pmt-detail" style="display:none;">'+
+          '<div style="margin-bottom:10px;"><label style="display:block;font-size:11px;font-weight:700;color:rgba(180,190,220,.65);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Montant reçu (€)</label>'+
+          '<input id="v37-pmt-amount" type="number" step="0.01" min="0" value="'+rest.toFixed(2)+'" style="width:100%;padding:10px 12px;background:#111827;border:1px solid rgba(255,255,255,.12);border-radius:8px;color:#e4e9f7;font-size:18px;font-weight:800;box-sizing:border-box;" oninput="pmtV3UpdBtn()"></div>'+
+          '<div><label style="display:block;font-size:11px;font-weight:700;color:rgba(180,190,220,.65);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Mode de paiement</label>'+
+          '<div class="pmt-mode-wrap">'+modes.map(function(m){return '<button class="pmt-mode-btn'+(m===_v3PmtMode?' active':'')+'" onclick="pmtV3Mode(\''+e(m)+'\',this)">'+e(m)+'</button>';}).join('')+'</div>'+
+          '</div>'+
+          '<input type="hidden" id="v37-pmt-date" value="'+new Date().toISOString().slice(0,10)+'">'+
+          '<input type="hidden" id="v37-pmt-mode" value="'+e(_v3PmtMode)+'">'+
+          '<input type="hidden" id="v37-pmt-ech" value="">'+
+          '<div style="margin-top:14px;">'+
+            '<button id="v3-pmt-save" onclick="v37SavePaiement()" style="width:100%;padding:11px;background:linear-gradient(135deg,rgba(62,207,142,.18),rgba(62,207,142,.08));border:1px solid rgba(62,207,142,.5);border-radius:9px;color:#6DEAA7;font-size:13px;font-weight:700;cursor:pointer;">💾 Confirmer le paiement</button>'+
+          '</div>'+
+        '</div>';
+      document.getElementById('v37-pmt-modal').classList.add('open');
+    };
+    window.v37OpenPaiementModal.__v3pmt=true; return true;
+  },200,8000);
+
+  window.pmtV3Q = function(mode, amount){
+    if(mode==='unpaid'){
+      var dn=window._v37PmtDocNum||'';
+      var pmts={}; try{pmts=JSON.parse(localStorage.getItem('yama_paiements_v1')||'{}');}catch(x){}
+      pmts[dn]=Object.assign(pmts[dn]||{},{montantPaye:0,statutPaiement:'none'});
+      localStorage.setItem('yama_paiements_v1',JSON.stringify(pmts));
+      document.getElementById('v37-pmt-modal').classList.remove('open');
+      try{if(typeof renderCockpit==='function') renderCockpit();}catch(x){}
+      try{if(typeof renderHistory==='function') renderHistory();}catch(x){}
+      toast('⚠️ Facture marquée impayée');
+    } else {
+      var d=document.getElementById('v3-pmt-detail');
+      if(d) d.style.display='block';
+      var amtEl=document.getElementById('v37-pmt-amount');
+      if(amtEl){ amtEl.value=amount.toFixed(2); }
+      var mEl=document.getElementById('v37-pmt-mode');
+      if(mEl) mEl.value=_v3PmtMode;
+      var btn=document.getElementById('v3-pmt-save');
+      if(btn) btn.textContent='💾 Confirmer '+fe(amount);
+    }
+  };
+  window.pmtV3Mode = function(mode, btn){
+    _v3PmtMode=mode;
+    document.querySelectorAll('.pmt-mode-btn').forEach(function(b){b.classList.remove('active');});
+    if(btn) btn.classList.add('active');
+    var mEl=document.getElementById('v37-pmt-mode'); if(mEl) mEl.value=mode;
+  };
+  window.pmtV3UpdBtn = function(){
+    var btn=document.getElementById('v3-pmt-save'); if(!btn) return;
+    var amt=parseFloat((document.getElementById('v37-pmt-amount')||{value:'0'}).value)||0;
+    btn.textContent=amt>0?'💾 Confirmer '+fe(amt):'💾 Confirmer le paiement';
+    var mEl=document.getElementById('v37-pmt-mode'); if(mEl) mEl.value=_v3PmtMode;
+  };
+
+  // ══════════════════════════════════════════════════
+  // CRM REFUSED ARCHIVE
+  // ══════════════════════════════════════════════════
+
+  // Patch filterContactsForScope: exclude refused from all active scopes
+  poll(function(){
+    if(typeof window.filterContactsForScope!=='function') return false;
+    if(window.filterContactsForScope.__v3ref) return true;
+    var origF=window.filterContactsForScope;
+    window.filterContactsForScope=function(list,filterType){
+      if(filterType==='refused'){
+        var nm=list.map(typeof normalizeContact==='function'?normalizeContact:function(c){return c;});
+        return nm.filter(function(c){return c&&(c.followUpStatus==='refused'||c.status==='refuse'||c.devisRefused===true);});
+      }
+      var res=origF.call(this,list,filterType);
+      return res.filter(function(c){return!(c.followUpStatus==='refused'||c.status==='refuse'||c.devisRefused===true);});
+    };
+    window.filterContactsForScope.__v3ref=true; return true;
+  },200,8000);
+
+  function injectRefusedSection(){
+    if(document.getElementById('yama-refused-wrap')) return;
+    var page=document.getElementById('page-contacts'); if(!page) return;
+    var wrap=document.createElement('div'); wrap.id='yama-refused-wrap'; wrap.className='yama-refused-wrap';
+    wrap.innerHTML=
+      '<div class="yama-refused-tog" onclick="yamaToggleRefused()" id="yama-refused-tog">'+
+        '<div class="yrt-title">📦 Dossiers refusés / inactifs <span id="yama-refused-cnt" style="font-weight:400;opacity:.7;"></span></div>'+
+        '<div class="yrt-arrow" id="yama-refused-arr">▼</div>'+
+      '</div>'+
+      '<div class="yama-refused-body" id="yama-refused-body">'+
+        '<div class="contact-table" id="contacts-refused"></div>'+
+      '</div>';
+    var cnt=page.querySelector('.container-wide'); if(cnt) cnt.appendChild(wrap); else page.appendChild(wrap);
+  }
+  window.yamaToggleRefused=function(){
+    var body=document.getElementById('yama-refused-body'), arr=document.getElementById('yama-refused-arr');
+    if(!body) return;
+    var isOpen=body.classList.contains('open');
+    body.classList.toggle('open',!isOpen);
+    if(arr) arr.classList.toggle('open',!isOpen);
+    if(!isOpen){ try{if(typeof renderContactList==='function') renderContactList('contacts-refused','refused');}catch(x){} }
+  };
+
+  function updateRefusedBadge(){
+    try{
+      var cnts=typeof window.getContacts==='function'?window.getContacts():[];
+      var n=cnts.filter(function(c){return c&&(c.followUpStatus==='refused'||c.status==='refuse'||c.devisRefused===true);}).length;
+      var el=document.getElementById('yama-refused-cnt'); if(el) el.textContent=n>0?'('+n+')':'';
+    }catch(x){}
+  }
+
+  poll(function(){
+    if(typeof window.renderContacts!=='function') return false;
+    if(window.renderContacts.__v3ref) return true;
+    var origRC=window.renderContacts;
+    window.renderContacts=function(scope){
+      var r=origRC.apply(this,arguments);
+      try{ updateRefusedBadge(); if(document.getElementById('yama-refused-body')&&document.getElementById('yama-refused-body').classList.contains('open')){ if(typeof renderContactList==='function') renderContactList('contacts-refused','refused'); } }catch(x){}
+      return r;
+    };
+    window.renderContacts.__v3ref=true; return true;
+  },200,8000);
+
+  function init(){
+    injectRefusedSection();
+    setTimeout(updateRefusedBadge,800);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else setTimeout(init,600);
+
+  console.info('[YAMA V3] Avenant V2 · Paiement simplifié · Archive refusés — chargé.');
 })();
 </script>
 </body>
