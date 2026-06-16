@@ -8917,6 +8917,18 @@ function renderDevisTab() {
     const crmContact = findCRMContactForDevis(h.clientNom);
     const crmBtn = crmContact ? `<button class="btn-action load" onclick="event.stopPropagation();switchApp('crm');setTimeout(()=>{openContactDetail('${escapeHtml(crmContact.id||crmContact.contact_id||'')}')},300);" title="Voir dans CRM" style="background:rgba(91,156,246,.1);border-color:rgba(91,156,246,.4);color:#5b9cf6;">👤 CRM</button>` : '';
 
+    // ── Âge du devis + flag de relance (automatisation pipeline) ───────────
+    const _ageDays = yamaDevisAgeDays(h);
+    const RELANCE_SEUIL = 7; // jours calendrier avant relance conseillée
+    const _isPending = st.status === 'pending';
+    const _stale = _isPending && _ageDays >= RELANCE_SEUIL;
+    const relanceBtn = _isPending
+      ? `<button class="btn-action ${_stale ? 'yama-relance-due' : 'load'}" onclick="event.stopPropagation();yamaRelancerDevis('${h.docNum}')" title="Préparer un message de relance pour ce devis">📩 Relancer</button>`
+      : '';
+    const staleBanner = _stale
+      ? `<div class="yama-relance-flag" onclick="event.stopPropagation();yamaRelancerDevis('${h.docNum}')" title="Cliquer pour préparer la relance">📩 En attente depuis ${_ageDays} jours — relance conseillée</div>`
+      : '';
+
     const moreBtn = (items) => items.length === 0 ? '' : `
       <div class="devis-more-wrap">
         <button class="btn-more" onclick="event.stopPropagation();yamaToggleMore(this)" title="Plus d'actions">⋯</button>
@@ -8931,6 +8943,7 @@ function renderDevisTab() {
         <div class="devis-actions-primary">
           <button class="btn-action accept" onclick="acceptDevis('${h.docNum}')">✅ Accepté</button>
           <button class="btn-action refuse" onclick="refuseDevis('${h.docNum}')">❌ Refusé</button>
+          ${relanceBtn}
         </div>
         ${moreBtn([
           ['📂 Modifier', `loadFromHistoryByNum('${h.docNum}')`, ''],
@@ -8988,10 +9001,66 @@ function renderDevisTab() {
           <div class="devis-item-amount">${fmt(h.totalTTC || 0)}</div>
           <div class="status-badge ${statusInfo.cls}">${statusInfo.label}</div>
         </div>
+        ${staleBanner}
         ${actions ? `<div class="devis-item-actions">${actions}</div>` : ''}
       </div>`;
   }).join('');
 }
+
+// Âge d'un devis en jours calendrier (depuis l'émission, sinon l'enregistrement)
+function yamaDevisAgeDays(h){
+  try{
+    const ref = h.dateEmission || h.savedAt || h.date || null;
+    if(!ref) return 0;
+    const d = new Date(ref);
+    if(isNaN(d.getTime())) return 0;
+    const diff = Date.now() - d.getTime();
+    return Math.max(0, Math.floor(diff / 86400000));
+  }catch(e){ return 0; }
+}
+
+// Automatisation pipeline : depuis un devis en attente, ouvrir le message de
+// relance contextuel pré-rempli (nom, réf, montant, tél) et choisir le palier
+// de relance selon l'ancienneté du devis.
+function yamaRelancerDevis(docNum){
+  try{
+    const hist = getHistory();
+    const h = hist.find(x => x && x.docNum === docNum);
+    if(!h){ try{ showToast('Devis introuvable','error'); }catch(e){} return; }
+
+    // S'assurer d'être dans l'onglet Documents
+    try{ if(typeof switchTab === 'function') switchTab('devis'); }catch(e){}
+
+    // Basculer la section relance sur l'onglet « Devis client »
+    try{ if(typeof switchRelanceTab === 'function') switchRelanceTab('devis'); }catch(e){}
+
+    // Pré-remplir les champs
+    const set = (id,val) => { const el=document.getElementById(id); if(el){ el.value = val; } };
+    set('rdev-nom', h.clientNom || '');
+    set('rdev-ref', h.docNum || '');
+    set('rdev-montant', (Number(h.totalTTC)||0).toLocaleString('fr-BE',{minimumFractionDigits:2,maximumFractionDigits:2}));
+    set('rdev-tel', h.clientTel || h.tel || '');
+    if(h.dateValidite){ set('rdev-validite', fmtDate(h.dateValidite) || ''); }
+
+    // Choisir le palier selon l'âge : J+7 → 1er, J+14 → 2e, J+21 → dernier
+    const age = yamaDevisAgeDays(h);
+    const niveau = age >= 21 ? 3 : age >= 14 ? 2 : 1;
+    try{ if(typeof setRelanceDevis === 'function') setRelanceDevis(niveau); }catch(e){}
+
+    // Faire défiler jusqu'à la section relance
+    setTimeout(function(){
+      const sec = document.getElementById('relance-section-wrap');
+      if(sec && sec.scrollIntoView) sec.scrollIntoView({behavior:'smooth', block:'center'});
+      const msg = document.getElementById('rdev-msg');
+      if(msg) msg.style.boxShadow = '0 0 0 2px rgba(201,168,76,.5)';
+      setTimeout(function(){ if(msg) msg.style.boxShadow=''; }, 1600);
+    }, 120);
+
+    try{ showToast('📩 Relance préparée pour ' + (h.clientNom||docNum), 'success'); }catch(e){}
+  }catch(err){ try{ showToast('Erreur relance: '+err.message,'error'); }catch(e){} }
+}
+window.yamaRelancerDevis = yamaRelancerDevis;
+window.yamaDevisAgeDays = yamaDevisAgeDays;
 
 // Charge un devis depuis l'historique par son numéro
 function loadFromHistoryByNum(docNum) {
@@ -14842,7 +14911,10 @@ order by table_name;</textarea>
       if (!doc) return;
       const st = getStatusesSafe()[doc]?.status || 'pending';
       const actions = card.querySelector('.devis-item-actions') || card;
-      if (st !== 'refused' && st !== 'invoiced') {
+      // Pipeline correct : on ne propose « Transformer en facture » que sur un
+      // devis ACCEPTÉ ou dont les travaux sont finis — jamais sur un devis en
+      // attente (il faut d'abord qu'il soit accepté).
+      if (st === 'accepted' || st === 'done') {
         const btn = document.createElement('button');
         btn.className = 'btn-action travaux v12-smart-invoice-btn';
         btn.textContent = '🧾 Transformer en facture';
@@ -34460,6 +34532,32 @@ _L('Restructure V1 loaded — dashboard merge · delete on devis · facture dire
   padding:4px 11px!important;
   border-radius:20px!important;
   white-space:nowrap!important;
+}
+
+/* ── FLAG DE RELANCE (devis en attente trop ancien) ──────────────── */
+.yama-relance-flag {
+  display:flex; align-items:center; gap:7px;
+  margin-top:10px; padding:8px 12px;
+  background:rgba(232,160,32,.09);
+  border:1px solid rgba(232,160,32,.28);
+  border-left:3px solid #e8a020;
+  border-radius:8px;
+  font-size:12px; font-weight:600; color:#e8c96a;
+  cursor:pointer; transition:background .15s,border-color .15s;
+}
+.yama-relance-flag:hover {
+  background:rgba(232,160,32,.16);
+  border-color:rgba(232,160,32,.45);
+}
+/* Bouton « Relancer » mis en avant quand la relance est conseillée */
+.btn-action.yama-relance-due {
+  background:rgba(232,160,32,.16)!important;
+  border-color:rgba(232,160,32,.5)!important;
+  color:#e8c96a!important;
+}
+.btn-action.yama-relance-due:hover {
+  background:rgba(232,160,32,.26)!important;
+  border-color:rgba(232,160,32,.7)!important;
 }
 
 /* ── BARRE DE NAVIGATION TABS ────────────────────────────────────── */
