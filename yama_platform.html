@@ -14958,7 +14958,7 @@ order by table_name;</textarea>
     if (!window.__YAMA_V12_RENDER_DEVIS_PATCHED__ && typeof window.renderDevisTab === 'function') {
       window.__YAMA_V12_RENDER_DEVIS_PATCHED__ = true;
       const old = window.renderDevisTab;
-      window.renderDevisTab = function(){ const res = old.apply(this, arguments); setTimeout(enhanceDevisCards, 30); return res; };
+      window.renderDevisTab = function(){ const res = old.apply(this, arguments); enhanceDevisCards(); return res; };
     }
     if (!window.__YAMA_V12_RENDER_HISTORY_PATCHED__ && typeof window.renderHistory === 'function') {
       window.__YAMA_V12_RENDER_HISTORY_PATCHED__ = true;
@@ -28749,7 +28749,9 @@ console.info('[YAMA V46] Patch chargé');
   if (originalRenderDevisTab) {
     window.renderDevisTab = function finalRenderDevisTab() {
       const result = originalRenderDevisTab.apply(this, arguments);
-      setTimeout(() => {
+      // Injection SYNCHRONE (avant peinture) — évite le redimensionnement visible
+      // de la carte qui survenait quand les boutons étaient ajoutés en différé.
+      (() => {
         const hist = readJSON(LS_HISTORY, []);
         qa('#devisList .devis-item').forEach(item => {
           const num = clean(item.querySelector('.devis-item-num')?.textContent || '');
@@ -28770,7 +28772,7 @@ console.info('[YAMA V46] Patch chargé');
             actions.appendChild(btn);
           }
         });
-      }, 40);
+      })();
       return result;
     };
   }
@@ -30100,8 +30102,9 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
     if (!orig || orig.__ytWrapped) return;
     window.renderDevisTab = function() {
       const r = orig.apply(this, arguments);
-      // 100ms pour s'exécuter après le setTimeout de 30ms de V12
-      setTimeout(patchDevisCards, 100);
+      // SYNCHRONE : s'exécute après enhanceDevisCards (V12) dans le même flux,
+      // avant la peinture — supprime le redimensionnement par étapes de la carte.
+      patchDevisCards();
       return r;
     };
     window.renderDevisTab.__ytWrapped = true;
@@ -34173,8 +34176,11 @@ _poll(function(){
   if(window.renderDevisTab._yamaR) return true;
   var _orig = window.renderDevisTab;
   window.renderDevisTab = function(){
-    _orig.apply(this, arguments);
-    setTimeout(function(){ _injectDelBtns(); _markArchived(); }, 45);
+    var r = _orig.apply(this, arguments);
+    // SYNCHRONE (avant peinture) : le bouton supprimer et l'archivage sont
+    // posés dans le même flux de rendu → plus aucun saut de hauteur de carte.
+    _injectDelBtns(); _markArchived();
+    return r;
   };
   window.renderDevisTab._yamaR = true;
   _L('renderDevisTab patched (delete + archive)');
