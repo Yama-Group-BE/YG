@@ -34682,5 +34682,279 @@ _L('Restructure V1 loaded — dashboard merge · delete on devis · facture dire
 }
 
 </style>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     YAMA PIPELINE V2 — automatisations entre étapes
+     1. Facture payée à 100 % → proposer clôture du dossier + satisfaction
+     2. Facture en retard → contact CRM en alerte (chip rouge + remontée)
+     3. Historique du dossier (timeline) dans la fiche contact
+     ═══════════════════════════════════════════════════════════════════ -->
+<style id="yama-pipeline-v2-css">
+.yama-fac-retard-chip{
+  display:inline-flex;align-items:center;gap:4px;margin:0 8px 6px 0;
+  padding:3px 9px;border-radius:999px;
+  background:rgba(231,76,60,.14);border:1px solid rgba(231,76,60,.45);
+  color:#ff6b6b;font-size:10.5px;font-weight:800;white-space:nowrap;
+}
+.contact-row.yama-fac-retard-row{
+  border-color:rgba(231,76,60,.5)!important;
+  background:rgba(231,76,60,.04)!important;
+}
+.yama-timeline-section{ animation:yamaTlFade .25s ease; }
+@keyframes yamaTlFade{ from{opacity:0;} to{opacity:1;} }
+</style>
+<script id="yama-pipeline-v2">
+(function(){
+'use strict';
+if(window.__YAMA_PIPELINE_V2__) return;
+window.__YAMA_PIPELINE_V2__ = true;
+
+var L = function(m){ try{ console.info('[YAMA-PIPE]', m); }catch(e){} };
+function poll(fn, iv, max){ var h=setInterval(function(){ try{ if(fn()) clearInterval(h); }catch(e){} }, iv); setTimeout(function(){ clearInterval(h); }, max); }
+function lsGet(k, def){ try{ var v=JSON.parse(localStorage.getItem(k)|| def); return v; }catch(e){ try{ return JSON.parse(def); }catch(e2){ return null; } } }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function fmtEur(n){ return (Number(n)||0).toLocaleString('fr-BE',{minimumFractionDigits:2,maximumFractionDigits:2})+' €'; }
+function fmtDay(iso){ if(!iso) return ''; var d=new Date(iso); if(isNaN(d.getTime())) return ''; return d.toLocaleDateString('fr-BE',{day:'2-digit',month:'short',year:'numeric'}); }
+function daysSince(iso){ if(!iso) return null; var d=new Date(iso); if(isNaN(d.getTime())) return null; return Math.floor((Date.now()-d.getTime())/86400000); }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function getHist(){ return lsGet('yama_history_v3','[]') || []; }
+function getPmts(){ return lsGet('yama_paiements_v1','{}') || {}; }
+function getCrm(){ try{ return (typeof getContacts==='function'?getContacts():lsGet('yama_crm_v2','[]'))||[]; }catch(e){ return []; } }
+function cidOf(c){ return String((c&&(c.id||c.contact_id))||''); }
+function normName(s){ return String(s||'').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim(); }
+
+// Une facture impayée et échue ? → {days, due}
+function factureOverdue(fac){
+  if(!fac) return null;
+  var p = getPmts()[fac.docNum] || {};
+  if(p.statutPaiement === 'paye') return null;
+  var due = p.dateEcheance || fac.dateEcheance || '';
+  if(!due || String(due) >= todayStr()) return null;
+  return { days: daysSince(due), due: due };
+}
+// Facture liée à un contact (devisDocNum → parentDevisNum, sinon nom)
+function factureForContact(c){
+  var hist = getHist(), dn = c.devisDocNum || '', fac = null;
+  if(dn) fac = hist.find(function(h){ return h && h.docType==='facture' && (h.parentDevisNum===dn || h.docNum===dn); });
+  if(!fac){ var nom = normName(c.nom); if(nom.length>=3) fac = hist.find(function(h){ return h && h.docType==='facture' && normName(h.clientNom).indexOf(nom)>=0; }); }
+  return fac || null;
+}
+// Contact lié à une facture (parentDevisNum → devisDocNum, sinon nom)
+function contactForFacture(fac){
+  var crm = getCrm(), pn = fac.parentDevisNum || fac.docNum || '', hit = null;
+  if(pn) hit = crm.find(function(c){ return String(c.devisDocNum||'')===String(pn); });
+  if(!hit){ var nom = normName(fac.clientNom); if(nom.length>=3) hit = crm.find(function(c){ var cn=normName(c.nom); return cn.length>=3 && (cn.indexOf(nom)>=0 || nom.indexOf(cn)>=0); }); }
+  return hit || null;
+}
+
+/* ════════ FEATURE 1 — Facture payée à 100 % → clôture + satisfaction ════════ */
+poll(function(){
+  if(typeof window.v37OpenPaiementModal!=='function') return false;
+  if(window.v37OpenPaiementModal.__pipeCap) return true;
+  var orig = window.v37OpenPaiementModal;
+  window.v37OpenPaiementModal = function(docNum){ try{ window.__pipePmtDoc = docNum; }catch(e){} return orig.apply(this, arguments); };
+  window.v37OpenPaiementModal.__pipeCap = true; return true;
+}, 250, 12000);
+
+poll(function(){
+  if(typeof window.v37SavePaiement!=='function') return false;
+  if(window.v37SavePaiement.__pipePaid) return true;
+  var orig = window.v37SavePaiement;
+  window.v37SavePaiement = function(){
+    var doc = window.__pipePmtDoc || '';
+    var before = (getPmts()[doc]||{}).statutPaiement || 'none';
+    var r = orig.apply(this, arguments);
+    setTimeout(function(){
+      try{
+        var after = (getPmts()[doc]||{}).statutPaiement || 'none';
+        if(doc && after==='paye' && before!=='paye') proposeCloture(doc);
+      }catch(e){}
+    }, 140);
+    return r;
+  };
+  window.v37SavePaiement.__pipePaid = true;
+  L('paiement → clôture branché'); return true;
+}, 250, 12000);
+
+function proposeCloture(docNum){
+  var fac = getHist().find(function(h){ return h && h.docNum===docNum; });
+  if(!fac) return;
+  var c = contactForFacture(fac);
+  var nomClient = (c && c.nom) || fac.clientNom || 'le client';
+  var old=document.getElementById('yama-cloture-overlay'); if(old) old.remove();
+  var ov = document.createElement('div');
+  ov.id = 'yama-cloture-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:100001;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML =
+    '<div style="background:#141828;border:1px solid rgba(82,199,127,.3);border-radius:14px;max-width:440px;width:100%;padding:24px;box-sizing:border-box;">'
+    +'<div style="font-size:30px;text-align:center;margin-bottom:8px;">✅</div>'
+    +'<div style="font-size:16px;font-weight:800;color:#f0f2f8;text-align:center;margin-bottom:6px;">Facture '+esc(docNum)+' payée à 100 %</div>'
+    +'<div style="font-size:13px;color:rgba(180,190,220,.78);text-align:center;line-height:1.5;margin-bottom:20px;">Le dossier de <strong>'+esc(nomClient)+'</strong> est réglé. Le clôturer et envoyer un message de satisfaction (avis Google) ?</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px;">'
+    +'<button id="yama-cloture-yes" style="padding:11px;background:rgba(82,199,127,.16);border:1px solid rgba(82,199,127,.5);border-radius:9px;color:#6DEAA7;font-size:13px;font-weight:700;cursor:pointer;">✅ Clôturer + message de satisfaction</button>'
+    +(c?'':'<div style="font-size:11px;color:rgba(224,82,82,.75);text-align:center;line-height:1.4;">⚠️ Aucun contact CRM lié trouvé — seul le message sera proposé.</div>')
+    +'<button id="yama-cloture-no" style="padding:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(180,190,220,.7);font-size:13px;cursor:pointer;">Plus tard</button>'
+    +'</div></div>';
+  document.body.appendChild(ov);
+  document.getElementById('yama-cloture-no').onclick = function(){ ov.remove(); };
+  document.getElementById('yama-cloture-yes').onclick = function(){ ov.remove(); doCloture(c, nomClient); };
+}
+
+function doCloture(c, nomClient){
+  if(c){
+    try{
+      var raw = (typeof findRawContact==='function') ? findRawContact(cidOf(c)) : c;
+      if(raw){
+        var now = new Date().toISOString();
+        raw.followUpStatus='finished'; raw.status='finished'; raw.finished=true;
+        raw.finishedReportAt = now; raw.followUpDoneAt = now; raw.clotureFacturePayee = true;
+        raw.timeline = (Array.isArray(raw.timeline)?raw.timeline.slice(-19):[]).concat({ at:now, label:'Dossier clôturé', meta:'Facture payée à 100 %' });
+        if(typeof saveUpdatedContact==='function') saveUpdatedContact(raw);
+        else if(typeof pushContact==='function') pushContact(raw);
+      }
+    }catch(e){ L('clôture contact: '+e.message); }
+  }
+  var msg = 'Bonjour '+nomClient+',\n\n'+
+    'Nous vous remercions pour votre confiance et votre règlement. Nous espérons que vous êtes pleinement satisfait(e) des travaux réalisés par YAMA Group.\n\n'+
+    '⭐ Si vous avez un instant, un avis Google sur notre travail nous aiderait énormément et nous ferait très plaisir.\n\n'+
+    'Restant à votre entière disposition pour vos futurs projets.\n\nCordialement,\nL\'équipe YAMA Group\n📞 0489 33 77 00';
+  try{
+    if(typeof window.yamaShowAutoMessage==='function') window.yamaShowAutoMessage('🎉 Dossier clôturé — message de satisfaction', msg, c?cidOf(c):null);
+    else alert(msg);
+  }catch(e){}
+  ['renderContacts','renderCockpit','renderHistory','updateBadges','renderPriorityDashboard'].forEach(function(fn){ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){} });
+}
+
+/* ════════ FEATURE 2 — Facture en retard → contact CRM en alerte ════════ */
+function decorateCrmOverdue(){
+  var rows = document.querySelectorAll('#app-crm .contact-row');
+  if(!rows.length) return;
+  var crm = getCrm();
+  var overdueRows = [];
+  rows.forEach(function(row){
+    var cid = row.getAttribute('data-cid') || '';
+    if(!cid){ var oc = row.getAttribute('onclick')||''; var m = oc.match(/openContactDetail\('([^']+)'\)/); if(m) cid = m[1]; }
+    var old = row.querySelector('.yama-fac-retard-chip'); if(old) old.remove();
+    row.classList.remove('yama-fac-retard-row');
+    if(!cid) return;
+    var c = crm.find(function(x){ return cidOf(x)===String(cid); });
+    if(!c) return;
+    var fac = factureForContact(c);
+    var ov = fac ? factureOverdue(fac) : null;
+    if(!ov) return;
+    row.classList.add('yama-fac-retard-row');
+    var chip = document.createElement('span');
+    chip.className='yama-fac-retard-chip';
+    chip.textContent='🔴 Facture en retard · J+'+ov.days;
+    chip.title='Facture '+(fac.docNum||'')+' échue le '+fmtDay(ov.due)+' — '+fmtEur(fac.totalTTC);
+    var meta = row.querySelector('.cr-meta') || row.querySelector('.contact-meta') || row;
+    meta.appendChild(chip);
+    overdueRows.push(row);
+  });
+  // Remonter les dossiers en retard de facture en tête de liste (en conservant l'ordre)
+  for(var i=overdueRows.length-1;i>=0;i--){
+    var r = overdueRows[i], p = r.parentNode;
+    if(p && p.firstChild !== r) p.insertBefore(r, p.firstChild);
+  }
+}
+poll(function(){
+  if(typeof window.renderContacts!=='function') return false;
+  if(window.renderContacts.__pipeOverdue) return true;
+  var orig = window.renderContacts;
+  window.renderContacts = function(){ var r = orig.apply(this, arguments); setTimeout(decorateCrmOverdue, 70); return r; };
+  window.renderContacts.__pipeOverdue = true;
+  L('CRM en retard branché'); return true;
+}, 300, 12000);
+setInterval(function(){ try{ decorateCrmOverdue(); }catch(e){} }, 60000);
+
+// Cockpit : ajouter un lien « 👤 Fiche » vers le contact lié sur chaque facture impayée
+function decorateCockpitOverdue(){
+  var rows = document.querySelectorAll('#tab-cockpit .v37-impaye-row');
+  rows.forEach(function(row){
+    if(row.querySelector('.yama-impaye-fiche')) return;
+    var numEl = row.querySelector('.v37-impaye-num');
+    var docNum = numEl ? String(numEl.textContent||'').split('·')[0].trim() : '';
+    if(!docNum) return;
+    var fac = getHist().find(function(h){ return h && h.docNum===docNum; });
+    if(!fac) return;
+    var c = contactForFacture(fac);
+    if(!c) return;
+    var actions = row.querySelector('.v37-impaye-actions');
+    if(!actions) return;
+    var btn = document.createElement('button');
+    btn.className='v37-btn-xs yama-impaye-fiche';
+    btn.style.cssText='background:rgba(91,156,246,.1);border-color:rgba(91,156,246,.3);color:#5b9cf6;';
+    btn.textContent='👤 Fiche';
+    btn.onclick=function(e){ e.stopPropagation(); try{ if(typeof switchApp==='function') switchApp('crm'); }catch(e2){} setTimeout(function(){ try{ if(typeof openContactDetail==='function') openContactDetail(cidOf(c)); }catch(e3){} },260); };
+    actions.appendChild(btn);
+  });
+}
+poll(function(){
+  if(typeof window.renderCockpit!=='function') return false;
+  if(window.renderCockpit.__pipeCockpitFiche) return true;
+  var orig = window.renderCockpit;
+  window.renderCockpit = function(){ var r = orig.apply(this, arguments); setTimeout(decorateCockpitOverdue, 180); return r; };
+  window.renderCockpit.__pipeCockpitFiche = true; return true;
+}, 300, 12000);
+
+/* ════════ FEATURE 3 — Timeline du dossier dans la fiche contact ════════ */
+function buildTimeline(raw){
+  if(!raw) return [];
+  var ev = [];
+  function add(at, icon, label, meta){ if(!at) return; ev.push({ at:at, icon:icon, label:label, meta:meta||'' }); }
+  add(raw.createdAt||raw.savedAt, '📥', 'Dossier créé', '');
+  var rdv = raw.date_rdv || raw.date || '';
+  if(rdv) add(rdv, '📅', 'Rendez-vous planifié', raw.heure_rdv||raw.heure?('à '+(raw.heure_rdv||raw.heure)):'');
+  add(raw.waitingResponseAt, '📋', 'Devis envoyé — attente réponse', raw.devisDocNum||'');
+  add(raw.chantierConfirmedAt, '🔨', 'Chantier confirmé', '');
+  add(raw.devisRefusedAt, '❌', 'Devis refusé', '');
+  add(raw.finishedReportAt, '✅', 'Dossier clôturé', raw.clientMood?('Client '+raw.clientMood):'');
+  if(Array.isArray(raw.timeline)) raw.timeline.forEach(function(t){ if(t && t.at) ev.push({ at:t.at, icon:'•', label:t.label||'Étape', meta:t.meta||'' }); });
+  add(raw.crmStageUpdatedAt, '✏️', 'Étape modifiée manuellement', '');
+  ev.sort(function(a,b){ return new Date(a.at)-new Date(b.at); });
+  var seen={}, out=[];
+  ev.forEach(function(e){ var key=(e.label||'')+'|'+String(e.at).slice(0,10); if(seen[key]) return; seen[key]=1; out.push(e); });
+  return out;
+}
+function injectTimeline(cid){
+  var body = document.getElementById('detail-modal-body');
+  if(!body || body.querySelector('.yama-timeline-section')) return;
+  var raw = (typeof findRawContact==='function') ? findRawContact(cid) : null;
+  if(!raw){ try{ raw = getCrm().find(function(c){ return cidOf(c)===String(cid); }); }catch(e){} }
+  if(!raw) return;
+  var ev = buildTimeline(raw);
+  if(!ev.length) return;
+  var rowsHtml = ev.map(function(e, i){
+    var last = i===ev.length-1;
+    return '<div style="display:flex;gap:11px;align-items:flex-start;">'
+      +'<div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0;">'
+        +'<div style="width:24px;height:24px;border-radius:50%;background:rgba(201,168,76,.14);border:1px solid rgba(201,168,76,.35);display:flex;align-items:center;justify-content:center;font-size:11px;">'+e.icon+'</div>'
+        +(last?'':'<div style="width:2px;flex:1;min-height:14px;background:rgba(255,255,255,.08);margin:2px 0;"></div>')
+      +'</div>'
+      +'<div style="padding-bottom:'+(last?'0':'12px')+';min-width:0;">'
+        +'<div style="font-size:12.5px;font-weight:600;color:var(--white);">'+esc(e.label)+'</div>'
+        +'<div style="font-size:11px;color:var(--text3);">'+esc(fmtDay(e.at))+(e.meta?(' · '+esc(e.meta)):'')+'</div>'
+      +'</div></div>';
+  }).join('');
+  var section = document.createElement('div');
+  section.className='yama-timeline-section';
+  section.style.cssText='padding:14px 22px;border-bottom:1px solid var(--border);';
+  section.innerHTML='<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">🕓 Historique du dossier</div>'+rowsHtml;
+  var actionBar = null, divs = body.children;
+  for(var i=divs.length-1;i>=0;i--){ if(divs[i].querySelector && divs[i].querySelector('button')){ actionBar = divs[i]; break; } }
+  if(actionBar) body.insertBefore(section, actionBar); else body.appendChild(section);
+}
+poll(function(){
+  if(typeof window.openContactDetail!=='function') return false;
+  if(window.openContactDetail.__pipeTimeline) return true;
+  var orig = window.openContactDetail;
+  window.openContactDetail = function(cid){ var r = orig.apply(this, arguments); try{ injectTimeline(cid); }catch(e){} return r; };
+  window.openContactDetail.__pipeTimeline = true;
+  L('timeline fiche contact branchée'); return true;
+}, 300, 12000);
+
+L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
+})();
+</script>
 </body>
 </html>
