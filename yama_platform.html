@@ -35326,5 +35326,523 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
   console.info('[YAMA V3] Avenant V2 · Paiement simplifié · Archive refusés — chargé.');
 })();
 </script>
+
+<script id="yama-platform-v4">
+/* ── YAMA PLATFORM V4 ─────────────────────────────────────────────────────
+   1. Avenant → Facture : avenants visibles sous la facture parente
+   2. Message auto avenant : template WhatsApp généré à la création
+   3. RDV Reporter : modal de report + message d'excuse automatique
+   4. Évaluation sous-traitant : notation après chantier
+   5. Visual V4 : hiérarchie boutons, responsive, pipeline amélioré
+*/
+(function(){
+  if(window.__YAMA_PLATFORM_V4__) return;
+  window.__YAMA_PLATFORM_V4__ = true;
+
+  function e(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];}); }
+  function fe(v){ return (Math.round(v*100)/100).toFixed(2).replace('.',',')+' €'; }
+  function poll(fn,d,mx){ var t=0,i=setInterval(function(){ t+=d; if(fn()||t>=mx) clearInterval(i); },d); }
+  function toast(msg){ try{ var t=document.getElementById('toast'); if(t){ t.textContent=msg; t.style.opacity='1'; setTimeout(function(){ t.style.opacity='0'; },3000); } }catch(x){} }
+  function getHist(){ var r=[]; try{ r=JSON.parse(localStorage.getItem('yama_history_v3')||'[]'); }catch(x){}
+    try{ var ext=typeof window.getHistory==='function'?window.getHistory():[]; ext.forEach(function(h){ if(h&&!r.find(function(x){return x&&x.docNum===h.docNum;})) r.push(h); }); }catch(x){} return r; }
+  function saveHist(a){ try{ localStorage.setItem('yama_history_v3',JSON.stringify(a)); }catch(x){} }
+  function getContacts(){ try{ return typeof window.getContacts==='function'?window.getContacts():[]; }catch(x){return[];} }
+
+  // ══════════════════════════════════════════════════
+  // CSS V4 — Visual hierarchy + responsive
+  // ══════════════════════════════════════════════════
+  (function(){
+    if(document.getElementById('yama-v4-styles')) return;
+    var s=document.createElement('style'); s.id='yama-v4-styles';
+    s.textContent=[
+      /* Button hierarchy */
+      '.btn-action{transition:background .15s,opacity .15s,box-shadow .15s!important;}',
+      '.btn-action:hover{opacity:.85!important;box-shadow:0 2px 8px rgba(0,0,0,.25)!important;}',
+      '.btn-action.accept{background:rgba(62,207,142,.15)!important;border-color:rgba(62,207,142,.5)!important;color:#3ecf8e!important;}',
+      '.btn-action.accept:hover{background:rgba(62,207,142,.25)!important;}',
+      '.btn-action.refuse{background:rgba(224,82,82,.12)!important;border-color:rgba(224,82,82,.45)!important;color:#e05252!important;}',
+      '.btn-action.refuse:hover{background:rgba(224,82,82,.22)!important;}',
+      '.btn-action.travaux{background:rgba(91,156,246,.14)!important;border-color:rgba(91,156,246,.45)!important;color:#5b9cf6!important;}',
+      '.btn-action.travaux:hover{background:rgba(91,156,246,.22)!important;}',
+      '.btn-action.load{background:rgba(255,255,255,.04)!important;border-color:rgba(255,255,255,.12)!important;}',
+      '.btn-action.load:hover{background:rgba(255,255,255,.09)!important;}',
+      /* Facture avenant sub-row */
+      '.yama-fac-av-sub{margin-left:16px!important;border-left:2px solid rgba(201,168,76,.35)!important;border-top:none!important;border-radius:0 0 8px 8px!important;margin-top:-8px!important;padding-top:8px!important;background:rgba(201,168,76,.025)!important;}',
+      '.yama-fac-av-sub .devis-item-num{font-size:10px!important;color:rgba(201,168,76,.7)!important;}',
+      '.yama-fac-av-sub .status-badge{font-size:10px!important;padding:2px 7px!important;}',
+      /* ST Rating */
+      '.st-stars{display:flex;gap:3px;margin-top:4px;}',
+      '.st-star{font-size:14px;cursor:pointer;transition:transform .1s;color:rgba(255,255,255,.2);}',
+      '.st-star.filled{color:#C9A84C;}',
+      '.st-star:hover{transform:scale(1.2);}',
+      '.st-rating-row{display:flex;align-items:center;gap:8px;margin-top:6px;padding:6px 10px;background:rgba(201,168,76,.06);border-radius:7px;border:1px solid rgba(201,168,76,.12);}',
+      '.st-rating-avg{font-size:12px;font-weight:700;color:#C9A84C;}',
+      /* Pipeline stage visual */
+      '.crm-stage-step{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:3px 9px;border-radius:10px;font-weight:700;white-space:nowrap;}',
+      /* Reschedule modal */
+      '#yama-reschedule-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999999;display:flex;align-items:center;justify-content:center;padding:16px;}',
+      '#yama-reschedule-modal{background:#141828;border:1px solid rgba(91,156,246,.3);border-radius:16px;padding:24px 20px;max-width:540px;width:100%;max-height:92vh;overflow-y:auto;}',
+      '#yama-reschedule-modal h2{margin:0 0 4px;font-size:15px;font-weight:800;color:#5b9cf6;}',
+      '.rsch-reason-btns{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0;}',
+      '.rsch-reason-btn{padding:7px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:rgba(200,210,230,.65);font-size:12px;cursor:pointer;transition:all .15s;}',
+      '.rsch-reason-btn.active{background:rgba(91,156,246,.14);border-color:rgba(91,156,246,.45);color:#5b9cf6;font-weight:700;}',
+      /* Avenant message modal */
+      '#yama-avmsg-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999998;display:flex;align-items:center;justify-content:center;padding:16px;}',
+      '#yama-avmsg-modal{background:#141828;border:1px solid rgba(201,168,76,.3);border-radius:16px;padding:22px 20px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;}',
+      /* Mobile responsive */
+      '@media(max-width:600px){',
+        '.pmt-quick-btns{grid-template-columns:1fr!important;}',
+        '.devis-item-header{flex-wrap:wrap!important;}',
+        '.devis-item-amount{margin-top:2px!important;}',
+        '.devis-actions-primary{flex-wrap:wrap!important;}',
+        '.btn-action{min-height:36px!important;font-size:12px!important;}',
+        '.contact-row .cr-actions{flex-wrap:wrap!important;gap:4px!important;}',
+      '}'
+    ].join('\n');
+    document.head.appendChild(s);
+  })();
+
+  // ══════════════════════════════════════════════════
+  // 1. AVENANTS SOUS LA FACTURE PARENTE
+  // ══════════════════════════════════════════════════
+  function getAvenantsForFacture(facture){
+    var hist=getHist(); var pd=facture.parentDevisNum||'';
+    return hist.filter(function(h){
+      if(!h||!h.isAvenant) return false;
+      var pn=h.parentDocNum||h.parentDevisNum||'';
+      return pd && (pn===pd || pn===facture.docNum);
+    });
+  }
+
+  function buildAvenantSubHtml(av){
+    var stMap={pending:{l:'⏳ En attente',c:'pending'},accepted:{l:'✅ Accepté',c:'accepted'},refused:{l:'❌ Refusé',c:'refused'}};
+    var st=stMap[av.statutAvenant||'pending']||stMap.pending;
+    var acts=av.statutAvenant==='pending'?
+      '<div class="devis-actions-primary" style="margin-top:6px;">'+
+        '<button class="btn-action accept" onclick="event.stopPropagation();acceptAvenant(\''+e(av.docNum)+'\')">✅ Accepté</button>'+
+        '<button class="btn-action refuse" onclick="event.stopPropagation();refuseAvenant(\''+e(av.docNum)+'\')">❌ Refusé</button>'+
+      '</div>':'';
+    return '<div class="devis-item yama-fac-av-sub" data-avnum="'+e(av.docNum)+'">'+
+      '<div class="devis-item-header">'+
+        '<div class="devis-item-num">'+e(av.docNum)+'</div>'+
+        '<div class="devis-item-info" style="flex:1;">'+
+          '<div class="di-client" style="font-size:12px;">'+e(av.clientNom||'')+'</div>'+
+          '<div class="di-sub" style="font-size:10px;">Avenant · '+e(av.chantierRef||av.chantierVille||'')+'</div>'+
+        '</div>'+
+        '<div class="devis-item-amount" style="font-size:12px;color:#C9A84C;">+'+fe(av.totalTTC||0)+'</div>'+
+        '<div class="status-badge '+st.c+'">'+st.l+'</div>'+
+      '</div>'+
+      (acts?'<div class="devis-item-actions">'+acts+'</div>':'')+
+    '</div>';
+  }
+
+  function injectAvenantsInFactures(){
+    if((window._docType||'devis')!=='factures') return;
+    var listEl=document.getElementById('devisList'); if(!listEl) return;
+    var hist=getHist();
+    var facItems=listEl.querySelectorAll('.yama-facture-item');
+    facItems.forEach(function(card){
+      var numEl=card.querySelector('.devis-item-num'); if(!numEl) return;
+      var facNum=numEl.textContent.trim();
+      var fac=hist.find(function(h){return h&&h.docNum===facNum&&h.docType==='facture'});
+      if(!fac) return;
+      var avs=getAvenantsForFacture(fac); if(!avs.length) return;
+      avs.forEach(function(av){
+        if(listEl.querySelector('[data-avnum="'+av.docNum+'"]')) return;
+        var sub=document.createElement('div'); sub.innerHTML=buildAvenantSubHtml(av);
+        if(card.nextSibling) listEl.insertBefore(sub.firstChild,card.nextSibling);
+        else listEl.appendChild(sub.firstChild);
+      });
+    });
+  }
+
+  poll(function(){
+    if(typeof window.renderDevisTab!=='function') return false;
+    if(window.renderDevisTab.__facAvV4) return true;
+    var orig=window.renderDevisTab;
+    window.renderDevisTab=function(){
+      var r=orig.apply(this,arguments);
+      try{ injectAvenantsInFactures(); }catch(x){}
+      return r;
+    };
+    window.renderDevisTab.__facAvV4=true; return true;
+  },200,8000);
+
+  // ══════════════════════════════════════════════════
+  // 2. MESSAGE AUTO POUR AVENANT
+  // ══════════════════════════════════════════════════
+  function showAvenantMessage(avNum, parent, totalTTC, lignes){
+    var old=document.getElementById('yama-avmsg-overlay'); if(old) old.remove();
+    var civ=parent.clientCivilite||'Monsieur';
+    var prenom=(parent.clientNom||'Client').split(' ')[0];
+    var adresse=[parent.chantierAdresse,parent.chantierVille].filter(Boolean).join(', ')||[parent.clientAdresse,parent.clientVille].filter(Boolean).join(', ')||'';
+    var lignesText=Array.isArray(lignes)?lignes.map(function(l,i){return '  '+(i+1)+'. '+l.desc+' — '+fe((parseFloat(l.pu)||0)*(parseFloat(l.qte)||1));}).join('\n'):'';
+    var msg='Bonjour '+civ+',\n\nSuite à nos travaux en cours à '+adresse+', nous avons établi un avenant à votre dossier.\n\n'+
+      '📋 Avenant n° '+avNum+'\n'+
+      '💶 Montant de l\'avenant : '+fe(totalTTC)+' TVAC\n'+
+      (lignesText?'\nTravaux inclus :\n'+lignesText+'\n':'')+
+      '\nMerci de nous confirmer votre accord sur cet avenant pour que nous puissions planifier ces travaux supplémentaires.\n\n'+
+      'Cordialement,\nYAMA Group\n📞 0489 33 77 00 | info@yama-group.be';
+
+    var ov=document.createElement('div'); ov.id='yama-avmsg-overlay';
+    ov.innerHTML=
+      '<div id="yama-avmsg-modal">'+
+        '<h2 style="margin:0 0 4px;font-size:15px;font-weight:800;color:#C9A84C;">📩 Message avenant — '+e(avNum)+'</h2>'+
+        '<div style="font-size:11px;color:rgba(200,210,230,.55);margin-bottom:14px;">Message généré automatiquement — modifiez avant envoi</div>'+
+        '<textarea id="yama-avmsg-txt" style="width:100%;min-height:220px;background:#0d1117;border:1px solid rgba(255,255,255,.1);border-radius:9px;color:#e4e9f7;padding:13px;font-size:13px;line-height:1.6;resize:vertical;box-sizing:border-box;font-family:inherit;">'+e(msg)+'</textarea>'+
+        '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">'+
+          '<button onclick="yamaAvMsgCopy()" style="flex:1;min-width:120px;padding:10px;background:rgba(201,168,76,.16);border:1px solid rgba(201,168,76,.45);border-radius:9px;color:#C9A84C;font-size:12px;font-weight:700;cursor:pointer;">📋 Copier le message</button>'+
+          '<button onclick="document.getElementById(\'yama-avmsg-overlay\').remove()" style="padding:10px 20px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(200,210,230,.6);font-size:12px;cursor:pointer;">Fermer</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click',function(x){if(x.target===ov) ov.remove();});
+  }
+  window.yamaAvMsgCopy=function(){
+    var txt=(document.getElementById('yama-avmsg-txt')||{}).value||'';
+    try{ navigator.clipboard.writeText(txt).then(function(){ toast('📋 Message copié !'); }); }catch(x){ toast('Sélectionnez et copiez manuellement'); }
+  };
+
+  // Override showYamaAvenantModal to add message after creation
+  var _origAvenantModal=window.showYamaAvenantModal;
+  window.showYamaAvenantModal=function(parentDocNum){
+    // Re-wrap the create button to show message after creation
+    var origCreate=null; // We'll intercept via a global hook
+    window.__yamaV4AvenantPending={parentDocNum:parentDocNum};
+    if(typeof _origAvenantModal==='function') _origAvenantModal.apply(this,arguments);
+  };
+  // Hook into avenant creation: patch acceptAvenant/createAvenant results via wrapper on window.renderDevisTab
+  // We intercept at the toast level — check if avenant was just created
+  (function(){
+    var origSYAM=window.showYamaAvenantModal;
+    window.showYamaAvenantModal=function(parentDocNum){
+      if(typeof origSYAM==='function') origSYAM.apply(this,arguments);
+      // After the modal is shown, patch its save button
+      setTimeout(function(){
+        var ov=document.getElementById('yama-avenant-overlay'); if(!ov) return;
+        var btn=ov.querySelector('.av-btn-primary'); if(!btn||btn.__v4wrap) return;
+        btn.__v4wrap=true;
+        var origClick=btn.onclick; // might be null
+        btn.addEventListener('click',function(){
+          // Wait a tick, then check if a new avenant was created
+          setTimeout(function(){
+            if(document.getElementById('yama-avenant-overlay')) return; // still open = not saved
+            var hist=getHist(); if(!hist.length) return;
+            var newest=hist[0];
+            if(!newest||newest.docType!=='avenant'||newest.isAvenant!==true) return;
+            var created=(new Date())-new Date(newest.savedAt||0);
+            if(created>8000) return; // older than 8s, not the one we just created
+            var parent=hist.find(function(x){return x&&x.docNum===newest.parentDocNum;})||{};
+            showAvenantMessage(newest.docNum,parent,newest.totalTTC||0,newest.lignesClient||[]);
+          },500);
+        },true); // capture phase
+      },300);
+    };
+  })();
+
+  // ══════════════════════════════════════════════════
+  // 3. RDV REPORTER — Modal de report + message
+  // ══════════════════════════════════════════════════
+  var _rschCid='', _rschReason='imprévu';
+
+  window.yamaRescheduleRdv=function(cid){
+    _rschCid=String(cid||''); _rschReason='imprévu';
+    var contacts=getContacts();
+    var c=contacts.find(function(x){return String((x&&(x.id||x.contact_id))||'')===_rschCid;});
+    if(!c) return;
+    var old=document.getElementById('yama-reschedule-overlay'); if(old) old.remove();
+    var dfOld=c.date?new Date(c.date).toLocaleDateString('fr-BE'):'';
+    var hOld=c.heure||'';
+    var ov=document.createElement('div'); ov.id='yama-reschedule-overlay';
+    ov.innerHTML=
+      '<div id="yama-reschedule-modal">'+
+        '<h2>🔄 Reporter le rendez-vous</h2>'+
+        '<div style="font-size:12px;color:rgba(200,210,230,.55);margin-bottom:14px;">'+e(c.civilite||'')+' '+e(c.nom||'')+(dfOld?' · RDV actuel : '+dfOld+' à '+hOld:'')+' · '+e(c.commune||c.adresse||'')+'</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">'+
+          '<div><label style="display:block;font-size:11px;font-weight:700;color:rgba(180,190,220,.65);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Nouvelle date</label>'+
+          '<input id="rsch-date" type="date" value="" style="width:100%;padding:9px 12px;background:#111827;border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e4e9f7;font-size:14px;box-sizing:border-box;"></div>'+
+          '<div><label style="display:block;font-size:11px;font-weight:700;color:rgba(180,190,220,.65);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Heure</label>'+
+          '<input id="rsch-heure" type="time" value="'+(c.heure||'09:00')+'" style="width:100%;padding:9px 12px;background:#111827;border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#e4e9f7;font-size:14px;box-sizing:border-box;"></div>'+
+        '</div>'+
+        '<div style="font-size:11px;font-weight:700;color:rgba(180,190,220,.65);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Motif</div>'+
+        '<div class="rsch-reason-btns">'+
+          '<button class="rsch-reason-btn active" onclick="rschSetReason(\'imprévu\',this)">⚠️ Imprévu</button>'+
+          '<button class="rsch-reason-btn" onclick="rschSetReason(\'météo\',this)">🌧️ Météo</button>'+
+          '<button class="rsch-reason-btn" onclick="rschSetReason(\'indisponibilité\',this)">📅 Indisponibilité</button>'+
+          '<button class="rsch-reason-btn" onclick="rschSetReason(\'urgent\',this)">🚨 Urgence chantier</button>'+
+        '</div>'+
+        '<div style="font-size:11px;font-weight:700;color:rgba(180,190,220,.65);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Message client généré</div>'+
+        '<textarea id="rsch-msg" rows="6" style="width:100%;background:#0d1117;border:1px solid rgba(255,255,255,.1);border-radius:9px;color:#e4e9f7;padding:12px;font-size:12.5px;line-height:1.65;resize:vertical;box-sizing:border-box;"></textarea>'+
+        '<div style="display:flex;gap:8px;margin-top:14px;">'+
+          '<button onclick="rschConfirm()" style="flex:1;padding:11px;background:rgba(91,156,246,.16);border:1px solid rgba(91,156,246,.5);border-radius:9px;color:#5b9cf6;font-size:13px;font-weight:700;cursor:pointer;">💾 Mettre à jour + copier message</button>'+
+          '<button onclick="document.getElementById(\'yama-reschedule-overlay\').remove()" style="padding:11px 18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(200,210,230,.5);font-size:12px;cursor:pointer;">Annuler</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click',function(x){if(x.target===ov) ov.remove();});
+    rschUpdateMsg(c);
+  };
+
+  window.rschSetReason=function(reason,btn){
+    _rschReason=reason;
+    document.querySelectorAll('.rsch-reason-btn').forEach(function(b){b.classList.remove('active');});
+    if(btn) btn.classList.add('active');
+    var contacts=getContacts();
+    var c=contacts.find(function(x){return String((x&&(x.id||x.contact_id))||'')===_rschCid;});
+    if(c) rschUpdateMsg(c);
+  };
+
+  function rschUpdateMsg(c){
+    var civ=c.civilite||'Monsieur'; var nom=c.nom||'';
+    var newDate=(document.getElementById('rsch-date')||{}).value||'';
+    var newHeure=(document.getElementById('rsch-heure')||{}).value||c.heure||'';
+    var dfNew=newDate?new Date(newDate).toLocaleDateString('fr-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'}):'[nouvelle date]';
+    var reasonText={
+      'imprévu':'En raison d\'un imprévu de dernière minute',
+      'météo':'En raison des conditions météorologiques',
+      'indisponibilité':'En raison d\'une indisponibilité imprévue de notre équipe',
+      'urgent':'En raison d\'une urgence sur un chantier en cours'
+    }[_rschReason]||'En raison d\'un imprévu';
+    var msg='Bonjour '+civ+' '+nom.split(' ')[0]+',\n\n'+
+      reasonText+', nous nous voyons dans l\'obligation de reporter notre rendez-vous.\n\n'+
+      'Nous nous excusons sincèrement pour ce contretemps.\n\n'+
+      '📅 Nouveau rendez-vous proposé :\n'+
+      '   Le '+dfNew+' à partir de '+newHeure+'\n'+
+      '   '+[c.adresse,c.commune].filter(Boolean).join(', ')+'\n\n'+
+      'Si cette date ne vous convient pas, n\'hésitez pas à nous le faire savoir et nous trouverons ensemble un autre créneau.\n\n'+
+      'Cordialement,\nYAMA Group\n📞 0489 33 77 00';
+    var ta=document.getElementById('rsch-msg'); if(ta) ta.value=msg;
+    // Update on date/time change too
+    var dEl=document.getElementById('rsch-date'); var hEl=document.getElementById('rsch-heure');
+    if(dEl&&!dEl.__rschBound){ dEl.__rschBound=true; dEl.addEventListener('input',function(){rschUpdateMsg(c);}); }
+    if(hEl&&!hEl.__rschBound){ hEl.__rschBound=true; hEl.addEventListener('input',function(){rschUpdateMsg(c);}); }
+  }
+
+  window.rschConfirm=function(){
+    var newDate=(document.getElementById('rsch-date')||{}).value||'';
+    var newHeure=(document.getElementById('rsch-heure')||{}).value||'';
+    var msg=(document.getElementById('rsch-msg')||{}).value||'';
+    if(!newDate){ toast('⚠️ Veuillez choisir une nouvelle date'); return; }
+    // Update contact date/heure in CRM
+    if(_rschCid){
+      try{
+        var raw=typeof window.findRawContact==='function'?window.findRawContact(_rschCid):null;
+        if(raw){
+          raw.date=newDate; raw.heure=newHeure;
+          raw.rescheduledAt=new Date().toISOString(); raw.rescheduledReason=_rschReason;
+          if(typeof window.saveUpdatedContact==='function') window.saveUpdatedContact(raw);
+          else if(typeof window.upsertLocalContact==='function') window.upsertLocalContact(raw);
+          try{if(typeof renderContacts==='function') renderContacts();}catch(x){}
+        }
+      }catch(x){}
+    }
+    try{ navigator.clipboard.writeText(msg).then(function(){ toast('✅ RDV mis à jour + message copié'); }); }catch(x){ toast('✅ RDV mis à jour'); }
+    document.getElementById('yama-reschedule-overlay')?.remove();
+  };
+
+  // Inject "Reporter" button into RDV contact cards
+  poll(function(){
+    if(typeof window.renderContacts!=='function') return false;
+    if(window.renderContacts.__rschV4) return true;
+    var origRC=window.renderContacts;
+    window.renderContacts=function(scope){
+      var r=origRC.apply(this,arguments);
+      try{ injectRescheduleButtons(); }catch(x){}
+      return r;
+    };
+    window.renderContacts.__rschV4=true; return true;
+  },200,8000);
+
+  function injectRescheduleButtons(){
+    // Add reschedule button to RDV page contact cards
+    var rdvContainer=document.getElementById('contacts-rdv'); if(!rdvContainer) return;
+    var rows=rdvContainer.querySelectorAll('.contact-row');
+    rows.forEach(function(row){
+      if(row.querySelector('.yama-rsch-btn')) return;
+      var cid=row.getAttribute('onclick')||'';
+      var m=cid.match(/openContactDetail\('([^']+)'\)/); if(!m) return;
+      var contactId=m[1];
+      var actionsDiv=row.querySelector('.cr-actions'); if(!actionsDiv) return;
+      var btn=document.createElement('button');
+      btn.className='btn btn-outline btn-sm yama-rsch-btn';
+      btn.style.cssText='color:#5b9cf6;border-color:rgba(91,156,246,0.35);';
+      btn.title='Reporter le rendez-vous';
+      btn.textContent='🔄 Reporter';
+      btn.onclick=function(x){ x.stopPropagation(); window.yamaRescheduleRdv(contactId); };
+      actionsDiv.insertBefore(btn,actionsDiv.firstChild);
+    });
+  }
+
+  // ══════════════════════════════════════════════════
+  // 4. ÉVALUATION SOUS-TRAITANT
+  // ══════════════════════════════════════════════════
+  function getSTList(){ var r=[]; try{ r=JSON.parse(localStorage.getItem('yama_soustraitants_v1')||'[]'); }catch(x){} return r; }
+  function saveSTList(a){ localStorage.setItem('yama_soustraitants_v1',JSON.stringify(a)); localStorage.setItem('yama_soustraitants_v1_ts',new Date().toISOString()); }
+
+  window.yamaEvalST=function(stId, stars, chantierRef, notes){
+    var list=getSTList(); var idx=list.findIndex(function(s){return s&&s.id===stId;});
+    if(idx<0) return;
+    if(!Array.isArray(list[idx].evaluations)) list[idx].evaluations=[];
+    list[idx].evaluations.push({date:new Date().toISOString(),stars:stars,chantier:chantierRef||'',notes:notes||''});
+    saveSTList(list);
+    try{if(typeof renderSTTab==='function') renderSTTab();}catch(x){}
+    toast('⭐ Évaluation enregistrée');
+  };
+
+  window.yamaOpenSTEval=function(stId, chantierRef){
+    var list=getSTList(); var st=list.find(function(s){return s&&s.id===stId;});
+    if(!st) return;
+    var old=document.getElementById('yama-steval-overlay'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='yama-steval-overlay';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999997;display:flex;align-items:center;justify-content:center;padding:16px;';
+    var selStars=0;
+    ov.innerHTML=
+      '<div style="background:#141828;border:1px solid rgba(224,123,57,.3);border-radius:14px;padding:22px 20px;max-width:420px;width:100%;">'+
+        '<div style="font-size:15px;font-weight:800;color:#E07B39;margin-bottom:4px;">⭐ Évaluer '+e(st.nom)+'</div>'+
+        '<div style="font-size:11px;color:rgba(200,210,230,.5);margin-bottom:16px;">'+(chantierRef?'Chantier : '+e(chantierRef):'')+'</div>'+
+        '<div style="font-size:12px;font-weight:700;color:rgba(180,190,220,.65);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Note globale</div>'+
+        '<div id="steval-stars" class="st-stars" style="margin-bottom:14px;font-size:28px;">'+
+          [1,2,3,4,5].map(function(n){return '<span class="st-star" onclick="stevalSetStar('+n+')" data-n="'+n+'">★</span>';}).join('')+
+        '</div>'+
+        '<div style="font-size:12px;font-weight:700;color:rgba(180,190,220,.65);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Commentaire (optionnel)</div>'+
+        '<textarea id="steval-notes" rows="3" placeholder="Qualité du travail, ponctualité, communication..." style="width:100%;background:#0d1117;border:1px solid rgba(255,255,255,.1);border-radius:9px;color:#e4e9f7;padding:10px;font-size:13px;resize:vertical;box-sizing:border-box;"></textarea>'+
+        '<div style="display:flex;gap:8px;margin-top:14px;">'+
+          '<button onclick="stevalSave(\''+e(stId)+'\',\''+e(chantierRef||'')+'\',this)" style="flex:1;padding:10px;background:rgba(224,123,57,.16);border:1px solid rgba(224,123,57,.5);border-radius:9px;color:#E07B39;font-size:13px;font-weight:700;cursor:pointer;">💾 Enregistrer</button>'+
+          '<button onclick="document.getElementById(\'yama-steval-overlay\').remove()" style="padding:10px 18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:rgba(200,210,230,.5);font-size:12px;cursor:pointer;">Annuler</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click',function(x){if(x.target===ov) ov.remove();});
+    window.__stevalStars=0;
+  };
+  window.stevalSetStar=function(n){
+    window.__stevalStars=n;
+    document.querySelectorAll('#steval-stars .st-star').forEach(function(s,i){
+      s.classList.toggle('filled',i<n);
+    });
+  };
+  window.stevalSave=function(stId,chRef){
+    var stars=window.__stevalStars||0;
+    if(!stars){ toast('⚠️ Sélectionnez une note'); return; }
+    var notes=(document.getElementById('steval-notes')||{}).value||'';
+    window.yamaEvalST(stId,stars,chRef,notes);
+    document.getElementById('yama-steval-overlay')?.remove();
+  };
+
+  // Patch renderSTTab to show ratings + eval button
+  poll(function(){
+    if(typeof window.renderSTTab!=='function') return false;
+    if(window.renderSTTab.__evalV4) return true;
+    var origST=window.renderSTTab;
+    window.renderSTTab=function(){
+      var r=origST.apply(this,arguments);
+      try{ enhanceSTCards(); }catch(x){}
+      return r;
+    };
+    window.renderSTTab.__evalV4=true; return true;
+  },300,8000);
+
+  function stAvgRating(st){
+    if(!Array.isArray(st.evaluations)||!st.evaluations.length) return 0;
+    var sum=st.evaluations.reduce(function(s,x){return s+(x.stars||0);},0);
+    return Math.round(sum/st.evaluations.length*10)/10;
+  }
+  function stStarsHtml(avg, stId){
+    var html='<div class="st-stars">';
+    for(var i=1;i<=5;i++) html+='<span class="st-star'+(i<=Math.round(avg)?' filled':'')+'">★</span>';
+    html+='<span class="st-rating-avg" style="margin-left:6px;">'+avg+'<span style="font-size:10px;font-weight:400;opacity:.6;"> / 5</span></span></div>';
+    return html;
+  }
+
+  function enhanceSTCards(){
+    var carnet=document.getElementById('stCarnet'); if(!carnet) return;
+    var list=getSTList();
+    carnet.querySelectorAll('.st-card').forEach(function(card,idx){
+      if(card.querySelector('.st-rating-row')) return;
+      var st=list[idx]; if(!st) return;
+      var avg=stAvgRating(st);
+      var ratingDiv=document.createElement('div'); ratingDiv.className='st-rating-row';
+      ratingDiv.innerHTML=
+        '<div style="flex:1;">'+
+          (avg>0?stStarsHtml(avg,st.id)+'<div style="font-size:10px;color:rgba(200,210,230,.45);margin-top:2px;">'+(st.evaluations.length)+' évaluation'+(st.evaluations.length>1?'s':'')+'</div>':'<div style="font-size:11px;color:rgba(200,210,230,.4);">Aucune évaluation</div>')+
+        '</div>'+
+        '<button onclick="event.stopPropagation();yamaOpenSTEval(\''+e(st.id)+'\',\'\')" style="padding:5px 12px;border-radius:7px;border:1px solid rgba(224,123,57,.4);background:rgba(224,123,57,.08);color:#E07B39;font-size:11px;font-weight:700;cursor:pointer;">⭐ Évaluer</button>';
+      card.appendChild(ratingDiv);
+    });
+  }
+
+  // ══════════════════════════════════════════════════
+  // 5. PIPELINE IMPROVEMENTS — bouton évaluer ST sur chantier clôturé
+  // ══════════════════════════════════════════════════
+  // Patch renderContacts to add ST eval button on finished contacts
+  poll(function(){
+    if(typeof window.renderContactList!=='function') return false;
+    if(window.renderContactList.__stEvalV4) return true;
+    var origRCL=window.renderContactList;
+    window.renderContactList=function(containerId,filterType){
+      var r=origRCL.apply(this,arguments);
+      if(filterType==='finished'||filterType==='all'){
+        try{ injectSTEvalButtons(containerId); }catch(x){}
+      }
+      return r;
+    };
+    window.renderContactList.__stEvalV4=true; return true;
+  },200,8000);
+
+  function injectSTEvalButtons(containerId){
+    var cnt=document.getElementById(containerId); if(!cnt) return;
+    var stList=getSTList(); if(!stList.length) return;
+    cnt.querySelectorAll('.contact-row').forEach(function(row){
+      if(row.querySelector('.yama-steval-btn')) return;
+      // Find st for this contact
+      var metaEl=row.querySelector('.cr-meta span:nth-child(3)');
+      if(!metaEl) return;
+      var stName=(metaEl.textContent||'').replace(/^🔧\s*/,'').trim();
+      if(!stName) return;
+      var st=stList.find(function(s){return s&&(s.nom||'').toLowerCase()===stName.toLowerCase();});
+      if(!st) return;
+      var actionsDiv=row.querySelector('.cr-actions'); if(!actionsDiv) return;
+      var chRef=row.querySelector('.cr-name')?.textContent.trim()||'';
+      var btn=document.createElement('button');
+      btn.className='btn btn-outline btn-sm yama-steval-btn';
+      btn.style.cssText='color:#E07B39;border-color:rgba(224,123,57,0.35);';
+      btn.title='Évaluer le sous-traitant';
+      btn.textContent='⭐ Évaluer ST';
+      btn.onclick=function(x){ x.stopPropagation(); window.yamaOpenSTEval(st.id,chRef); };
+      actionsDiv.appendChild(btn);
+    });
+  }
+
+  // ══════════════════════════════════════════════════
+  // 6. SYNC IMPROVEMENTS — debounce + visual feedback
+  // ══════════════════════════════════════════════════
+  (function(){
+    var syncTimer=null, syncPending=false;
+    function debouncedSync(){
+      if(syncTimer) clearTimeout(syncTimer);
+      syncTimer=setTimeout(function(){
+        syncPending=false;
+        try{ if(typeof window.syncAllData==='function') window.syncAllData(); }catch(x){}
+        try{ if(typeof updateBadges==='function') updateBadges(); }catch(x){}
+      },1500);
+      syncPending=true;
+    }
+    // Patch localStorage setItem for key data stores to trigger sync
+    var origSetItem=localStorage.setItem.bind(localStorage);
+    localStorage.setItem=function(key,val){
+      origSetItem(key,val);
+      if(/^yama_(history|contacts|paiements|soustraitants)/.test(key)) debouncedSync();
+    };
+  })();
+
+  // Init
+  setTimeout(function(){
+    try{ injectAvenantsInFactures(); }catch(x){}
+    try{ enhanceSTCards(); }catch(x){}
+    console.info('[YAMA V4] Avenants→Factures · Reschedule RDV · Eval ST · Message avenant — chargé.');
+  },800);
+
+})();
+</script>
 </body>
 </html>
