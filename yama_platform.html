@@ -37156,5 +37156,221 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
 
 })();
 </script>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     PLATFORM V7 — MOTEUR DE COHÉRENCE (plateforme malléable)
+     Source unique de vérité pour la config financière partagée.
+     Acompte : Paramètres ↔ Calculateur ↔ Devis ↔ Facture, bidirectionnel.
+     ══════════════════════════════════════════════════════════════════ -->
+<script id="yama-platform-v7">
+(function(){
+  if(window.__YAMA_PLATFORM_V7__) return;
+  window.__YAMA_PLATFORM_V7__ = true;
+
+  /* ─── utils ─── */
+  function fmt7(n){ try{ return new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(n||0); }catch(x){ return (n||0).toFixed(2)+' €'; } }
+  function toast7(m,t){ try{ if(typeof showToast==='function') showToast(m,t||'success'); }catch(x){} }
+  function getHist7(){ try{ return JSON.parse(localStorage.getItem('yama_history_v3')||'[]'); }catch(x){ return []; } }
+
+  /* ══════════════════════════════════════════════════════
+     1. YamaCore — SOURCE UNIQUE DE VÉRITÉ (config partagée)
+     ══════════════════════════════════════════════════════ */
+  var YamaCore = window.YamaCore = {
+    _subs: [],
+    /* Lecture config — tout passe par getSetting (settings_v1) */
+    acomptePct: function(){
+      var v = (typeof getSetting==='function') ? parseFloat(getSetting('financier.acomptePct')) : NaN;
+      return (isFinite(v) && v>=0) ? v : 30;
+    },
+    tvaRate: function(){
+      var v = (typeof getSetting==='function') ? parseFloat(getSetting('financier.tauxTVA')) : NaN;
+      return (isFinite(v) && v>=0) ? v : 21;
+    },
+    delaiPaiement: function(){
+      var v = (typeof getSetting==='function') ? parseInt(getSetting('financier.delaiPaiementJours')) : NaN;
+      return (isFinite(v) && v>=0) ? v : 30;
+    },
+    /* Écriture config — propage partout via yama-settings-changed */
+    setAcomptePct: function(v){
+      v = Math.max(0, Math.min(100, parseFloat(v)||0));
+      try{
+        if(typeof getSettings==='function' && typeof saveSettings==='function'){
+          var s = getSettings(); s.financier = s.financier||{}; s.financier.acomptePct = v;
+          saveSettings(s); // dispatch yama-settings-changed
+        }
+      }catch(x){}
+      YamaCore.broadcast('acomptePct', v);
+      return v;
+    },
+    subscribe: function(fn){ if(typeof fn==='function') YamaCore._subs.push(fn); },
+    broadcast: function(key, val){ YamaCore._subs.forEach(function(fn){ try{ fn(key,val); }catch(x){} }); }
+  };
+
+  /* ══════════════════════════════════════════════════════
+     2. CALCULATEUR — acompte éditable + synchro live
+     ══════════════════════════════════════════════════════ */
+  function injectAcompteEditor(){
+    var h3 = document.getElementById('acompte-label-h3'); if(!h3) return;
+    var pct = YamaCore.acomptePct();
+    var existing = document.getElementById('ymCalcAcomptePct');
+    if(existing){
+      // ne pas perturber la saisie en cours
+      if(document.activeElement !== existing) existing.value = pct;
+      return;
+    }
+    h3.innerHTML =
+      'Acompte <input type="number" id="ymCalcAcomptePct" value="'+pct+'" min="0" max="100" step="5" '+
+      'title="Modifie l\'acompte par défaut — appliqué partout (devis, facture, paramètres)" '+
+      'style="width:50px;background:rgba(201,168,76,.14);border:1px solid rgba(201,168,76,.4);border-radius:7px;color:#C9A84C;font-weight:800;font-size:15px;text-align:center;padding:3px 4px;font-family:inherit;cursor:text;vertical-align:middle;"> '+
+      '% &amp; Solde <span style="font-size:9px;color:rgba(201,168,76,.55);font-weight:600;letter-spacing:.5px;margin-left:5px;vertical-align:middle;">✏️ SYNCHRONISÉ</span>';
+    var inp = document.getElementById('ymCalcAcomptePct');
+    if(inp){
+      inp.addEventListener('click', function(ev){ ev.stopPropagation(); this.select(); });
+      inp.addEventListener('change', function(){
+        var v = YamaCore.setAcomptePct(this.value);
+        this.value = v;
+        toast7('✓ Acompte par défaut : '+v+'% — appliqué sur tous les devis et factures');
+      });
+      // Enter = valider
+      inp.addEventListener('keydown', function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); this.blur(); } });
+    }
+  }
+
+  /* Wrap recalcTotals : ré-injecte l'éditeur après chaque recalcul */
+  (function pollRecalc(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.recalcTotals==='function' && !window.recalcTotals.__v7){
+        var _orig = window.recalcTotals;
+        window.recalcTotals = function(){
+          var r = _orig.apply(this, arguments);
+          try{ injectAcompteEditor(); }catch(x){}
+          return r;
+        };
+        window.recalcTotals.__v7 = true;
+        try{ window.recalcTotals(); }catch(x){}
+        clearInterval(iv);
+      }
+      if(tries>40) clearInterval(iv);
+    },300);
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     3. SYNCHRO LIVE — settings change → calculateur + panneau
+     ══════════════════════════════════════════════════════ */
+  document.addEventListener('yama-settings-changed', function(){
+    // Calculateur
+    try{ if(typeof window.recalcTotals==='function') window.recalcTotals(); }catch(x){}
+    // Panneau paramètres ouvert
+    try{
+      var f = document.getElementById('s-acomptepct');
+      if(f && document.activeElement!==f) f.value = YamaCore.acomptePct();
+    }catch(x){}
+  });
+
+  /* ══════════════════════════════════════════════════════
+     4. FACTURE — acompte versé saisi → reflété dans le document
+     ══════════════════════════════════════════════════════ */
+  // 4a. Pré-remplir la suggestion d'acompte dans la modale de transformation
+  function injectAcompteSuggestion(docNum){
+    var block = document.getElementById('v12PaymentBlock'); if(!block) return;
+    var h = getHist7().find(function(x){ return x && x.docNum===docNum; }); if(!h) return;
+    var ttc = parseFloat(h.totalTTC)||0;
+    var pct = YamaCore.acomptePct();
+    var ac  = ttc * pct / 100;
+    var old = document.getElementById('ym-acompte-suggest'); if(old) old.remove();
+    var hint = document.createElement('div');
+    hint.id = 'ym-acompte-suggest';
+    hint.style.cssText = 'background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.28);border-radius:9px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:rgba(255,255,255,.85);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;';
+    hint.innerHTML =
+      '<span>💡 Acompte prévu au devis : <strong style="color:#C9A84C;">'+pct+'%</strong> = <strong style="color:#C9A84C;">'+fmt7(ac)+'</strong></span>'+
+      '<button type="button" onclick="window.ymPrefillAcompte('+ac.toFixed(2)+')" '+
+      'style="padding:6px 14px;border-radius:7px;border:1px solid rgba(201,168,76,.4);background:rgba(201,168,76,.12);color:#C9A84C;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">↧ Acompte déjà reçu</button>';
+    block.insertBefore(hint, block.firstChild);
+  }
+  window.ymPrefillAcompte = function(v){
+    var st = document.getElementById('v12InvoicePayStatus');
+    if(st){ st.value='partial'; if(typeof window.toggleInvoicePaidAmount==='function') window.toggleInvoicePaidAmount(); }
+    var pa = document.getElementById('v12InvoicePaidAmount');
+    if(pa){ pa.value = v; pa.focus(); }
+    toast7('Acompte de '+fmt7(parseFloat(v))+' pré-rempli — sera déduit du solde sur la facture');
+  };
+
+  /* 4b. Wrap openSmartInvoiceModal */
+  (function pollOpenSI(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.openSmartInvoiceModal==='function' && !window.openSmartInvoiceModal.__v7){
+        var _orig = window.openSmartInvoiceModal;
+        window.openSmartInvoiceModal = function(docNum){
+          var r = _orig.apply(this, arguments);
+          try{ setTimeout(function(){ injectAcompteSuggestion(docNum); }, 60); }catch(x){}
+          return r;
+        };
+        window.openSmartInvoiceModal.__v7 = true;
+        clearInterval(iv);
+      }
+      if(tries>40) clearInterval(iv);
+    },300);
+  })();
+
+  /* 4c. Wrap generateSmartInvoiceFromDevis : l'acompte versé saisi
+         devient __ytfAcompteVerse → le PDF facture affiche le solde restant */
+  (function pollGenSI(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.generateSmartInvoiceFromDevis==='function' && !window.generateSmartInvoiceFromDevis.__v7){
+        var _orig = window.generateSmartInvoiceFromDevis;
+        window.generateSmartInvoiceFromDevis = function(){
+          try{
+            var status = (document.getElementById('v12InvoicePayStatus')||{}).value || 'unpaid';
+            var pa = parseFloat((document.getElementById('v12InvoicePaidAmount')||{}).value) || 0;
+            // Acompte versé = montant déjà payé partiellement (pas si payée intégralement)
+            if(status==='partial' && pa>0){
+              window.__ytfAcompteVerse = pa;
+            } else {
+              window.__ytfAcompteVerse = 0;
+            }
+          }catch(x){ window.__ytfAcompteVerse = 0; }
+          return _orig.apply(this, arguments);
+        };
+        window.generateSmartInvoiceFromDevis.__v7 = true;
+        clearInterval(iv);
+      }
+      if(tries>40) clearInterval(iv);
+    },300);
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     5. PANNEAU PARAMÈTRES — l'input acompte écrit via YamaCore
+        (cohérence : settings save → broadcast → calculateur)
+     ══════════════════════════════════════════════════════ */
+  document.addEventListener('input', function(ev){
+    if(ev.target && ev.target.id==='s-acomptepct'){
+      // débounce léger pour synchro live du calculateur sans sauver à chaque frappe
+      clearTimeout(window.__ymAcompteLiveT);
+      window.__ymAcompteLiveT = setTimeout(function(){
+        var v = parseFloat(ev.target.value);
+        if(isFinite(v)){
+          var inp = document.getElementById('ymCalcAcomptePct');
+          if(inp && document.activeElement!==inp) inp.value = Math.max(0,Math.min(100,v));
+        }
+      }, 250);
+    }
+  }, true);
+
+  /* ══════════════════════════════════════════════════════
+     INIT
+     ══════════════════════════════════════════════════════ */
+  setTimeout(function(){
+    try{ injectAcompteEditor(); }catch(x){}
+    console.info('[YAMA V7] Moteur de cohérence — acompte synchronisé Paramètres↔Calculateur↔Devis↔Facture.');
+  }, 1600);
+
+})();
+</script>
 </body>
 </html>
