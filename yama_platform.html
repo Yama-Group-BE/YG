@@ -37888,331 +37888,238 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
 })();
 </script>
 
-<!-- ═══ SUPABASE SDK ═══════════════════════════════════════════════════ -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-
 <script id="yama-platform-v10">
 /* ═══════════════════════════════════════════════════════════════════════
-   YAMA PLATFORM V10 — Authentification + Synchronisation Supabase
-   · Auth email/password multi-comptes (Supabase Auth)
-   · Sync bi-directionnel localStorage ↔ Supabase (toutes clés critiques)
-   · Pull au login — Push dès chaque écriture localStorage (debounce 800ms)
-   · Isolation par user_id + RLS Supabase
+   YAMA PLATFORM V10 — Authentification Supabase Auth (email/password)
+   · Gate UI par login — le sync existant (syncFullPull, syncPushHistory…)
+     continue de fonctionner avec supaClient / getCRMClient() déjà en place
+   · Aucun doublon SDK, aucun doublon client, aucune interception localStorage
+   · Après login → appel syncFullPull() + re-render ; après logout → overlay
    ═══════════════════════════════════════════════════════════════════════ */
 (function(){
   if(window.__YAMA_PLATFORM_V10__) return;
   window.__YAMA_PLATFORM_V10__ = true;
 
-  /* ── CONFIG ──────────────────────────────────────────────────────── */
-  var SUPA_URL = 'https://rjjowpknppdakaskscap.supabase.co';
-  var SUPA_KEY = 'sb_publishable_Qz7EhApqdrEuBA2XsjXNyA_H4lph7bP';
+  var _u = null; /* utilisateur connecté */
 
-  /* ── INIT CLIENT ─────────────────────────────────────────────────── */
-  if(typeof window.supabase === 'undefined'){
-    console.error('[YAMA V10] Supabase SDK non chargé — sync désactivé');
-    return;
-  }
-  var sb = window.supabase.createClient(SUPA_URL, SUPA_KEY);
-
-  /* ── STATE ───────────────────────────────────────────────────────── */
-  var _user        = null;
-  var _syncOn      = false;
-  var _pullDone    = false;
-  var _pushTimers  = {};
-  var _origSet     = localStorage.setItem.bind(localStorage);
-  var _origRemove  = localStorage.removeItem.bind(localStorage);
-
-  /* ── SYNC KEYS ───────────────────────────────────────────────────── */
-  /* Integer counters */
-  var COUNTER_KEYS = [
-    'yama_rapport_counter',
-    'yama_counter_devis',
-    'yama_counter_facture',
-    'yama_num_floor_devis',
-    'yama_num_floor_facture',
-  ];
-  /* JSON blobs (misc) */
-  var BLOB_KEYS = ['yama_devis_status_v1'];
-  /* Structured tables */
-  var STRUCT_KEYS = ['yama_history_v3','yama_paiements_v1','yama_settings_v1','yama_invoice_status_v12'];
-
-  var ALL_SYNC_KEYS = STRUCT_KEYS.concat(COUNTER_KEYS).concat(BLOB_KEYS);
-
-  /* ── HELPERS ─────────────────────────────────────────────────────── */
-  function log10(m){ console.info('[YAMA V10]', m); }
-  function sj(k,d){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(d)); }catch(e){ return d; } }
-  function syncDot(cls, title){
-    var d=document.getElementById('v6-sync-dot');
-    if(d){ d.className='v6-sync-'+cls; d.title=title||cls; }
-  }
-  function rerender(){
-    setTimeout(function(){
-      try{ if(typeof window.renderDevisTab==='function') window.renderDevisTab(); }catch(e){}
-      try{ if(typeof window.renderHistory==='function') window.renderHistory(); }catch(e){}
-      try{ if(typeof window.renderCockpit==='function') window.renderCockpit(); }catch(e){}
-      try{ if(typeof window.renderAnalyse==='function') window.renderAnalyse(); }catch(e){}
-      try{ if(typeof window.renderPriorityDashboard==='function') window.renderPriorityDashboard(); }catch(e){}
-    }, 150);
-  }
-  function _escH(s){ return String(s||'').replace(/[&<>"']/g,function(c){ return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
-
-  /* ── PUSH ────────────────────────────────────────────────────────── */
-  function debouncedPush(key, value){
-    clearTimeout(_pushTimers[key]);
-    _pushTimers[key] = setTimeout(function(){ pushKey(key, value).catch(function(e){ console.warn('[V10] push err',e); }); }, 800);
-  }
-
-  async function pushKey(key, value){
-    if(!_user || !_syncOn) return;
-    var uid = _user.id;
-    syncDot('pending','Sync en cours...');
-    try{
-      if(key === 'yama_history_v3'){
-        var hist = JSON.parse(value||'[]');
-        if(!Array.isArray(hist)) return;
-        var rows = hist.filter(function(d){ return d&&d.docNum; }).map(function(d){
-          return { user_id:uid, doc_num:d.docNum, doc_type:d.docType||'devis',
-                   data:d, saved_at:d.savedAt||new Date().toISOString(), updated_at:new Date().toISOString() };
-        });
-        if(rows.length) { var r=await sb.from('yama_documents').upsert(rows,{onConflict:'user_id,doc_num'}); if(r.error) throw r.error; }
-      }
-      else if(key === 'yama_paiements_v1'){
-        var map = JSON.parse(value||'{}');
-        var rows = Object.keys(map).map(function(k){ return { user_id:uid, doc_num:k, data:map[k], updated_at:new Date().toISOString() }; });
-        if(rows.length) { var r=await sb.from('yama_payments').upsert(rows,{onConflict:'user_id,doc_num'}); if(r.error) throw r.error; }
-      }
-      else if(key === 'yama_settings_v1'){
-        var r=await sb.from('yama_settings').upsert({ user_id:uid, data:JSON.parse(value||'{}'), updated_at:new Date().toISOString() },{onConflict:'user_id'});
-        if(r.error) throw r.error;
-      }
-      else if(key === 'yama_invoice_status_v12'){
-        var map = JSON.parse(value||'{}');
-        var rows = Object.keys(map).map(function(k){ return { user_id:uid, doc_num:k, data:map[k], updated_at:new Date().toISOString() }; });
-        if(rows.length) { var r=await sb.from('yama_invoice_statuses').upsert(rows,{onConflict:'user_id,doc_num'}); if(r.error) throw r.error; }
-      }
-      else if(COUNTER_KEYS.indexOf(key) !== -1){
-        var r=await sb.from('yama_counters').upsert({ user_id:uid, key:key, value:parseInt(value)||0, updated_at:new Date().toISOString() },{onConflict:'user_id,key'});
-        if(r.error) throw r.error;
-      }
-      else if(BLOB_KEYS.indexOf(key) !== -1){
-        var parsed; try{ parsed=JSON.parse(value||'{}'); }catch(e){ parsed={}; }
-        var r=await sb.from('yama_blobs').upsert({ user_id:uid, key:key, data:parsed, updated_at:new Date().toISOString() },{onConflict:'user_id,key'});
-        if(r.error) throw r.error;
-      }
-      syncDot('ok','Synchronisé — '+new Date().toLocaleTimeString('fr-BE'));
-    }catch(err){
-      console.error('[YAMA V10] Push error:',err);
-      syncDot('err','Erreur sync: '+(err.message||err));
-    }
-  }
-
-  /* ── PULL ────────────────────────────────────────────────────────── */
-  async function pullAll(uid){
-    syncDot('pending','Chargement depuis le cloud...');
-    try{
-      var [docsR, settR, pmtR, stR, cntR, blbR] = await Promise.all([
-        sb.from('yama_documents').select('doc_num,doc_type,data,saved_at').eq('user_id',uid),
-        sb.from('yama_settings').select('data').eq('user_id',uid).maybeSingle(),
-        sb.from('yama_payments').select('doc_num,data').eq('user_id',uid),
-        sb.from('yama_invoice_statuses').select('doc_num,data').eq('user_id',uid),
-        sb.from('yama_counters').select('key,value').eq('user_id',uid),
-        sb.from('yama_blobs').select('key,data').eq('user_id',uid),
-      ]);
-
-      if(docsR.data && docsR.data.length){
-        var hist = docsR.data.map(function(r){ return Object.assign({},r.data,{docNum:r.doc_num,docType:r.doc_type,savedAt:r.saved_at}); });
-        _origSet('yama_history_v3', JSON.stringify(hist));
-        log10('Documents : '+hist.length);
-      }
-      if(settR.data){ _origSet('yama_settings_v1', JSON.stringify(settR.data.data)); log10('Paramètres chargés'); }
-      if(pmtR.data && pmtR.data.length){
-        var m={}; pmtR.data.forEach(function(r){ m[r.doc_num]=r.data; });
-        _origSet('yama_paiements_v1', JSON.stringify(m)); log10('Paiements : '+pmtR.data.length);
-      }
-      if(stR.data && stR.data.length){
-        var m={}; stR.data.forEach(function(r){ m[r.doc_num]=r.data; });
-        _origSet('yama_invoice_status_v12', JSON.stringify(m)); log10('Statuts : '+stR.data.length);
-      }
-      if(cntR.data){ cntR.data.forEach(function(c){ _origSet(c.key, String(c.value)); }); log10('Compteurs chargés'); }
-      if(blbR.data){ blbR.data.forEach(function(b){ _origSet(b.key, JSON.stringify(b.data)); }); log10('Blobs chargés'); }
-
-      _pullDone = true;
-      syncDot('ok','Données chargées — '+new Date().toLocaleTimeString('fr-BE'));
-    }catch(err){
-      console.error('[YAMA V10] Pull error:',err);
-      syncDot('err','Erreur chargement: '+(err.message||err));
-    }
-  }
-
-  /* ── INTERCEPT localStorage ──────────────────────────────────────── */
-  localStorage.setItem = function(key, value){
-    _origSet(key, value);
-    if(_syncOn && _user && ALL_SYNC_KEYS.indexOf(key) !== -1){
-      debouncedPush(key, value);
-    }
-  };
-
-  /* ── AUTH CSS ────────────────────────────────────────────────────── */
+  /* ── CSS AUTH ────────────────────────────────────────────────────── */
   var CSS10 = [
-    '#ym-auth-ov{position:fixed;inset:0;background:rgba(5,5,10,.97);display:flex;align-items:center;',
-    'justify-content:center;z-index:10000;font-family:"DM Sans",sans-serif;transition:opacity .4s;}',
-    '#ym-auth-box{background:linear-gradient(160deg,#0f0f1e,#0a0a14);',
-    'border:1px solid rgba(201,168,76,.22);border-radius:22px;padding:38px 42px;',
-    'width:100%;max-width:400px;box-shadow:0 50px 120px rgba(0,0,0,.85),0 0 100px rgba(201,168,76,.04);}',
-    '#ym-auth-brand{text-align:center;margin-bottom:30px;}',
-    '#ym-auth-brand .b{font-size:23px;font-weight:800;letter-spacing:2px;',
-    'background:linear-gradient(135deg,#C9A84C,#E8A020);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}',
-    '#ym-auth-brand .s{font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.8px;margin-top:4px;}',
-    '#ym-auth-title{font-size:17px;font-weight:700;color:#efefef;margin-bottom:24px;text-align:center;}',
-    '.ym-af{margin-bottom:15px;}',
-    '.ym-af label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.6px;',
+    '#ym-ov{position:fixed;inset:0;background:rgba(5,5,10,.97);',
+    'display:flex;align-items:center;justify-content:center;',
+    'z-index:10000;font-family:"DM Sans",sans-serif;transition:opacity .4s;}',
+    '#ym-box{background:linear-gradient(160deg,#0f0f1e,#0a0a14);',
+    'border:1px solid rgba(201,168,76,.22);border-radius:22px;padding:40px 44px;',
+    'width:100%;max-width:400px;',
+    'box-shadow:0 50px 120px rgba(0,0,0,.85),0 0 80px rgba(201,168,76,.04);}',
+    '#ym-brand{text-align:center;margin-bottom:32px;}',
+    '#ym-brand .yb{font-size:23px;font-weight:800;letter-spacing:2px;',
+    'background:linear-gradient(135deg,#C9A84C,#E8A020);',
+    '-webkit-background-clip:text;-webkit-text-fill-color:transparent;}',
+    '#ym-brand .ys{font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.9px;margin-top:4px;}',
+    '#ym-title{font-size:17px;font-weight:700;color:#efefef;margin-bottom:26px;text-align:center;}',
+    '.ymf{margin-bottom:15px;}',
+    '.ymf label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.6px;',
     'color:rgba(255,255,255,.4);text-transform:uppercase;margin-bottom:7px;}',
-    '.ym-af input{width:100%;padding:12px 14px;background:rgba(255,255,255,.04);',
-    'border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#efefef;font-size:14px;',
-    'font-family:inherit;transition:border .2s;box-sizing:border-box;outline:none;}',
-    '.ym-af input:focus{border-color:rgba(201,168,76,.55);}',
-    '#ym-auth-sbmt{width:100%;padding:14px;margin-top:4px;',
+    '.ymf input{width:100%;padding:12px 14px;background:rgba(255,255,255,.04);',
+    'border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#efefef;',
+    'font-size:14px;font-family:inherit;box-sizing:border-box;outline:none;transition:border .2s;}',
+    '.ymf input:focus{border-color:rgba(201,168,76,.55);}',
+    '#ym-btn{width:100%;padding:14px;margin-top:4px;',
     'background:linear-gradient(135deg,#C9A84C,#E8A020);color:#0c0c0c;',
     'font-size:14px;font-weight:800;border:none;border-radius:10px;cursor:pointer;',
     'font-family:inherit;transition:opacity .2s,transform .15s;}',
-    '#ym-auth-sbmt:hover{opacity:.88;transform:translateY(-1px);}',
-    '#ym-auth-sbmt:disabled{opacity:.45;cursor:default;transform:none;}',
-    '#ym-auth-err{color:#e74c3c;font-size:12px;margin-top:10px;text-align:center;min-height:16px;}',
-    '#ym-auth-tog{text-align:center;margin-top:20px;font-size:12px;color:rgba(255,255,255,.38);}',
-    '#ym-auth-tog a{color:rgba(201,168,76,.8);cursor:pointer;text-decoration:underline;}',
-    /* User bar */
-    '#ym-user-bar{position:fixed;top:10px;right:12px;z-index:1150;display:flex;align-items:center;gap:7px;}',
+    '#ym-btn:hover{opacity:.88;transform:translateY(-1px);}',
+    '#ym-btn:disabled{opacity:.45;cursor:default;transform:none;}',
+    '#ym-err{color:#e74c3c;font-size:12px;margin-top:10px;text-align:center;min-height:16px;}',
+    '#ym-sw{text-align:center;margin-top:20px;font-size:12px;color:rgba(255,255,255,.38);}',
+    '#ym-sw a{color:rgba(201,168,76,.8);cursor:pointer;text-decoration:underline;}',
+    /* Barre utilisateur */
+    '#ym-ubar{position:fixed;bottom:16px;right:16px;z-index:1150;',
+    'display:flex;align-items:center;gap:8px;opacity:.85;}',
     '.ym-chip{background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.22);',
-    'border-radius:20px;padding:4px 13px;font-size:11px;color:rgba(201,168,76,.85);',
-    'font-family:"DM Sans",sans-serif;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
-    '.ym-logout{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);',
+    'border-radius:20px;padding:4px 13px;font-size:11px;color:rgba(201,168,76,.8);',
+    'font-family:"DM Sans",sans-serif;max-width:220px;overflow:hidden;',
+    'text-overflow:ellipsis;white-space:nowrap;}',
+    '.ym-lo{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);',
     'border-radius:20px;padding:4px 11px;font-size:11px;color:rgba(255,255,255,.4);',
     'cursor:pointer;font-family:"DM Sans",sans-serif;transition:all .2s;}',
-    '.ym-logout:hover{border-color:rgba(231,76,60,.4);color:rgba(231,76,60,.75);}',
+    '.ym-lo:hover{border-color:rgba(231,76,60,.4);color:rgba(231,76,60,.75);}',
   ].join('');
+  var st10 = document.createElement('style');
+  st10.textContent = CSS10;
+  document.head.appendChild(st10);
 
-  var st10=document.createElement('style'); st10.textContent=CSS10; document.head.appendChild(st10);
-
-  /* ── AUTH OVERLAY ────────────────────────────────────────────────── */
-  function buildAuthOverlay(){
-    if(document.getElementById('ym-auth-ov')) return;
-    var ov=document.createElement('div'); ov.id='ym-auth-ov';
-    ov.innerHTML=
-      '<div id="ym-auth-box">'+
-        '<div id="ym-auth-brand"><div class="b">YAMA GROUP</div><div class="s">PLATEFORME DE GESTION</div></div>'+
-        '<div id="ym-auth-title">Se connecter</div>'+
-        '<div class="ym-af"><label>Email</label><input type="email" id="ym-em" placeholder="votre@email.com" autocomplete="email"></div>'+
-        '<div class="ym-af"><label>Mot de passe</label><input type="password" id="ym-pw" placeholder="••••••••" autocomplete="current-password"></div>'+
-        '<button id="ym-auth-sbmt">Se connecter</button>'+
-        '<div id="ym-auth-err"></div>'+
-        '<div id="ym-auth-tog">Pas encore de compte ? <a id="ym-auth-sw">Créer un compte</a></div>'+
+  /* ── OVERLAY AUTH ────────────────────────────────────────────────── */
+  function buildOverlay(){
+    if(document.getElementById('ym-ov')) return;
+    var ov = document.createElement('div');
+    ov.id = 'ym-ov';
+    ov.innerHTML =
+      '<div id="ym-box">'+
+        '<div id="ym-brand">'+
+          '<div class="yb">YAMA GROUP</div>'+
+          '<div class="ys">PLATEFORME DE GESTION</div>'+
+        '</div>'+
+        '<div id="ym-title">Se connecter</div>'+
+        '<div class="ymf"><label>Email</label>'+
+          '<input type="email" id="ym-em" placeholder="votre@email.com" autocomplete="email"></div>'+
+        '<div class="ymf"><label>Mot de passe</label>'+
+          '<input type="password" id="ym-pw" placeholder="••••••••" autocomplete="current-password"></div>'+
+        '<button id="ym-btn">Se connecter</button>'+
+        '<div id="ym-err"></div>'+
+        '<div id="ym-sw">Pas encore de compte ? <a id="ym-swlnk">Créer un compte</a></div>'+
       '</div>';
     document.body.appendChild(ov);
 
-    var isReg=false;
-    var emEl=ov.querySelector('#ym-em'), pwEl=ov.querySelector('#ym-pw');
-    var btnEl=ov.querySelector('#ym-auth-sbmt'), errEl=ov.querySelector('#ym-auth-err');
-    var titleEl=ov.querySelector('#ym-auth-title'), swEl=ov.querySelector('#ym-auth-sw');
-    var togEl=ov.querySelector('#ym-auth-tog');
+    var isReg = false;
+    var em = ov.querySelector('#ym-em'), pw = ov.querySelector('#ym-pw');
+    var btn = ov.querySelector('#ym-btn'), err = ov.querySelector('#ym-err');
+    var ttl = ov.querySelector('#ym-title'), sw = ov.querySelector('#ym-swlnk');
+    var swWrap = ov.querySelector('#ym-sw');
 
-    function setErr(m){ errEl.textContent=m||''; }
-    function setLoad(v){ btnEl.disabled=v; btnEl.textContent=v?(isReg?'Création...':'Connexion...'):(isReg?'Créer le compte':'Se connecter'); }
+    function setErr(m){ err.textContent = m||''; }
+    function setLoad(v){ btn.disabled = v; btn.textContent = v?(isReg?'Création...':'Connexion en cours...'):(isReg?'Créer le compte':'Se connecter'); }
 
-    swEl.addEventListener('click',function(){
-      isReg=!isReg;
-      titleEl.textContent=isReg?'Créer un compte':'Se connecter';
-      btnEl.textContent=isReg?'Créer le compte':'Se connecter';
-      togEl.childNodes[0].textContent=isReg?'Déjà un compte ? ':'Pas encore de compte ? ';
-      swEl.textContent=isReg?'Se connecter':'Créer un compte';
+    sw.addEventListener('click', function(){
+      isReg = !isReg;
+      ttl.textContent    = isReg ? 'Créer un compte'       : 'Se connecter';
+      btn.textContent    = isReg ? 'Créer le compte'        : 'Se connecter';
+      sw.textContent     = isReg ? 'Se connecter'           : 'Créer un compte';
+      swWrap.childNodes[0].textContent = isReg ? 'Déjà un compte ? ' : 'Pas encore de compte ? ';
       setErr('');
     });
 
     async function doAuth(){
-      var email=emEl.value.trim(), pwd=pwEl.value;
-      if(!email||!pwd){ setErr('Email et mot de passe requis'); return; }
+      var email = em.value.trim(), pass = pw.value;
+      if(!email || !pass){ setErr('Email et mot de passe requis'); return; }
       setLoad(true); setErr('');
       try{
+        /* Réutilise le client existant créé par initSupabase / getCRMClient */
+        var client = (typeof getCRMClient==='function') ? getCRMClient()
+                   : (window.supaClient || (typeof supabase!=='undefined' && supabase.createClient(
+                       'https://rjjowpknppdakaskscap.supabase.co',
+                       'sb_publishable_Qz7EhApqdrEuBA2XsjXNyA_H4lph7bP',
+                       {auth:{persistSession:true,storageKey:'yama_supa_auth'}}
+                     )));
         var res;
         if(isReg){
-          res=await sb.auth.signUp({email,password:pwd});
+          res = await client.auth.signUp({email:email, password:pass});
           if(res.error) throw res.error;
-          if(res.data.user && !res.data.session){ setErr('✅ Compte créé — vérifie ton email pour confirmer.'); setLoad(false); return; }
+          if(res.data.user && !res.data.session){
+            setErr('✅ Compte créé — vérifie ton email pour confirmer, puis connecte-toi.');
+            setLoad(false); return;
+          }
         } else {
-          res=await sb.auth.signInWithPassword({email,password:pwd});
+          res = await client.auth.signInWithPassword({email:email, password:pass});
           if(res.error) throw res.error;
         }
-      }catch(err){
-        var m=err.message||String(err);
-        if(m.includes('Invalid login credentials')) m='Email ou mot de passe incorrect';
-        if(m.includes('already registered')) m='Cet email est déjà utilisé';
-        if(m.includes('Password should')) m='Mot de passe trop court (6 caractères minimum)';
+        /* onAuthStateChange gérera la suite */
+      }catch(e){
+        var m = e.message || String(e);
+        if(m.includes('Invalid login credentials')) m = 'Email ou mot de passe incorrect';
+        if(m.includes('already registered'))        m = 'Cet email est déjà utilisé';
+        if(m.includes('Password should'))           m = 'Mot de passe trop court (6 car. minimum)';
         setErr(m); setLoad(false);
       }
     }
 
-    btnEl.addEventListener('click',doAuth);
-    [emEl,pwEl].forEach(function(el){ el.addEventListener('keydown',function(ev){ if(ev.key==='Enter') doAuth(); }); });
-    setTimeout(function(){ emEl.focus(); }, 200);
+    btn.addEventListener('click', doAuth);
+    [em, pw].forEach(function(el){ el.addEventListener('keydown', function(ev){ if(ev.key==='Enter') doAuth(); }); });
+    setTimeout(function(){ em.focus(); }, 180);
   }
 
-  function hideAuthOverlay(){
-    var ov=document.getElementById('ym-auth-ov');
-    if(ov){ ov.style.opacity='0'; setTimeout(function(){ if(ov.parentNode) ov.parentNode.removeChild(ov); },420); }
+  function hideOverlay(){
+    var ov = document.getElementById('ym-ov');
+    if(!ov) return;
+    ov.style.opacity = '0';
+    setTimeout(function(){ if(ov.parentNode) ov.parentNode.removeChild(ov); }, 420);
   }
 
-  /* ── USER BAR ────────────────────────────────────────────────────── */
+  /* ── BARRE UTILISATEUR ───────────────────────────────────────────── */
   function showUserBar(user){
-    var existing=document.getElementById('ym-user-bar');
-    if(existing) existing.parentNode.removeChild(existing);
-    var bar=document.createElement('div'); bar.id='ym-user-bar';
-    bar.innerHTML='<div class="ym-chip">👤 '+_escH(user.email)+'</div>'+
-                  '<button class="ym-logout" id="ym-logout-btn">Déconnexion</button>';
+    var old = document.getElementById('ym-ubar');
+    if(old) old.parentNode.removeChild(old);
+    var bar = document.createElement('div');
+    bar.id = 'ym-ubar';
+    var email = (user.email||'').replace(/[&<>"']/g, function(c){ return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; });
+    bar.innerHTML = '<div class="ym-chip">👤 '+email+'</div>'+
+                    '<button class="ym-lo" id="ym-lobtn">Déconnexion</button>';
     document.body.appendChild(bar);
-    document.getElementById('ym-logout-btn').addEventListener('click',function(){
+    document.getElementById('ym-lobtn').addEventListener('click', function(){
       if(!confirm('Se déconnecter de YAMA GROUP ?')) return;
-      sb.auth.signOut();
+      var client = (typeof getCRMClient==='function') ? getCRMClient() : window.supaClient;
+      if(client) client.auth.signOut();
     });
   }
 
-  /* ── AUTH STATE HANDLERS ─────────────────────────────────────────── */
-  async function onLogin(user){
-    _user=user;
-    log10('Connecté : '+user.email);
-    hideAuthOverlay();
+  /* ── HANDLERS AUTH ───────────────────────────────────────────────── */
+  function onLogin(user){
+    _u = user;
+    hideOverlay();
     showUserBar(user);
-    await pullAll(user.id);
-    _syncOn=true;
-    rerender();
+    /* Re-déclencher la sync si le client est prêt */
+    setTimeout(function(){
+      try{
+        if(typeof syncFullPull === 'function') syncFullPull();
+        var dot = document.getElementById('v6-sync-dot');
+        if(dot){ dot.className='v6-sync-ok'; dot.title='Connecté — '+user.email; }
+      }catch(e){}
+    }, 400);
+    console.info('[YAMA V10] Connecté :', user.email);
   }
 
   function onLogout(){
-    _syncOn=false;
-    _user=null;
-    _pullDone=false;
-    /* Effacer les données locales pour éviter fuites entre comptes */
-    ALL_SYNC_KEYS.forEach(function(k){ _origRemove(k); });
-    var bar=document.getElementById('ym-user-bar');
+    _u = null;
+    var bar = document.getElementById('ym-ubar');
     if(bar) bar.parentNode.removeChild(bar);
-    syncDot('err','Déconnecté');
-    buildAuthOverlay();
-    log10('Déconnecté');
+    buildOverlay();
+    var dot = document.getElementById('v6-sync-dot');
+    if(dot){ dot.className='v6-sync-err'; dot.title='Déconnecté'; }
+    console.info('[YAMA V10] Déconnecté');
   }
 
-  /* ── AUTH STATE CHANGE ───────────────────────────────────────────── */
-  sb.auth.onAuthStateChange(function(event, session){
-    if(session && session.user){
-      if(!_user || _user.id !== session.user.id) onLogin(session.user);
-    } else {
-      if(_user) onLogout();
-    }
-  });
+  /* ── INIT AUTH ───────────────────────────────────────────────────── */
+  function initAuth(){
+    var client;
+    try{
+      client = (typeof getCRMClient==='function') ? getCRMClient()
+             : (window.supaClient || null);
+      if(!client && typeof supabase !== 'undefined'){
+        client = supabase.createClient(
+          'https://rjjowpknppdakaskscap.supabase.co',
+          'sb_publishable_Qz7EhApqdrEuBA2XsjXNyA_H4lph7bP',
+          {auth:{persistSession:true,storageKey:'yama_supa_auth'}}
+        );
+      }
+    }catch(e){ console.warn('[YAMA V10] client init err:', e); }
+    if(!client){ console.warn('[YAMA V10] Pas de client Supabase — auth désactivée'); return; }
 
-  /* ── INITIAL SESSION CHECK ───────────────────────────────────────── */
-  sb.auth.getSession().then(function(res){
-    if(!res.data || !res.data.session) buildAuthOverlay();
-  }).catch(function(){ buildAuthOverlay(); });
+    /* Listener de changement de session */
+    client.auth.onAuthStateChange(function(event, session){
+      if(session && session.user){
+        if(!_u || _u.id !== session.user.id) onLogin(session.user);
+      } else {
+        if(_u) onLogout();
+      }
+    });
 
-  log10('V10 init — '+SUPA_URL);
+    /* Vérifier session existante */
+    client.auth.getSession().then(function(res){
+      if(!res.data || !res.data.session){
+        buildOverlay(); /* Pas de session → écran de connexion */
+      }
+      /* Sinon onAuthStateChange gère l'affichage */
+    }).catch(function(){ buildOverlay(); });
+  }
+
+  /* Lancer après que initSupabase() (DOMContentLoaded) ait eu le temps de créer supaClient */
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){ setTimeout(initAuth, 300); });
+  } else {
+    setTimeout(initAuth, 300);
+  }
+
+  console.info('[YAMA V10] Auth layer initialisé.');
 })();
 </script>
 </body>
