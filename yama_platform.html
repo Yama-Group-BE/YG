@@ -37569,5 +37569,323 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
 
 })();
 </script>
+
+<script id="yama-platform-v9">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V9 — Facture Cohérence
+   1. Bridge V37 ↔ V12 payment status (synchronisation)
+   2. Acompte malléable — pré-remplissage intelligent du modal paiement
+   3. Fix acompteVerse dans la facture générée (cas 'payé' + 'partiel')
+   4. Archive visuelle — section repliable pour factures payées
+   5. Statut paiement temps réel sur les cartes factures
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V9__) return;
+  window.__YAMA_PLATFORM_V9__ = true;
+
+  /* ── HELPERS ─────────────────────────────────────────────────────── */
+  function sj9(key,def){ try{ return JSON.parse(localStorage.getItem(key)||JSON.stringify(def)); }catch(e){ return def; } }
+  function wj9(key,val){ try{ localStorage.setItem(key,JSON.stringify(val)); }catch(e){} }
+  function toast9(msg){ if(typeof showToast==='function') showToast(msg); }
+  function rerender9(){
+    setTimeout(function(){
+      try{ if(typeof window.renderDevisTab==='function') window.renderDevisTab(); }catch(e){}
+      try{ if(typeof window.renderCockpit==='function') window.renderCockpit(); }catch(e){}
+    }, 80);
+  }
+
+  var PK_V37 = 'yama_paiements_v1';
+  var PK_V12 = 'yama_invoice_status_v12';
+
+  /* Statut V37 → V12 */
+  function v37toV12(s){ return s==='paye'?'paid':s==='partiel'?'partial':'unpaid'; }
+  /* Statut V12 → V37 */
+  function v12toV37(s){ return s==='paid'?'paye':s==='partial'?'partiel':'none'; }
+
+  /* ══════════════════════════════════════════════════════
+     1. BRIDGE v37SavePaiement → sync V12 après chaque paiement V37
+     ══════════════════════════════════════════════════════ */
+  (function patchV37Save(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.v37SavePaiement==='function' && !window.v37SavePaiement.__v9){
+        var _orig = window.v37SavePaiement;
+        window.v37SavePaiement = function(){
+          _orig.apply(this, arguments);
+          try{
+            var docNum = window._v37PmtDocNum || '';
+            if(!docNum) return;
+            var pmts = sj9(PK_V37, {});
+            var p    = pmts[docNum] || {};
+            var v12  = sj9(PK_V12, {});
+            v12[docNum] = Object.assign(v12[docNum]||{}, {
+              status:      v37toV12(p.statutPaiement||'none'),
+              paidAmount:  p.montantPaye||0,
+              updatedAt:   new Date().toISOString()
+            });
+            wj9(PK_V12, v12);
+          }catch(x){}
+        };
+        window.v37SavePaiement.__v9 = true;
+        clearInterval(iv);
+      }
+      if(tries>40) clearInterval(iv);
+    }, 300);
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     2. BRIDGE setInvoiceStatus → sync V37 après changement V12
+     ══════════════════════════════════════════════════════ */
+  (function patchSetInvoiceStatus(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.setInvoiceStatus==='function' && !window.setInvoiceStatus.__v9){
+        var _orig = window.setInvoiceStatus;
+        window.setInvoiceStatus = function(docNum, patch){
+          var r = _orig.apply(this, arguments);
+          try{
+            if(patch && patch.status){
+              var pmts = sj9(PK_V37, {});
+              var prev = pmts[docNum] || {};
+              pmts[docNum] = Object.assign(prev, {
+                statutPaiement: v12toV37(patch.status),
+                montantPaye:    patch.paidAmount || prev.montantPaye || 0
+              });
+              wj9(PK_V37, pmts);
+              rerender9();
+            }
+          }catch(x){}
+          return r;
+        };
+        window.setInvoiceStatus.__v9 = true;
+        clearInterval(iv);
+      }
+      if(tries>40) clearInterval(iv);
+    }, 300);
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     3. ACOMPTE MALLÉABLE — pré-remplir modal paiement V37
+        avec l'acompte attendu (YamaCore %) si premier paiement
+     ══════════════════════════════════════════════════════ */
+  (function patchV37OpenModal(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.v37OpenPaiementModal==='function' && !window.v37OpenPaiementModal.__v9){
+        var _orig = window.v37OpenPaiementModal;
+        window.v37OpenPaiementModal = function(docNum, clientNom, totalTTC){
+          _orig.apply(this, arguments);
+          setTimeout(function(){
+            try{
+              var inp = document.getElementById('v37-pmt-amount');
+              var pmts = sj9(PK_V37, {});
+              var prev = pmts[docNum] || {};
+              /* Pré-remplir seulement si c'est un premier paiement */
+              if(inp && !(prev.montantPaye > 0)){
+                var pct = (window.YamaCore && typeof window.YamaCore.acomptePct==='function')
+                          ? window.YamaCore.acomptePct() : 30;
+                var suggested = (parseFloat(totalTTC)||0) * pct / 100;
+                if(suggested > 0){
+                  inp.value = suggested.toFixed(2);
+                  /* Hint visuel */
+                  var hint = document.getElementById('v37-acompte-hint9');
+                  if(!hint){
+                    hint = document.createElement('div');
+                    hint.id = 'v37-acompte-hint9';
+                    hint.style.cssText = 'font-size:11px;color:rgba(201,168,76,.8);margin-top:5px;padding:4px 8px;background:rgba(201,168,76,.07);border-radius:5px;';
+                    inp.parentNode && inp.parentNode.insertBefore(hint, inp.nextSibling);
+                  }
+                  hint.textContent = '💡 Acompte suggéré : '+pct+'% du TTC — modifiable librement';
+                }
+              } else if(inp && prev.montantPaye > 0) {
+                /* Acompte déjà reçu — montrer le restant */
+                var hint2 = document.getElementById('v37-acompte-hint9');
+                if(!hint2){
+                  hint2 = document.createElement('div');
+                  hint2.id = 'v37-acompte-hint9';
+                  hint2.style.cssText = 'font-size:11px;color:rgba(94,200,158,.8);margin-top:5px;padding:4px 8px;background:rgba(94,200,158,.07);border-radius:5px;';
+                  inp.parentNode && inp.parentNode.insertBefore(hint2, inp.nextSibling);
+                }
+                var restant = (parseFloat(totalTTC)||0) - (prev.montantPaye||0);
+                hint2.textContent = '✅ Déjà reçu : '+(prev.montantPaye||0).toFixed(2)+' € — Restant : '+restant.toFixed(2)+' €';
+              }
+            }catch(x){}
+          }, 100);
+        };
+        window.v37OpenPaiementModal.__v9 = true;
+        clearInterval(iv);
+      }
+      if(tries>40) clearInterval(iv);
+    }, 300);
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     4. FIX acompteVerse dans la facture générée
+        — cas 'payé' : acompte = TTC complet
+        — cas 'partiel' : acompte = montant saisi (V7 le fait mais reset à 0 pour 'payé')
+        — post-traitement : mise à jour de l'entrée history
+     ══════════════════════════════════════════════════════ */
+  (function patchGenSmartInvoice(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.generateSmartInvoiceFromDevis==='function' && !window.generateSmartInvoiceFromDevis.__v9){
+        var _orig = window.generateSmartInvoiceFromDevis;
+        window.generateSmartInvoiceFromDevis = function(){
+          /* Lire le statut AVANT d'appeler la chaîne */
+          var status  = (document.getElementById('v12InvoicePayStatus')||{}).value || 'unpaid';
+          var paidAmt = parseFloat((document.getElementById('v12InvoicePaidAmount')||{}).value) || 0;
+
+          var result = _orig.apply(this, arguments);
+
+          /* Post-traitement : corriger acompteVerse dans history */
+          function fix(){
+            try{
+              var acompte = 0;
+              if(status==='paid' && paidAmt>0)          acompte = paidAmt;
+              else if(status==='partial' && paidAmt>0)  acompte = paidAmt;
+              if(acompte <= 0) return;
+
+              /* Ré-exposer __ytfAcompteVerse pour le prochain rendu PDF */
+              window.__ytfAcompteVerse = acompte;
+
+              /* Mettre à jour l'entrée history la plus récente de type 'facture' */
+              var hist = sj9('yama_history_v3', []);
+              var fact = hist.find(function(h){ return h && h.docType==='facture'; });
+              if(fact && !(parseFloat(fact.acompteVerse||0) > 0)){
+                fact.acompteVerse = String(acompte);
+                wj9('yama_history_v3', hist);
+              }
+            }catch(x){}
+          }
+
+          if(result && typeof result.then==='function'){
+            return result.then(function(v){ fix(); return v; });
+          } else {
+            setTimeout(fix, 400);
+            return result;
+          }
+        };
+        window.generateSmartInvoiceFromDevis.__v9 = true;
+        clearInterval(iv);
+      }
+      if(tries>40) clearInterval(iv);
+    }, 380);
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     5. ARCHIVE VISUELLE — CSS + MutationObserver sur #devisList
+        Factures payées → section repliable "Archivées"
+     ══════════════════════════════════════════════════════ */
+  var CSS9 = [
+    '.yf-arch-wrap{border-top:1px solid rgba(62,207,142,.15);margin-top:10px;padding-top:2px;}',
+    '.yf-arch-toggle{display:flex;align-items:center;gap:7px;padding:8px 14px;font-size:11px;',
+    'font-weight:700;letter-spacing:.7px;color:rgba(62,207,142,.65);text-transform:uppercase;',
+    'cursor:pointer;user-select:none;background:none;border:none;width:100%;text-align:left;}',
+    '.yf-arch-toggle::before{content:"▾";font-size:10px;transition:transform .2s;}',
+    '.yf-arch-toggle.collapsed::before{transform:rotate(-90deg);}',
+    '.yf-arch-items.hidden .yama-facture-item{display:none!important;}',
+    '.yama-facture-item.v9-paid{',
+    '  border-color:rgba(62,207,142,.2)!important;',
+    '  background:linear-gradient(135deg,rgba(12,20,16,.95),rgba(10,18,12,.95))!important;',
+    '}',
+    '.yama-facture-item.v9-paid .devis-item-num{opacity:.65;}',
+    '.yama-facture-item.v9-paid .devis-item-amount{color:rgba(62,207,142,.75)!important;}',
+    '.v9-paid-stamp{font-size:10px;font-weight:700;letter-spacing:.5px;color:rgba(62,207,142,.6);',
+    'padding:2px 7px;border:1px solid rgba(62,207,142,.2);border-radius:4px;',
+    'background:rgba(62,207,142,.06);margin-left:6px;vertical-align:middle;}',
+  ].join('');
+  var st9 = document.createElement('style');
+  st9.textContent = CSS9;
+  document.head.appendChild(st9);
+
+  var _archCollapsed = false; /* état mémorisé entre renders */
+
+  function enhanceFactureCards(){
+    var list = document.getElementById('devisList');
+    if(!list || !list.querySelector('.yama-facture-item')) return;
+    /* Déjà traité ce render ? */
+    if(list.querySelector('.yf-arch-wrap')) return;
+
+    var items = list.querySelectorAll('.yama-facture-item');
+    var paid   = [], active = [];
+
+    items.forEach(function(item){
+      /* Détecter factures payées via badge ou style opacity */
+      var hasPaidBadge = item.querySelector('.status-badge.accepted');
+      var hasOpacity   = (item.style.opacity && parseFloat(item.style.opacity) < 0.9);
+      if(hasPaidBadge || hasOpacity){
+        item.classList.add('v9-paid');
+        paid.push(item);
+      } else {
+        active.push(item);
+      }
+    });
+
+    if(paid.length === 0) return;
+
+    /* Créer la section archive */
+    var wrap = document.createElement('div');
+    wrap.className = 'yf-arch-wrap';
+
+    var btn = document.createElement('button');
+    btn.className = 'yf-arch-toggle' + (_archCollapsed ? ' collapsed' : '');
+    btn.type = 'button';
+    btn.innerHTML = '&nbsp; Payées · Archivées ('+paid.length+')';
+    btn.onclick = function(){
+      _archCollapsed = !_archCollapsed;
+      btn.classList.toggle('collapsed', _archCollapsed);
+      archItems.classList.toggle('hidden', _archCollapsed);
+    };
+
+    var archItems = document.createElement('div');
+    archItems.className = 'yf-arch-items' + (_archCollapsed ? ' hidden' : '');
+
+    paid.forEach(function(item){
+      /* Ajouter un tampon "ARCHIVÉE" si pas encore présent */
+      var numEl = item.querySelector('.devis-item-num');
+      if(numEl && !numEl.querySelector('.v9-paid-stamp')){
+        var stamp = document.createElement('span');
+        stamp.className = 'v9-paid-stamp';
+        stamp.textContent = 'ARCHIVÉE';
+        numEl.appendChild(stamp);
+      }
+      archItems.appendChild(item);
+    });
+
+    wrap.appendChild(btn);
+    wrap.appendChild(archItems);
+    list.appendChild(wrap);
+  }
+
+  /* Observer les modifications du #devisList pour relancer l'enhancement */
+  (function setupObserver9(){
+    function observe(listEl){
+      var obs = new MutationObserver(function(mutations){
+        var added = mutations.some(function(m){ return m.addedNodes.length > 0; });
+        if(added) setTimeout(enhanceFactureCards, 120);
+      });
+      obs.observe(listEl, {childList:true});
+    }
+    function tryBind(){
+      var el = document.getElementById('devisList');
+      if(el){ observe(el); setTimeout(enhanceFactureCards, 800); return; }
+      setTimeout(tryBind, 600);
+    }
+    tryBind();
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     6. LOG
+     ══════════════════════════════════════════════════════ */
+  setTimeout(function(){
+    console.info('[YAMA V9] Sync V37↔V12 · Acompte malléable · Archive visuelle · Fix acompteVerse — actif.');
+  }, 1800);
+
+})();
+</script>
 </body>
 </html>
