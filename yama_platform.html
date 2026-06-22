@@ -37372,5 +37372,202 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
 
 })();
 </script>
+<script id="yama-platform-v8">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V8 — Moteur de cohérence : TVA · Échéances · Alertes Marge
+   ═══════════════════════════════════════════════════════════════════════
+   1. ageBatiment → TVA sync sur toutes les lignes existantes
+   2. initDefaults patché → durée validité depuis Paramètres
+   3. yama-settings-changed → recalcul dateValidite si vide
+   4. Alerte marge live → bannière si marge < seuil recommandé
+   5. Sync dot mis à jour
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V8__) return;
+  window.__YAMA_PLATFORM_V8__ = true;
+
+  /* ── HELPERS ─────────────────────────────────────────────────────── */
+  function gs(key){ return (typeof getSetting==='function') ? getSetting(key) : null; }
+  function toast8(msg){ if(typeof showToast==='function') showToast(msg); }
+  function parseEur(str){
+    return parseFloat(String(str).replace(/\s/g,'').replace(',','.').replace(/[^0-9.-]/g,'')) || 0;
+  }
+
+  /* ══════════════════════════════════════════════════════
+     1. AGEBATIMENT → TVA — synchronisation sur toutes les lignes
+     ══════════════════════════════════════════════════════ */
+  document.addEventListener('change', function(ev){
+    if(!ev.target || ev.target.id !== 'ageBatiment') return;
+    var newTva = ev.target.value === 'plus10' ? '0.06' : '0.21';
+    var container = document.getElementById('lignesClient');
+    if(!container) return;
+    var rows = container.querySelectorAll('.ligne');
+    var updated = 0;
+    rows.forEach(function(row){
+      var selects = row.querySelectorAll('select');
+      var tvaSelect = selects[1]; /* 2e select = TVA (1er = unité) */
+      if(tvaSelect && tvaSelect.value !== newTva){
+        tvaSelect.value = newTva;
+        /* Déclencher le listener de la ligne → met à jour state.lignesClient */
+        tvaSelect.dispatchEvent(new Event('change', {bubbles:true}));
+        updated++;
+      }
+    });
+    if(typeof window.recalcTotals === 'function') window.recalcTotals();
+    if(updated > 0){
+      toast8('TVA mise à jour sur '+updated+' ligne'+(updated>1?'s':'')+
+             ' → '+(ev.target.value==='plus10'?'6% (bât. >10 ans)':'21% (bât. ≤10 ans)'));
+    }
+  });
+
+  /* ══════════════════════════════════════════════════════
+     2. PATCH initDefaults — durée validité depuis Paramètres
+     ══════════════════════════════════════════════════════ */
+  (function patchInitDefaults(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.initDefaults==='function' && !window.initDefaults.__v8){
+        window.initDefaults = function(){
+          var today = new Date().toISOString().split('T')[0];
+          var emEl  = document.getElementById('dateEmission');
+          var vaEl  = document.getElementById('dateValidite');
+          if(emEl && !emEl.value) emEl.value = today;
+          if(vaEl && !vaEl.value){
+            var days = parseInt(gs('devis.dureeValiditeJours'))||30;
+            var d = new Date();
+            d.setDate(d.getDate() + days);
+            vaEl.value = d.toISOString().split('T')[0];
+          }
+        };
+        window.initDefaults.__v8 = true;
+        clearInterval(iv);
+      }
+      if(tries > 40) clearInterval(iv);
+    }, 300);
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     3. SETTINGS CHANGED → recalculer dateValidite si le champ est vide
+     ══════════════════════════════════════════════════════ */
+  document.addEventListener('yama-settings-changed', function(){
+    var vaEl = document.getElementById('dateValidite');
+    var emEl = document.getElementById('dateEmission');
+    if(vaEl && emEl && !vaEl.value){
+      var days = parseInt(gs('devis.dureeValiditeJours'))||30;
+      var base = emEl.value ? new Date(emEl.value) : new Date();
+      base.setDate(base.getDate() + days);
+      vaEl.value = base.toISOString().split('T')[0];
+    }
+  });
+
+  /* ══════════════════════════════════════════════════════
+     4. ALERTE MARGE LIVE — bannière flottante si marge sous seuil
+     ══════════════════════════════════════════════════════ */
+  var TIERS_V8 = [
+    { max:500,       rec:40 },
+    { max:1000,      rec:38 },
+    { max:2000,      rec:35 },
+    { max:5000,      rec:30 },
+    { max:10000,     rec:25 },
+    { max:Infinity,  rec:20 }
+  ];
+
+  function getMargeBanner(){
+    var b = document.getElementById('ym-marge-alert-banner');
+    if(b) return b;
+    b = document.createElement('div');
+    b.id = 'ym-marge-alert-banner';
+    b.style.cssText = [
+      'display:none',
+      'position:fixed',
+      'top:68px',
+      'left:50%',
+      'transform:translateX(-50%)',
+      'z-index:2000',
+      'background:linear-gradient(135deg,rgba(231,76,60,.94),rgba(192,57,43,.94))',
+      'color:#fff',
+      'padding:10px 22px',
+      'border-radius:10px',
+      'font-size:13px',
+      'font-weight:600',
+      'box-shadow:0 6px 30px rgba(0,0,0,.6)',
+      'backdrop-filter:blur(8px)',
+      '-webkit-backdrop-filter:blur(8px)',
+      'pointer-events:none',
+      'transition:opacity .3s ease',
+      'max-width:440px',
+      'text-align:center',
+      'white-space:nowrap'
+    ].join(';');
+    document.body.appendChild(b);
+    return b;
+  }
+
+  var _v8MargeKey = null;
+  function checkMargeAlert(totalHT, margePCT){
+    var banner = getMargeBanner();
+    if(totalHT <= 0){ banner.style.display='none'; _v8MargeKey=null; return; }
+    var tier = TIERS_V8.find(function(t){ return totalHT <= t.max; });
+    if(!tier){ banner.style.display='none'; return; }
+    if(margePCT < tier.rec - 2){ /* tolérance 2 pts */
+      var key = 'below:'+tier.rec+':'+Math.round(margePCT);
+      if(_v8MargeKey !== key){
+        _v8MargeKey = key;
+        banner.textContent = '⚠️  Marge '+margePCT.toFixed(1)+'% — en dessous du seuil recommandé ('+tier.rec+'%) pour cette tranche';
+        banner.style.opacity = '1';
+        banner.style.display = 'block';
+        clearTimeout(window.__ymMargeBannerT);
+        window.__ymMargeBannerT = setTimeout(function(){
+          banner.style.opacity = '0';
+          setTimeout(function(){ banner.style.display='none'; _v8MargeKey=null; }, 320);
+        }, 7000);
+      }
+    } else {
+      _v8MargeKey = null;
+      banner.style.opacity = '0';
+      setTimeout(function(){ if(!_v8MargeKey) banner.style.display='none'; }, 320);
+    }
+  }
+
+  /* Wrap recalcTotals pour lire marge après chaque recalcul */
+  (function pollRecalcV8(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.recalcTotals==='function' && !window.recalcTotals.__v8){
+        var _orig = window.recalcTotals;
+        window.recalcTotals = function(){
+          var r = _orig.apply(this, arguments);
+          try{
+            var vendEl  = document.getElementById('r-vendu');
+            var pctEl   = document.getElementById('r-marge-pct');
+            var totalHT = vendEl  ? parseEur(vendEl.textContent)         : 0;
+            var margePCT= pctEl   ? parseFloat(pctEl.textContent)||0     : 0;
+            checkMargeAlert(totalHT, margePCT);
+          }catch(x){}
+          return r;
+        };
+        window.recalcTotals.__v8 = true;
+        clearInterval(iv);
+      }
+      if(tries > 40) clearInterval(iv);
+    }, 380);
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     5. SYNC DOT + LOG
+     ══════════════════════════════════════════════════════ */
+  setTimeout(function(){
+    var dot = document.getElementById('v6-sync-dot');
+    if(dot){
+      dot.className = 'v6-sync-ok';
+      dot.title = 'Cohérence V8 — TVA · Échéances · Acompte · Marge';
+    }
+    console.info('[YAMA V8] Cohérence TVA + Échéances + Alertes Marge — actif.');
+  }, 2400);
+
+})();
+</script>
 </body>
 </html>
