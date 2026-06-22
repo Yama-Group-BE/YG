@@ -37887,5 +37887,171 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
 
 })();
 </script>
+
+<script id="yama-platform-v10">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V10 — Cohérence Acompte Versé
+   1. recalcTotals() : si #acompteVerse > 0 → override r-acompte / r-solde
+   2. Modale transformation facture (v12InvoicePaidAmount/PayStatus) → sync #acompteVerse
+   3. Post-save V37 → sync #acompteVerse + recalc
+   4. Label "versé : X€" + bouton reset vers mode %
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V10__) return;
+  window.__YAMA_PLATFORM_V10__ = true;
+
+  /* ── HELPERS ─────────────────────────────────────────────────────── */
+  function fmt10(n){
+    return new Intl.NumberFormat('fr-BE',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n||0)+' €';
+  }
+  function parseEur10(str){
+    return parseFloat(String(str).replace(/\s/g,'').replace(',','.').replace(/[^0-9.-]/g,'')) || 0;
+  }
+  function getAcompteVerse(){
+    var el = document.getElementById('acompteVerse');
+    return el ? (parseFloat(el.value)||0) : 0;
+  }
+  function setAcompteVerse(v){
+    var el = document.getElementById('acompteVerse');
+    if(el) el.value = v > 0 ? v.toFixed(2) : '';
+    if(v > 0) window.__ytfAcompteVerse = v;
+  }
+
+  /* ══════════════════════════════════════════════════════
+     1. WRAP recalcTotals — override acompte si montant réel
+     ══════════════════════════════════════════════════════ */
+  (function patchRecalc10(){
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if(typeof window.recalcTotals==='function' && !window.recalcTotals.__v10){
+        var _orig = window.recalcTotals;
+        window.recalcTotals = function(){
+          var r = _orig.apply(this, arguments);
+          try{
+            var verse = getAcompteVerse();
+            var ttcEl = document.getElementById('r-ttc');
+            var ttc   = ttcEl ? parseEur10(ttcEl.textContent) : 0;
+            if(verse > 0 && ttc > 0){
+              var solde = Math.max(0, ttc - verse);
+              var elAc  = document.getElementById('r-acompte');
+              var elSol = document.getElementById('r-solde');
+              if(elAc)  elAc.textContent  = fmt10(verse);
+              if(elSol) elSol.textContent = fmt10(solde);
+              /* Griser le champ % — V7 vient de le recréer */
+              var pctInp = document.getElementById('ymCalcAcomptePct');
+              if(pctInp){ pctInp.disabled = true; pctInp.style.opacity = '0.4'; pctInp.title = 'Mode montant réel — cliquez sur « Réinitialiser % » pour revenir'; }
+              /* Badge versé + lien reset */
+              var h3 = document.getElementById('acompte-label-h3');
+              if(h3 && !document.getElementById('v10-acompte-badge')){
+                var badge = document.createElement('span');
+                badge.id = 'v10-acompte-badge';
+                badge.style.cssText = 'display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:#C9A84C;margin-left:8px;vertical-align:middle;';
+                badge.innerHTML =
+                  '<span id="v10-verse-amt" style="background:rgba(201,168,76,.14);border:1px solid rgba(201,168,76,.35);border-radius:5px;padding:2px 7px;">'+fmt10(verse)+'</span>'+
+                  '<span style="font-size:10.5px;color:rgba(255,255,255,.4);cursor:pointer;text-decoration:underline;font-weight:400;" onclick="window.ymV10ResetAcompte()">Réinitialiser %</span>';
+                h3.appendChild(badge);
+              } else if(h3){
+                var amtEl = document.getElementById('v10-verse-amt');
+                if(amtEl) amtEl.textContent = fmt10(verse);
+              }
+            } else {
+              /* Mode % normal — nettoyer badge */
+              var old = document.getElementById('v10-acompte-badge');
+              if(old) old.remove();
+              var pctInp2 = document.getElementById('ymCalcAcomptePct');
+              if(pctInp2){ pctInp2.disabled = false; pctInp2.style.opacity = ''; pctInp2.title = ''; }
+            }
+          }catch(x){ console.warn('[V10] recalcTotals patch:', x); }
+          return r;
+        };
+        window.recalcTotals.__v10 = true;
+        clearInterval(iv);
+      }
+      if(tries > 50) clearInterval(iv);
+    }, 350);
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     2. Reset → mode %
+     ══════════════════════════════════════════════════════ */
+  window.ymV10ResetAcompte = function(){
+    setAcompteVerse(0);
+    window.__ytfAcompteVerse = 0;
+    var old = document.getElementById('v10-acompte-badge');
+    if(old) old.remove();
+    if(typeof window.recalcTotals==='function') window.recalcTotals();
+  };
+
+  /* ══════════════════════════════════════════════════════
+     3. Écoute modale transformation facture
+        (v12InvoicePaidAmount / v12InvoicePayStatus)
+     ══════════════════════════════════════════════════════ */
+  function syncFromModal(){
+    var status = (document.getElementById('v12InvoicePayStatus')||{}).value || '';
+    if(status === 'unpaid'){
+      setAcompteVerse(0);
+    } else {
+      var amt = parseFloat((document.getElementById('v12InvoicePaidAmount')||{}).value) || 0;
+      if(amt > 0) setAcompteVerse(amt);
+      else setAcompteVerse(0);
+    }
+    if(typeof window.recalcTotals==='function') window.recalcTotals();
+  }
+
+  document.addEventListener('input', function(e){
+    if(e.target && (e.target.id==='v12InvoicePaidAmount' || e.target.id==='v12InvoicePayStatus')){
+      syncFromModal();
+    }
+  }, true);
+
+  document.addEventListener('change', function(e){
+    if(e.target && (e.target.id==='v12InvoicePaidAmount' || e.target.id==='v12InvoicePayStatus')){
+      syncFromModal();
+    }
+  }, true);
+
+  /* ══════════════════════════════════════════════════════
+     4. Post-save V37 → écrire montantPaye dans #acompteVerse
+     ══════════════════════════════════════════════════════ */
+  (function patchV37Save10(){
+    var tries = 0;
+    var iv = setInterval(function(){
+      tries++;
+      if(typeof window.v37SavePaiement==='function' && !window.v37SavePaiement.__v10){
+        var _orig = window.v37SavePaiement;
+        window.v37SavePaiement = function(){
+          _orig.apply(this, arguments);
+          try{
+            var docNum = window._v37PmtDocNum || '';
+            if(docNum){
+              setTimeout(function(){
+                try{
+                  var pmts = JSON.parse(localStorage.getItem('yama_paiements_v1')||'{}');
+                  var p    = pmts[docNum] || {};
+                  var montant = parseFloat(p.montantPaye) || 0;
+                  setAcompteVerse(montant > 0 ? montant : 0);
+                  if(typeof window.recalcTotals==='function') window.recalcTotals();
+                }catch(x){}
+              }, 150);
+            }
+          }catch(x){ console.warn('[V10] v37SavePaiement patch:', x); }
+        };
+        window.v37SavePaiement.__v10 = true;
+        clearInterval(iv);
+      }
+      if(tries > 50) clearInterval(iv);
+    }, 350);
+  })();
+
+  /* ══════════════════════════════════════════════════════
+     5. LOG
+     ══════════════════════════════════════════════════════ */
+  setTimeout(function(){
+    console.info('[YAMA V10] Cohérence acompte versé — modale + V37 + calculateur — actif.');
+  }, 2200);
+
+})();
+</script>
 </body>
 </html>
