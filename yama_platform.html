@@ -35844,5 +35844,695 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
 
 })();
 </script>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     PLATFORM V5 — Rapports RC-26-XXX · Guide Marges · PDF Generation
+     ══════════════════════════════════════════════════════════════════ -->
+<script id="yama-platform-v5">
+(function(){
+  if(window.__YAMA_PLATFORM_V5__) return;
+  window.__YAMA_PLATFORM_V5__ = true;
+
+  /* ─── UTILITIES ─── */
+  function e(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function getH(){ try{ return JSON.parse(localStorage.getItem('yama_history_v3')||'[]'); }catch(x){ return []; } }
+  function saveH(arr){ localStorage.setItem('yama_history_v3', JSON.stringify(arr)); }
+  function poll5(fn,d,mx){ var t=0,iv=setInterval(function(){ t+=d; if(fn()===true||t>=mx) clearInterval(iv); },d); }
+  function fmtLong(s){ if(!s) return ''; try{ return new Date(s).toLocaleDateString('fr-BE',{day:'numeric',month:'long',year:'numeric'}); }catch(x){ return s; } }
+  function nl2br(s){ return String(s||'').replace(/\n/g,'<br>'); }
+  function toast5(msg,type){ try{ if(typeof showToast==='function') showToast(msg,type||'success'); }catch(x){} }
+  function getComp(){
+    try{
+      return {
+        nom:   (typeof getSetting==='function' ? getSetting('entreprise.nom')  : '')||'YAMA-GROUP',
+        adresse:(typeof getSetting==='function' ? getSetting('entreprise.adresse'):'') ||'Budasteenweg 32',
+        cp:    (typeof getSetting==='function' ? getSetting('entreprise.codePostal'):'') ||'1830',
+        ville: (typeof getSetting==='function' ? getSetting('entreprise.ville'):'') ||'Machelen',
+        tel:   (typeof getSetting==='function' ? getSetting('entreprise.telephone'):'') ||'0489 33 77 00',
+        email: (typeof getSetting==='function' ? getSetting('entreprise.email'):'') ||'info@yama-group.be'
+      };
+    }catch(x){ return {nom:'YAMA-GROUP',adresse:'Budasteenweg 32',cp:'1830',ville:'Machelen',tel:'0489 33 77 00',email:'info@yama-group.be'}; }
+  }
+
+  /* ─── RAPPORT NUMBERING ─── */
+  var RKEY = 'yama_rapport_counter';
+  function getRCNum(){ var yy=String(new Date().getFullYear()).slice(2); return 'RC-'+yy+'-'+parseInt(localStorage.getItem(RKEY)||'101'); }
+  function incrRC(){ localStorage.setItem(RKEY, parseInt(localStorage.getItem(RKEY)||'101')+1); }
+  window.getRapportNum = getRCNum;
+
+  /* ─── CSS V5 ─── */
+  (function(){
+    var s=document.createElement('style'); s.id='yama-v5-styles';
+    s.textContent=
+      '#yama-rapport-create-modal .yama-modal-box,#yama-rapport-view .yama-modal-box{max-width:700px;width:95vw;max-height:90vh;overflow-y:auto;}'+
+      '.ymrm-section{background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:14px;}'+
+      '.ymrm-section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}'+
+      '.ymrm-section-label{font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);}'+
+      '.ymrm-add-btn{padding:4px 12px;border-radius:6px;border:1px solid rgba(201,168,76,.4);background:rgba(201,168,76,.08);color:var(--gold);font-size:11px;font-weight:700;cursor:pointer;}'+
+      '.ymrm-item{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:12px 12px 12px 12px;margin-bottom:8px;position:relative;}'+
+      '.ymrm-item-del{position:absolute;top:8px;right:8px;background:rgba(231,76,60,.12);border:1px solid rgba(231,76,60,.3);color:#e74c3c;border-radius:5px;width:22px;height:22px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;font-weight:900;line-height:1;padding:0;}'+
+      '.ymrm-row{display:flex;gap:10px;margin-bottom:8px;}'+
+      '.ymrm-field{flex:1;}'+
+      '.ymrm-field label{display:block;font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}'+
+      '.ymrm-field input,.ymrm-field textarea,.ymrm-field select{width:100%;background:rgba(255,255,255,.06);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:7px 10px;font-size:12px;font-family:inherit;}'+
+      '.ymrm-field textarea{resize:vertical;min-height:62px;}'+
+      '.ymrm-letter{font-size:13px;font-weight:900;color:var(--gold);width:28px;text-align:center;align-self:center;flex-shrink:0;}'+
+      '.yama-rapport-item{background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:12px;padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:border-color .15s;}'+
+      '.yama-rapport-item:hover{border-color:rgba(201,168,76,.5);}'+
+      '.yri-head{display:flex;align-items:center;gap:10px;}'+
+      '.yri-num{font-size:13px;font-weight:900;color:var(--gold);min-width:100px;}'+
+      '.yri-client{font-size:14px;font-weight:700;color:var(--text);flex:1;}'+
+      '.yri-date{font-size:11px;color:var(--text3);}'+
+      '.yri-sub{font-size:11px;color:var(--text3);margin-top:4px;}'+
+      '.yri-actions{display:flex;gap:8px;margin-top:10px;}'+
+      '#yama-margin-guide .yama-modal-box{max-width:720px;width:95vw;max-height:90vh;overflow-y:auto;}';
+    document.head.appendChild(s);
+  })();
+
+  /* ─── FORM ITEM BUILDERS ─── */
+  var _cIdx=0, _tIdx=0, _pIdx=0;
+
+  function _cItem(idx, letter){
+    return '<div class="ymrm-item" id="ymr-c-'+idx+'">'+
+      '<button type="button" class="ymrm-item-del" onclick="ymrDelConstat('+idx+')">×</button>'+
+      '<div class="ymrm-row"><div class="ymrm-letter" id="ymr-cl-'+idx+'">'+letter+'</div>'+
+      '<div class="ymrm-field"><label>Titre</label><input type="text" id="ymr-ct-'+idx+'" placeholder="ex: Chambre de visite non étanche"></div></div>'+
+      '<div class="ymrm-field" style="margin-left:38px;"><label>Description</label><textarea id="ymr-cd-'+idx+'" placeholder="Détails de la constatation..."></textarea></div>'+
+      '</div>';
+  }
+  function _tItem(idx, num){
+    return '<div class="ymrm-item" id="ymr-t-'+idx+'">'+
+      '<button type="button" class="ymrm-item-del" onclick="ymrDelTravaux('+idx+')">×</button>'+
+      '<div class="ymrm-row"><div class="ymrm-letter" id="ymr-tl-'+idx+'">'+num+'</div>'+
+      '<div class="ymrm-field"><label>Titre des travaux</label><input type="text" id="ymr-tt-'+idx+'" placeholder="ex: Reprise de l\'évacuation en partie haute"></div></div>'+
+      '<div class="ymrm-field" style="margin-left:38px;"><label>Description</label><textarea id="ymr-td-'+idx+'" placeholder="Détail des opérations..."></textarea></div>'+
+      '</div>';
+  }
+  function _pItem(idx, num, total){
+    return '<div class="ymrm-item" id="ymr-p-'+idx+'">'+
+      '<button type="button" class="ymrm-item-del" onclick="ymrDelPhoto('+idx+')">×</button>'+
+      '<div class="ymrm-row"><div class="ymrm-letter" style="font-size:10px;width:32px;" id="ymr-pl-'+idx+'">'+num+'/'+total+'</div>'+
+      '<div class="ymrm-field"><label>Titre de la photo</label><input type="text" id="ymr-pt-'+idx+'" placeholder="ex: Chambre de visite — ouverture sol"></div></div>'+
+      '<div class="ymrm-field" style="margin-left:42px;"><label>Légende / Description</label><textarea id="ymr-pd-'+idx+'" rows="2" placeholder="Ce que montre la photo..."></textarea></div>'+
+      '</div>';
+  }
+
+  window.ymrAddConstat = function(){
+    _cIdx++;
+    var n = document.querySelectorAll('#ymr-constats-list .ymrm-item').length;
+    var L = 'ABCDEFGHIJKLMNOP';
+    document.getElementById('ymr-constats-list').insertAdjacentHTML('beforeend', _cItem(_cIdx, L[n]||String.fromCharCode(65+n)));
+  };
+  window.ymrDelConstat = function(idx){
+    var el=document.getElementById('ymr-c-'+idx); if(el) el.remove();
+    var L='ABCDEFGHIJKLMNOP';
+    document.querySelectorAll('#ymr-constats-list .ymrm-item').forEach(function(it,i){ var lb=it.querySelector('.ymrm-letter'); if(lb) lb.textContent=L[i]||String.fromCharCode(65+i); });
+  };
+  window.ymrAddTravaux = function(){
+    _tIdx++;
+    var n = document.querySelectorAll('#ymr-travaux-list .ymrm-item').length;
+    document.getElementById('ymr-travaux-list').insertAdjacentHTML('beforeend', _tItem(_tIdx, n+1));
+  };
+  window.ymrDelTravaux = function(idx){
+    var el=document.getElementById('ymr-t-'+idx); if(el) el.remove();
+    document.querySelectorAll('#ymr-travaux-list .ymrm-item').forEach(function(it,i){ var lb=it.querySelector('.ymrm-letter'); if(lb) lb.textContent=i+1; });
+  };
+  window.ymrAddPhoto = function(){
+    _pIdx++;
+    var n = document.querySelectorAll('#ymr-photos-list .ymrm-item').length;
+    document.getElementById('ymr-photos-list').insertAdjacentHTML('beforeend', _pItem(_pIdx, n+1, n+1));
+    var all=document.querySelectorAll('#ymr-photos-list .ymrm-item');
+    all.forEach(function(it,i){ var lb=it.querySelector('.ymrm-letter'); if(lb) lb.textContent=(i+1)+'/'+all.length; });
+  };
+  window.ymrDelPhoto = function(idx){
+    var el=document.getElementById('ymr-p-'+idx); if(el) el.remove();
+    var all=document.querySelectorAll('#ymr-photos-list .ymrm-item');
+    all.forEach(function(it,i){ var lb=it.querySelector('.ymrm-letter'); if(lb) lb.textContent=(i+1)+'/'+all.length; });
+  };
+
+  /* ─── CREATE MODAL ─── */
+  window.showCreateRapportModal = function(linkedDevisNum){
+    if(document.getElementById('yama-rapport-create-modal')) return;
+    var nextNum = getRCNum();
+    var today = new Date().toISOString().slice(0,10);
+    var pre = {clientNom:'', clientTel:'', clientAdresse:'', chantierAdresse:'', devisNum:''};
+    if(linkedDevisNum){
+      var dv = getH().find(function(h){ return h && h.docNum===linkedDevisNum; });
+      if(dv){
+        pre.clientNom = dv.clientNom||'';
+        pre.clientAdresse = dv.clientAdresse||'';
+        pre.chantierAdresse = [dv.chantierAdresse||'', (dv.chantierCodePostal||dv.chantierCP||''), (dv.chantierVille||'')].filter(Boolean).join(', ');
+        pre.devisNum = linkedDevisNum;
+      }
+    }
+    _cIdx=0; _tIdx=0; _pIdx=0;
+    var html =
+      '<div id="yama-rapport-create-modal" class="yama-modal-overlay" onclick="if(event.target===this)window.closeRapportCreateModal()">'+
+      '<div class="yama-modal-box">'+
+      '<div class="yama-modal-title">📊 Nouveau rapport &nbsp;<span style="color:var(--gold);font-size:13px;">'+e(nextNum)+'</span></div>'+
+
+      // GENERAL
+      '<div class="ymrm-section">'+
+      '<div class="ymrm-section-head"><span class="ymrm-section-label">Informations générales</span></div>'+
+      '<div class="ymrm-row">'+
+      '<div class="ymrm-field"><label>Type de rapport</label><select id="ymr-type">'+
+      '<option value="constatation">Constatation des lieux</option>'+
+      '<option value="suivi">Suivi de chantier</option>'+
+      '<option value="reception">Réception de travaux</option>'+
+      '<option value="expertise">Rapport d\'expertise</option>'+
+      '</select></div>'+
+      '<div class="ymrm-field"><label>Date de visite</label><input type="date" id="ymr-date" value="'+today+'"></div>'+
+      '</div>'+
+      '<div class="ymrm-row">'+
+      '<div class="ymrm-field"><label>Devis lié (optionnel)</label><input type="text" id="ymr-devis" value="'+e(pre.devisNum)+'" placeholder="ex: D-26-101"></div>'+
+      '<div class="ymrm-field"><label>Objet de la visite</label><input type="text" id="ymr-objet" placeholder="ex: Constatation avant intervention"></div>'+
+      '</div>'+
+      '</div>'+
+
+      // CLIENT
+      '<div class="ymrm-section">'+
+      '<div class="ymrm-section-head"><span class="ymrm-section-label">Client & Chantier</span></div>'+
+      '<div class="ymrm-row">'+
+      '<div class="ymrm-field"><label>Nom / Société</label><input type="text" id="ymr-client-nom" value="'+e(pre.clientNom)+'" placeholder="Nom du client"></div>'+
+      '<div class="ymrm-field"><label>Téléphone</label><input type="text" id="ymr-client-tel" placeholder="0477 ..."></div>'+
+      '</div>'+
+      '<div class="ymrm-row">'+
+      '<div class="ymrm-field"><label>Adresse client</label><input type="text" id="ymr-client-adresse" value="'+e(pre.clientAdresse)+'" placeholder="Rue, numéro, CP Ville"></div>'+
+      '</div>'+
+      '<div class="ymrm-row">'+
+      '<div class="ymrm-field"><label>Adresse chantier</label><input type="text" id="ymr-chantier-adresse" value="'+e(pre.chantierAdresse)+'" placeholder="Adresse des travaux si différente"></div>'+
+      '</div>'+
+      '</div>'+
+
+      // SECTION 01 CONSTATATIONS
+      '<div class="ymrm-section">'+
+      '<div class="ymrm-section-head"><span class="ymrm-section-label">01 · Constatation de l\'état des lieux</span>'+
+      '<button type="button" class="ymrm-add-btn" onclick="ymrAddConstat()">+ Ajouter</button></div>'+
+      '<div class="ymrm-field" style="margin-bottom:10px;"><label>Phrase d\'introduction (optionnelle)</label><textarea id="ymr-intro" rows="2" placeholder="ex: Visite effectuée le… — X problématiques identifiées sur…"></textarea></div>'+
+      '<div id="ymr-constats-list">'+_cItem(0,'A')+'</div>'+
+      '</div>'+
+
+      // SECTION 02 TRAVAUX
+      '<div class="ymrm-section">'+
+      '<div class="ymrm-section-head"><span class="ymrm-section-label">02 · Travaux prévus</span>'+
+      '<button type="button" class="ymrm-add-btn" onclick="ymrAddTravaux()">+ Ajouter</button></div>'+
+      '<div id="ymr-travaux-list">'+_tItem(0,1)+'</div>'+
+      '</div>'+
+
+      // SECTION 03 PHOTOS
+      '<div class="ymrm-section">'+
+      '<div class="ymrm-section-head"><span class="ymrm-section-label">03 · Documentation photographique</span>'+
+      '<button type="button" class="ymrm-add-btn" onclick="ymrAddPhoto()">+ Photo</button></div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Décrivez chaque photo — les images réelles s\'insèrent lors de l\'impression</div>'+
+      '<div id="ymr-photos-list">'+_pItem(0,1,1)+'</div>'+
+      '</div>'+
+
+      // BUTTONS
+      '<div style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px;">'+
+      '<button class="yama-modal-btn secondary" onclick="window.closeRapportCreateModal()">Annuler</button>'+
+      '<button class="yama-modal-btn primary" onclick="window.saveRapport5()">💾 Enregistrer le rapport</button>'+
+      '</div>'+
+      '</div></div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+  };
+
+  window.closeRapportCreateModal = function(){ var m=document.getElementById('yama-rapport-create-modal'); if(m) m.remove(); };
+
+  /* ─── SAVE ─── */
+  window.saveRapport5 = function(){
+    var nom = (document.getElementById('ymr-client-nom')||{}).value||'';
+    if(!nom.trim()){ toast5('Nom du client obligatoire','error'); return; }
+    var constats=[], travaux=[], photos=[];
+    document.querySelectorAll('#ymr-constats-list .ymrm-item').forEach(function(it){
+      var id=it.id.replace('ymr-c-','');
+      var t=(document.getElementById('ymr-ct-'+id)||{}).value||'';
+      var d=(document.getElementById('ymr-cd-'+id)||{}).value||'';
+      var l=(document.getElementById('ymr-cl-'+id)||it.querySelector('.ymrm-letter')||{}).textContent||'';
+      if(t.trim()||d.trim()) constats.push({lettre:l,titre:t,description:d});
+    });
+    document.querySelectorAll('#ymr-travaux-list .ymrm-item').forEach(function(it,i){
+      var id=it.id.replace('ymr-t-','');
+      var t=(document.getElementById('ymr-tt-'+id)||{}).value||'';
+      var d=(document.getElementById('ymr-td-'+id)||{}).value||'';
+      if(t.trim()||d.trim()) travaux.push({numero:i+1,titre:t,description:d});
+    });
+    document.querySelectorAll('#ymr-photos-list .ymrm-item').forEach(function(it,i){
+      var id=it.id.replace('ymr-p-','');
+      var t=(document.getElementById('ymr-pt-'+id)||{}).value||'';
+      var d=(document.getElementById('ymr-pd-'+id)||{}).value||'';
+      if(t.trim()||d.trim()) photos.push({numero:i+1,titre:t,description:d});
+    });
+    var docNum=getRCNum();
+    var r={
+      docType:'rapport', docNum:docNum,
+      typeRapport:(document.getElementById('ymr-type')||{}).value||'constatation',
+      dateVisite:(document.getElementById('ymr-date')||{}).value||new Date().toISOString().slice(0,10),
+      objet:(document.getElementById('ymr-objet')||{}).value||'',
+      intro:(document.getElementById('ymr-intro')||{}).value||'',
+      devisNum:(document.getElementById('ymr-devis')||{}).value||'',
+      clientNom:nom,
+      clientTel:(document.getElementById('ymr-client-tel')||{}).value||'',
+      clientAdresse:(document.getElementById('ymr-client-adresse')||{}).value||'',
+      chantierAdresse:(document.getElementById('ymr-chantier-adresse')||{}).value||'',
+      constatations:constats, travauxPrevus:travaux, photos:photos,
+      savedAt:Date.now()
+    };
+    var hist=getH(); hist.unshift(r); saveH(hist); incrRC();
+    window.closeRapportCreateModal();
+    toast5('✅ Rapport '+docNum+' enregistré');
+    try{ if(typeof renderDevisTab==='function') renderDevisTab(); }catch(x){}
+  };
+
+  /* ─── PDF HTML GENERATOR ─── */
+  function generateRapportHTML(r){
+    var comp=getComp();
+    var TITLES={constatation:'RAPPORT DE CONSTATATION DE LIEUX',suivi:'RAPPORT DE SUIVI DE CHANTIER',reception:'RAPPORT DE RÉCEPTION DE TRAVAUX',expertise:"RAPPORT D'EXPERTISE"};
+    var SUBS={constatation:'Avant intervention',suivi:'État d\'avancement',reception:'Fin de chantier',expertise:'Analyse technique'};
+    var title=TITLES[r.typeRapport]||TITLES.constatation;
+    var sub=SUBS[r.typeRapport]||'';
+    var dStr=fmtLong(r.dateVisite)||r.dateVisite||'';
+    var compLine=comp.nom+' | '+comp.adresse+', '+comp.cp+' '+comp.ville+' | '+comp.email+' | '+comp.tel;
+
+    // Dark header (repeats visually on each logical page)
+    var HDR='<div style="background:#1a1a2e;color:white;padding:16px 40px;display:flex;justify-content:space-between;align-items:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;">'+
+      '<div><div style="font-size:20px;font-weight:900;letter-spacing:3px;">'+e(comp.nom)+'</div>'+
+      '<div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:3px;">Construction &amp; Rénovation</div></div>'+
+      '<div style="text-align:right;"><div style="font-size:12px;font-weight:700;letter-spacing:1px;">'+e(title)+'</div>'+
+      '<div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:3px;">'+e(r.docNum)+' &nbsp;·&nbsp; '+dStr+'</div></div>'+
+      '</div>';
+    var FTR='<div style="text-align:center;font-size:9.5px;color:#aaa;border-top:1px solid #e5e5e5;padding:10px 40px;">'+e(compLine)+'</div>';
+
+    // Section header
+    function secHead(num,lbl){
+      return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;padding-bottom:9px;border-bottom:2.5px solid #1a1a2e;">'+
+        '<div style="background:#1a1a2e;color:white;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;border-radius:50%;flex-shrink:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;">'+num+'</div>'+
+        '<div style="font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:2.5px;color:#1a1a2e;">'+lbl+'</div>'+
+        '</div>';
+    }
+
+    // Constatations HTML
+    var constHtml='';
+    if(r.constatations&&r.constatations.length){
+      if(r.intro) constHtml+='<p style="font-size:11.5px;color:#333;line-height:1.75;margin-bottom:18px;">'+nl2br(e(r.intro))+'</p>';
+      r.constatations.forEach(function(c){
+        constHtml+='<div style="margin-bottom:16px;">'+
+          '<div style="margin-bottom:5px;">'+
+          '<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;background:#f0f0f0;border:1.5px solid #bbb;border-radius:50%;font-weight:900;font-size:11px;margin-right:9px;vertical-align:middle;color:#1a1a2e;">'+e(c.lettre)+'</span>'+
+          '<strong style="font-size:12.5px;color:#1a1a2e;">'+e(c.titre)+'</strong></div>'+
+          (c.description?'<div style="font-size:11.5px;color:#444;line-height:1.7;padding-left:31px;">'+nl2br(e(c.description))+'</div>':'')+
+          '</div>';
+      });
+    }
+
+    // Travaux HTML
+    var travHtml='';
+    if(r.travauxPrevus&&r.travauxPrevus.length){
+      r.travauxPrevus.forEach(function(t){
+        travHtml+='<div style="display:flex;gap:12px;margin-bottom:16px;">'+
+          '<div style="flex-shrink:0;width:24px;height:24px;background:#1a1a2e;color:white;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;border-radius:50%;margin-top:1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">'+t.numero+'</div>'+
+          '<div><div style="font-size:12.5px;font-weight:700;color:#1a1a2e;margin-bottom:4px;">'+e(t.titre)+'</div>'+
+          (t.description?'<div style="font-size:11.5px;color:#444;line-height:1.7;">'+nl2br(e(t.description))+'</div>':'')+
+          '</div></div>';
+      });
+    }
+
+    // Photos HTML — 2 per row, page break between rows
+    var photoRows='';
+    if(r.photos&&r.photos.length){
+      var total=r.photos.length;
+      for(var i=0;i<r.photos.length;i+=2){
+        var p1=r.photos[i], p2=r.photos[i+1];
+        function photoCard(p){
+          return '<div style="border:1px solid #ddd;border-radius:6px;overflow:hidden;page-break-inside:avoid;">'+
+            '<div style="background:#f5f5f5;height:180px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid #ddd;-webkit-print-color-adjust:exact;print-color-adjust:exact;">'+
+            '<span style="font-size:48px;">📷</span></div>'+
+            '<div style="padding:12px 16px;">'+
+            '<div style="font-size:9px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#999;margin-bottom:5px;">PHOTO '+p.numero+' / '+total+'</div>'+
+            '<div style="font-size:13px;font-weight:700;color:#1a1a2e;margin-bottom:6px;">'+e(p.titre)+'</div>'+
+            '<div style="font-size:11.5px;color:#555;line-height:1.6;">'+nl2br(e(p.description))+'</div>'+
+            '</div></div>';
+        }
+        photoRows+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;page-break-inside:avoid;">'+
+          photoCard(p1)+(p2?photoCard(p2):'<div></div>')+
+          '</div>';
+      }
+    }
+
+    // Signatures
+    var sigHtml='<div style="font-size:11.5px;color:#555;margin-bottom:28px;line-height:1.7;padding:12px 16px;background:#f9f9f9;border-radius:5px;border-left:3.5px solid #1a1a2e;">'+
+      'En signant ce document, le client reconnaît avoir pris connaissance du présent rapport de constatation et confirme l\'exactitude des informations consignées.'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:50px;">'+
+      '<div>'+
+      '<div style="font-size:10px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#1a1a2e;margin-bottom:8px;">Pour '+e(comp.nom)+'</div>'+
+      '<div style="font-size:11.5px;margin-bottom:20px;color:#444;">Date : '+dStr+'</div>'+
+      '<div style="height:65px;border-bottom:1px solid #ccc;margin-bottom:5px;"></div>'+
+      '<div style="font-size:9.5px;color:#aaa;text-align:center;">Nom &amp; Signature</div>'+
+      '</div>'+
+      '<div>'+
+      '<div style="font-size:10px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;color:#1a1a2e;margin-bottom:8px;">Le Client / La Cliente</div>'+
+      '<div style="font-size:11.5px;margin-bottom:20px;color:#444;">Date : _____ / _____ / _________</div>'+
+      '<div style="height:65px;border-bottom:1px solid #ccc;margin-bottom:5px;"></div>'+
+      '<div style="font-size:9.5px;color:#aaa;text-align:center;">Nom &amp; Signature</div>'+
+      '</div></div>';
+
+    return '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">'+
+      '<title>'+e(r.docNum)+' — '+e(r.clientNom)+'</title>'+
+      '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,Helvetica,sans-serif;background:white;color:#1a1a2e;}'+
+      '.content{padding:24px 40px 0;}'+
+      '@media print{.no-print{display:none!important;}@page{size:A4;margin:10mm 12mm;}}</style>'+
+      '</head><body>'+
+
+      // Print toolbar
+      '<div class="no-print" style="position:sticky;top:0;background:#1a1a2e;padding:10px 20px;display:flex;justify-content:space-between;align-items:center;z-index:9999;">'+
+      '<span style="color:white;font-weight:700;font-size:13px;">'+e(r.docNum)+' &mdash; '+e(r.clientNom)+'</span>'+
+      '<div style="display:flex;gap:10px;">'+
+      '<button onclick="window.print()" style="padding:8px 22px;background:#C9A84C;color:white;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">🖨️&nbsp; Imprimer / PDF</button>'+
+      '<button onclick="window.close()" style="padding:8px 16px;background:rgba(255,255,255,.1);color:white;border:1px solid rgba(255,255,255,.25);border-radius:6px;cursor:pointer;font-size:13px;">✕</button>'+
+      '</div></div>'+
+
+      HDR+
+
+      '<div class="content">'+
+
+      // Title block
+      '<div style="text-align:center;padding:22px 0 26px;border-bottom:2.5px solid #1a1a2e;margin-bottom:26px;">'+
+      '<div style="font-size:21px;font-weight:900;letter-spacing:4px;text-transform:uppercase;">'+e(title)+'</div>'+
+      (sub?'<div style="font-size:12px;color:#777;margin-top:7px;font-style:italic;">'+e(sub)+'</div>':'')+
+      '</div>'+
+
+      // Info grid
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px;">'+
+      '<div style="border:1px solid #ddd;padding:11px 14px;border-radius:5px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#999;font-weight:700;margin-bottom:4px;">N° Rapport</div><div style="font-size:13px;font-weight:700;">'+e(r.docNum)+'</div></div>'+
+      '<div style="border:1px solid #ddd;padding:11px 14px;border-radius:5px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#999;font-weight:700;margin-bottom:4px;">Date de visite</div><div style="font-size:13px;font-weight:700;">'+dStr+'</div></div>'+
+      (r.objet?'<div style="border:1px solid #ddd;padding:11px 14px;border-radius:5px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#999;font-weight:700;margin-bottom:4px;">Objet</div><div style="font-size:12px;font-weight:600;">'+e(r.objet)+'</div></div>':'')+
+      (r.chantierAdresse?'<div style="border:1px solid #ddd;padding:11px 14px;border-radius:5px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#999;font-weight:700;margin-bottom:4px;">Adresse chantier</div><div style="font-size:12px;font-weight:600;">'+e(r.chantierAdresse)+'</div></div>':'')+
+      '</div>'+
+
+      // Parties
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:26px;">'+
+      '<div style="border:1px solid #ddd;border-radius:5px;overflow:hidden;">'+
+      '<div style="background:#1a1a2e;color:white;padding:6px 14px;font-size:10px;font-weight:900;letter-spacing:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">CLIENT</div>'+
+      '<div style="padding:12px 14px;">'+
+      '<div style="margin-bottom:6px;font-size:11.5px;"><strong>Nom</strong> &nbsp; '+e(r.clientNom)+'</div>'+
+      (r.clientAdresse?'<div style="margin-bottom:6px;font-size:11.5px;"><strong>Adresse</strong> &nbsp; '+e(r.clientAdresse)+'</div>':'')+
+      (r.clientTel?'<div style="font-size:11.5px;"><strong>Téléphone</strong> &nbsp; '+e(r.clientTel)+'</div>':'')+
+      '</div></div>'+
+      '<div style="border:1px solid #ddd;border-radius:5px;overflow:hidden;">'+
+      '<div style="background:#1a1a2e;color:white;padding:6px 14px;font-size:10px;font-weight:900;letter-spacing:2px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">INTERVENANT</div>'+
+      '<div style="padding:12px 14px;">'+
+      '<div style="margin-bottom:6px;font-size:11.5px;"><strong>Société</strong> &nbsp; '+e(comp.nom)+'</div>'+
+      '<div style="margin-bottom:6px;font-size:11.5px;"><strong>Adresse</strong> &nbsp; '+e(comp.adresse)+', '+e(comp.cp)+' '+e(comp.ville)+'</div>'+
+      '<div style="font-size:11.5px;"><strong>Contact</strong> &nbsp; '+e(comp.tel)+' &nbsp;·&nbsp; '+e(comp.email)+'</div>'+
+      '</div></div>'+
+      '</div>'+
+
+      // Section 01
+      (constHtml?'<div style="margin-bottom:28px;">'+secHead('01','CONSTATATION DE L\'ÉTAT DES LIEUX')+constHtml+'</div>':'')+
+
+      // Section 02
+      (travHtml?'<div style="margin-bottom:28px;">'+secHead('02','TRAVAUX PRÉVUS')+travHtml+'</div>':'')+
+
+      // Section 03 — photos on new page
+      (photoRows?
+        '<div style="page-break-before:always;margin-bottom:28px;">'+
+        secHead('03','DOCUMENTATION PHOTOGRAPHIQUE')+
+        '<div style="font-size:11px;color:#666;margin-bottom:18px;font-style:italic;border-left:3px solid #1a1a2e;padding-left:12px;">'+
+        'Photographies prises lors de la visite du '+dStr+' — avant toute intervention.</div>'+
+        photoRows+'</div>':'')+
+
+      // Section 04 — signatures on new page
+      '<div style="page-break-before:always;margin-bottom:28px;">'+
+      secHead('04','SIGNATURES')+
+      sigHtml+'</div>'+
+
+      '</div>'+ // .content
+      FTR+
+      '</body></html>';
+  }
+
+  /* ─── PRINT ─── */
+  window.printRapport = function(docNum){
+    var r=getH().find(function(h){ return h&&h.docNum===docNum; });
+    if(!r){ toast5('Rapport introuvable','error'); return; }
+    var w=window.open('','_blank');
+    if(!w){ alert('Autorisez les popups pour générer le PDF'); return; }
+    w.document.write(generateRapportHTML(r));
+    w.document.close(); w.focus();
+    setTimeout(function(){ try{ w.print(); }catch(x){} },700);
+  };
+
+  /* ─── VIEW MODAL ─── */
+  window.showRapportDetail = function(docNum){
+    if(document.getElementById('yama-rapport-view')) return;
+    var r=getH().find(function(h){ return h&&h.docNum===docNum; });
+    if(!r) return;
+    var TL={constatation:'Constatation',suivi:'Suivi chantier',reception:'Réception travaux',expertise:'Expertise'};
+    var dStr=r.dateVisite?new Date(r.dateVisite).toLocaleDateString('fr-BE'):'—';
+    var meta=[
+      (r.constatations&&r.constatations.length)?r.constatations.length+' constat.':'',
+      (r.travauxPrevus&&r.travauxPrevus.length)?r.travauxPrevus.length+' travaux':'',
+      (r.photos&&r.photos.length)?r.photos.length+' photo(s)':''
+    ].filter(Boolean).join(' · ');
+
+    var html='<div id="yama-rapport-view" class="yama-modal-overlay" onclick="if(event.target===this)window.closeRapportView()">'+
+      '<div class="yama-modal-box">'+
+      '<div class="yama-modal-title">📊 '+e(r.docNum)+' — '+e(r.clientNom)+'</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">'+
+      '<div style="background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text3);margin-bottom:4px;">Type</div><div style="font-size:12px;font-weight:700;">'+e(TL[r.typeRapport]||r.typeRapport||'—')+'</div></div>'+
+      '<div style="background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text3);margin-bottom:4px;">Date visite</div><div style="font-size:12px;font-weight:700;">'+dStr+'</div></div>'+
+      (r.devisNum?'<div style="background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text3);margin-bottom:4px;">Devis lié</div><div style="font-size:12px;font-weight:700;color:var(--gold);">'+e(r.devisNum)+'</div></div>':'')+
+      '<div style="background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;"><div style="font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text3);margin-bottom:4px;">Chantier</div><div style="font-size:12px;font-weight:700;">'+e(r.chantierAdresse||'—')+'</div></div>'+
+      '</div>'+
+      (r.constatations&&r.constatations.length?'<div style="margin-bottom:14px;"><div style="font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Constatations</div>'+
+        r.constatations.map(function(c){ return '<div style="font-size:12px;padding:6px 0;border-bottom:1px solid var(--border);"><strong style="color:var(--gold);margin-right:8px;">'+e(c.lettre)+'</strong>'+e(c.titre)+'</div>'; }).join('')+'</div>':'')+
+      (r.travauxPrevus&&r.travauxPrevus.length?'<div style="margin-bottom:14px;"><div style="font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px;">Travaux prévus</div>'+
+        r.travauxPrevus.map(function(t){ return '<div style="font-size:12px;padding:6px 0;border-bottom:1px solid var(--border);"><strong style="color:var(--text2);margin-right:8px;">'+t.numero+'.</strong>'+e(t.titre)+'</div>'; }).join('')+'</div>':'')+
+      (meta?'<div style="font-size:11px;color:var(--text3);margin-bottom:16px;">'+e(meta)+'</div>':'')+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">'+
+      '<button class="yama-modal-btn" style="background:rgba(231,76,60,.12);border-color:rgba(231,76,60,.35);color:#e74c3c;" onclick="window.deleteRapport5(\''+docNum+'\')">🗑 Supprimer</button>'+
+      '<div style="display:flex;gap:10px;">'+
+      '<button class="yama-modal-btn secondary" onclick="window.closeRapportView()">Fermer</button>'+
+      '<button class="yama-modal-btn primary" onclick="window.closeRapportView();window.printRapport(\''+docNum+'\')">🖨️ Générer PDF</button>'+
+      '</div></div>'+
+      '</div></div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+  };
+  window.closeRapportView = function(){ var m=document.getElementById('yama-rapport-view'); if(m) m.remove(); };
+  window.deleteRapport5 = function(docNum){
+    if(!confirm('Supprimer le rapport '+docNum+' ?')) return;
+    saveH(getH().filter(function(h){ return !h||h.docNum!==docNum; }));
+    window.closeRapportView();
+    toast5('Rapport supprimé');
+    try{ if(typeof renderDevisTab==='function') renderDevisTab(); }catch(x){}
+  };
+
+  /* ─── RAPPORTS LIST ─── */
+  function buildTypeBar5(active){
+    var hist=getH();
+    var counts={
+      devis: hist.filter(function(h){ return h&&h.docType!=='facture'&&!h.isAvenant&&h.docType!=='rapport'; }).length,
+      factures: hist.filter(function(h){ return h&&h.docType==='facture'; }).length,
+      avenants: hist.filter(function(h){ return h&&h.isAvenant; }).length,
+      rapports: hist.filter(function(h){ return h&&h.docType==='rapport'; }).length
+    };
+    function btn(key,lbl,n){
+      var act=active===key;
+      return '<button onclick="setDocType(\''+key+'\')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid;transition:all .15s;'+
+        (act?'background:rgba(232,160,32,.16);border-color:rgba(232,160,32,.5);color:var(--accent);':'background:transparent;border-color:var(--border2);color:var(--text2);')+'">'+lbl+
+        ' <span style="background:rgba(255,255,255,.1);border-radius:10px;padding:1px 8px;font-size:11px;">'+n+'</span></button>';
+    }
+    return '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;border-bottom:1px solid var(--border);padding-bottom:16px;">'+
+      btn('devis','📋 Devis',counts.devis)+btn('factures','🧾 Factures',counts.factures)+
+      btn('avenants','➕ Avenants',counts.avenants)+btn('rapports','📊 Rapports',counts.rapports)+
+      '</div>';
+  }
+
+  function renderRapportsList(rapports){
+    var listEl=document.getElementById('devisList'); if(!listEl) return;
+    var typeBar=buildTypeBar5('rapports');
+    if(!rapports.length){
+      listEl.innerHTML=typeBar+
+        '<div style="text-align:center;padding:50px 20px;">'+
+        '<div style="font-size:40px;margin-bottom:12px;">📊</div>'+
+        '<div style="font-size:14px;font-weight:700;color:var(--text2);margin-bottom:6px;">Aucun rapport pour l\'instant</div>'+
+        '<div style="font-size:12px;color:var(--text3);">Crée un rapport depuis un devis accepté ou via le bouton ci-dessous.</div>'+
+        '<button onclick="window.showCreateRapportModal()" style="margin-top:16px;padding:10px 22px;background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.4);border-radius:9px;color:var(--gold);font-weight:700;cursor:pointer;font-size:13px;">📊 Nouveau rapport</button>'+
+        '</div>';
+      return;
+    }
+    var TL={constatation:'Constatation',suivi:'Suivi chantier',reception:'Réception travaux',expertise:'Expertise'};
+    var items=rapports.slice().sort(function(a,b){ return (b.savedAt||0)-(a.savedAt||0); });
+    listEl.innerHTML=typeBar+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'+
+      '<div style="font-size:11px;color:var(--text3);">'+rapports.length+' rapport(s)</div>'+
+      '<button onclick="window.showCreateRapportModal()" style="padding:7px 16px;background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.4);border-radius:8px;color:var(--gold);font-weight:700;cursor:pointer;font-size:12px;">+ Nouveau rapport</button>'+
+      '</div>'+
+      items.map(function(r){
+        var dStr=r.dateVisite?new Date(r.dateVisite).toLocaleDateString('fr-BE'):'—';
+        var meta=[TL[r.typeRapport]||'Rapport',r.devisNum?'→ '+r.devisNum:'',
+          (r.constatations&&r.constatations.length)?r.constatations.length+' constat.':'',
+          (r.travauxPrevus&&r.travauxPrevus.length)?r.travauxPrevus.length+' travaux':'',
+          (r.photos&&r.photos.length)?r.photos.length+' photo(s)':''
+        ].filter(Boolean).join(' · ');
+        return '<div class="yama-rapport-item" onclick="window.showRapportDetail(\''+r.docNum+'\')">'+
+          '<div class="yri-head">'+
+          '<div class="yri-num">'+e(r.docNum)+'</div>'+
+          '<div class="yri-client">'+e(r.clientNom)+'</div>'+
+          '<div class="yri-date">'+dStr+'</div>'+
+          '</div>'+
+          '<div class="yri-sub">'+e(meta)+'</div>'+
+          '<div class="yri-actions">'+
+          '<button class="btn-action load" onclick="event.stopPropagation();window.showRapportDetail(\''+r.docNum+'\')" style="font-size:11px;">👁 Voir</button>'+
+          '<button class="btn-action" onclick="event.stopPropagation();window.printRapport(\''+r.docNum+'\')" style="font-size:11px;background:rgba(201,168,76,.1);border-color:rgba(201,168,76,.4);color:var(--gold);">🖨️ PDF</button>'+
+          '</div></div>';
+      }).join('');
+  }
+
+  /* ─── WRAP renderDevisTab ─── */
+  poll5(function(){
+    if(typeof window.renderDevisTab!=='function') return false;
+    if(window.renderDevisTab.__v5) return true;
+    var orig=window.renderDevisTab;
+    window.renderDevisTab=function(){
+      if(window._docType==='rapports'){
+        try{ renderRapportsList(getH().filter(function(h){ return h&&h.docType==='rapport'; })); }catch(x){}
+        return;
+      }
+      orig.apply(this,arguments);
+      try{ injectRapportsBtn(); }catch(x){}
+      try{ injectRapportBtnsOnAccepted(); }catch(x){}
+    };
+    window.renderDevisTab.__v5=true;
+    return true;
+  },200,10000);
+
+  function injectRapportsBtn(){
+    var listEl=document.getElementById('devisList'); if(!listEl) return;
+    var existing=listEl.querySelectorAll('button[onclick*="setDocType"]');
+    if(!existing.length) return;
+    var bar=existing[0].parentElement; if(!bar||bar.querySelector('[data-v5r]')) return;
+    var raps=getH().filter(function(h){ return h&&h.docType==='rapport'; });
+    var btn=document.createElement('button');
+    btn.setAttribute('data-v5r','1');
+    btn.style.cssText='display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid;transition:all .15s;background:transparent;border-color:var(--border2);color:var(--text2);';
+    btn.innerHTML='📊 Rapports <span style="background:rgba(255,255,255,.1);border-radius:10px;padding:1px 8px;font-size:11px;">'+raps.length+'</span>';
+    btn.onclick=function(){ if(typeof setDocType==='function') setDocType('rapports'); else { window._docType='rapports'; window._devisFilter='all'; window.renderDevisTab(); } };
+    bar.appendChild(btn);
+  }
+
+  function injectRapportBtnsOnAccepted(){
+    if(window._docType!=='devis') return;
+    var listEl=document.getElementById('devisList'); if(!listEl) return;
+    listEl.querySelectorAll('.devis-item.accepted').forEach(function(item){
+      if(item.querySelector('.v5-rap-btn')) return;
+      var numEl=item.querySelector('.devis-item-num'); if(!numEl) return;
+      var dn=numEl.textContent.trim();
+      var primary=item.querySelector('.devis-actions-primary'); if(!primary) return;
+      var btn=document.createElement('button');
+      btn.className='btn-action v5-rap-btn';
+      btn.style.cssText='background:rgba(91,156,246,.08);border-color:rgba(91,156,246,.4);color:#5b9cf6;';
+      btn.title='Créer un rapport de constatation lié à ce devis';
+      btn.textContent='📊 Rapport';
+      btn.onclick=function(ev){ ev.stopPropagation(); window.showCreateRapportModal(dn); };
+      primary.appendChild(btn);
+    });
+  }
+
+  /* ─── MARGIN GUIDE MODAL ─── */
+  window.showMarginGuide = function(){
+    if(document.getElementById('yama-margin-guide')) return;
+    var TIERS=[
+      {range:'< 500 €',      rec:40, col:'#52c77f', note:'Petite intervention ponctuelle'},
+      {range:'500 – 1 000 €',rec:38, col:'#52c77f', note:'Intervention courante'},
+      {range:'1 000 – 2 000 €',rec:35,col:'#C9A84C', note:'Chantier moyen'},
+      {range:'2 000 – 5 000 €',rec:30,col:'#C9A84C', note:'Chantier important'},
+      {range:'5 000 – 10 000 €',rec:25,col:'#E07B39',note:'Grand chantier sous-traité'},
+      {range:'> 10 000 €',   rec:20, col:'#5b9cf6', note:'Très grand projet'}
+    ];
+    var tiersHtml=TIERS.map(function(t){
+      return '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--border2);">'+
+        '<div style="min-width:135px;font-size:12px;font-weight:700;color:var(--text);">'+t.range+'</div>'+
+        '<div style="flex:1;background:rgba(255,255,255,.07);border-radius:4px;height:8px;overflow:hidden;">'+
+        '<div style="width:'+Math.round(t.rec/40*100)+'%;height:100%;background:'+t.col+';border-radius:4px;"></div></div>'+
+        '<div style="min-width:38px;font-size:14px;font-weight:900;color:'+t.col+';">'+t.rec+'%</div>'+
+        '<div style="font-size:11px;color:var(--text3);min-width:160px;">'+t.note+'</div>'+
+        '</div>';
+    }).join('');
+
+    function fml(label,formula,example){
+      return '<div style="padding:10px 14px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--border2);margin-bottom:6px;">'+
+        '<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;">'+
+        '<span style="font-size:12px;font-weight:700;color:var(--text);min-width:120px;">'+label+'</span>'+
+        '<code style="background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);border-radius:4px;padding:2px 8px;font-size:12px;color:var(--gold);">'+formula+'</code>'+
+        '</div><div style="font-size:10.5px;color:var(--text3);padding-left:2px;">'+example+'</div></div>';
+    }
+    function step(n,title,desc){
+      return '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 14px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--border2);margin-bottom:6px;">'+
+        '<div style="flex-shrink:0;width:22px;height:22px;background:var(--gold);color:#1a1a2e;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;border-radius:50%;">'+n+'</div>'+
+        '<div><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:3px;">'+title+'</div>'+
+        '<div style="font-size:11px;color:var(--text3);">'+desc+'</div></div></div>';
+    }
+
+    var html='<div id="yama-margin-guide" class="yama-modal-overlay" onclick="if(event.target===this)document.getElementById(\'yama-margin-guide\').remove()">'+
+      '<div class="yama-modal-box">'+
+      '<div class="yama-modal-title">📖 Guide marges &amp; workflow — Marché belge</div>'+
+
+      '<div style="margin-bottom:20px;">'+
+      '<div style="font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:12px;">Tranches de marge recommandées (sous-traitants belgique)</div>'+
+      '<div style="display:flex;flex-direction:column;gap:6px;">'+tiersHtml+'</div>'+
+      '<div style="margin-top:12px;padding:10px 14px;background:rgba(201,168,76,.07);border-radius:8px;border-left:3px solid var(--gold);font-size:11.5px;color:var(--text2);line-height:1.6;">'+
+      '💡 <strong>Règle pratique :</strong> La marge couvre frais admin, déplacements, coordination, imprévus et bénéfice net. '+
+      'Descendre à 20% sur >10 000 € est compétitif et rentable.'+
+      '</div></div>'+
+
+      '<div style="margin-bottom:20px;">'+
+      '<div style="font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:12px;">Formules de calcul</div>'+
+      fml('Prix client HT','Coût ST ÷ (1 − Marge%)','Ex : ST = 1 000 € · Marge 30% → 1 000 ÷ 0,70 = 1 428,57 € HT')+
+      fml('Prix TTC','Prix HT × 1,21','TVA 21% standard · Rénovation conditions : 6%')+
+      fml('Marge réelle','(Prix HT − Coût ST) ÷ Prix HT × 100','Vérification après saisie')+
+      fml('Acompte conseillé','TTC × 30%','Paramétrable : Paramètres → Financier → Acompte %')+
+      '</div>'+
+
+      '<div style="margin-bottom:20px;">'+
+      '<div style="font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:12px;">Pipeline recommandé</div>'+
+      step('1','📞 Contact entrant','CRM → Nouveau contact · Nom, tél, commune, type de travaux')+
+      step('2','📅 RDV planifié','CRM → Fixer date/heure · Générer invitation ICS')+
+      step('3','📊 Rapport de visite','Documents → Rapports · RC-26-XXX · Constatations + travaux prévus')+
+      step('4','📋 Devis','Calculateur → Lignes sous-traitants + fournitures · D-26-XXX')+
+      step('5','✅ Devis accepté','Documents → Accepter · Envoyer confirmation WhatsApp')+
+      step('6','🔨 Chantier','CRM → Étape "En cours" · Évaluer ST après travaux ⭐ 1–5')+
+      step('7','🧾 Facture','Documents → Transformer · F-26-XXX · Enregistrer paiement')+
+      step('8','📦 Archivage','Paiement "Payé" → contact archivé automatiquement')+
+      '</div>'+
+
+      '<div style="text-align:right;">'+
+      '<button class="yama-modal-btn primary" onclick="document.getElementById(\'yama-margin-guide\').remove()">Fermer</button>'+
+      '</div></div></div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+  };
+
+  /* ─── INJECT GUIDE BUTTON ─── */
+  function injectGuideBtn(){
+    var ref=document.querySelector('#yama-company-btn, [onclick*="openYamaCompanySettings"], [onclick*="v37ShowSettings"]');
+    if(ref&&ref.parentElement&&!document.getElementById('yama-guide-btn')){
+      var btn=document.createElement('button');
+      btn.id='yama-guide-btn';
+      btn.onclick=function(){ window.showMarginGuide(); };
+      btn.title='Guide marges & workflow';
+      btn.style.cssText='background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(200,210,230,.75);border-radius:8px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;letter-spacing:.3px;';
+      btn.innerHTML='📖 <span class="yama-settings-label">Guide</span>';
+      ref.parentElement.insertBefore(btn, ref);
+    }
+  }
+
+  /* ─── INIT ─── */
+  setTimeout(function(){
+    try{ injectGuideBtn(); }catch(x){}
+    console.info('[YAMA V5] Rapports RC-26-XXX · Guide Marges · PDF — chargé.');
+  },1000);
+
+})();
+</script>
 </body>
 </html>
