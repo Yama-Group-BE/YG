@@ -39644,5 +39644,59 @@ lineXml+
 
 })();
 </script>
+
+<style id="yama-platform-v17-stability">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V17 — Stabilité visuelle (additif, non destructif)
+   Quick-wins issus du benchmark UX 2026 — aucune structure modifiée.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 1. Empêche le décalage horizontal du layout quand une barre de défilement
+      apparaît/disparaît au changement d'onglet (cause fréquente du « ça bouge
+      quand je clique »). */
+html { scrollbar-gutter: stable; }
+
+/* 2. Safe-area iOS (encoche / Dynamic Island / barre d'accueil) pour les
+      éléments flottants fixes — évite qu'ils passent sous les bords. */
+#toast { margin-bottom: env(safe-area-inset-bottom, 0px); }
+#yama-v13-bell {
+  left: calc(16px + env(safe-area-inset-left, 0px)) !important;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* 3. Le panneau de notifications s'ancre désormais du MÊME côté que la cloche
+      (en bas à gauche) pour la cohérence — fini l'encadré qui surgit à droite
+      alors qu'on clique à gauche. */
+@media (min-width: 780px) {
+  #yama-v13-panel {
+    left: calc(16px + env(safe-area-inset-left, 0px)) !important;
+    right: auto !important;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important;
+    width: 420px;
+    max-width: calc(100vw - 32px);
+  }
+}
+@media (max-width: 779px) {
+  #yama-v13-panel { padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* 4. Stabilité des transitions : on ne laisse animer que transform/opacity
+      au survol des cartes (les autres propriétés provoquent des reflows).
+      Ciblé et non destructif. */
+.yv13-item, .yv14-mood button, .st-card { will-change: auto; }
+
+/* 5. Accessibilité + anti-jank : respecter prefers-reduced-motion. Pour les
+      utilisateurs ayant activé « réduire les animations », on neutralise les
+      transitions/animations qui causent des sauts visuels. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+</style>
 </body>
 </html>
