@@ -39044,5 +39044,286 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
 
 })();
 </script>
+
+<script id="yama-platform-v15">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V15 — Conformité belge / E-facturation (Peppol)
+   ───────────────────────────────────────────────────────────────────────
+   Couche ACTIVABLE/DÉSACTIVABLE pour la e-facturation structurée belge
+   (obligation B2B Peppol BIS 3.0 / UBL à partir du 01/01/2026).
+   • Onglet « Conformité » dans les Réglages : activer Peppol, identifiants
+     vendeur (n° TVA / n° d'entreprise BCE), schéma d'endpoint.
+   • Export d'une facture au format UBL 2.1 / Peppol BIS Billing 3.0 (.xml),
+     à transmettre via un point d'accès Peppol ou un logiciel comptable.
+   Config stockée dans l'objet settings (clé conformite) — getSettings/saveSettings.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V15__) return;
+  window.__YAMA_PLATFORM_V15__ = true;
+
+  function S(){ try{ return (typeof getSettings==='function')?getSettings():{}; }catch(e){ return {}; } }
+  function saveS(s){ try{ if(typeof saveSettings==='function') saveSettings(s); }catch(e){} }
+  function ent(){ return S().entreprise || {}; }
+  function conf(){
+    var c = S().conformite || {};
+    var e = ent();
+    return {
+      peppolEnabled: !!c.peppolEnabled,
+      sellerName: c.sellerName || e.nom || e.raisonSociale || 'YAMA Group',
+      sellerVat:  c.sellerVat  || e.tva || e.tvaNumero || e.numeroTVA || e.bce || '',
+      sellerScheme: c.sellerScheme || '9925',         // 9925 = TVA BE · 0208 = n° entreprise BE
+      sellerEndpoint: c.sellerEndpoint || c.sellerVat || e.tva || e.bce || '',
+      sellerStreet: c.sellerStreet || e.adresse || '',
+      sellerCity: c.sellerCity || e.ville || e.commune || '',
+      sellerZip: c.sellerZip || e.cp || e.codePostal || '',
+      sellerCountry: c.sellerCountry || 'BE'
+    };
+  }
+  function setConf(patch){
+    var s=S(); s.conformite = Object.assign({}, s.conformite||{}, patch); saveS(s);
+  }
+  function enabled(){ return !!(S().conformite && S().conformite.peppolEnabled); }
+
+  function n15(v){ var f=parseFloat(String(v==null?'':v).replace(',','.')); return isNaN(f)?0:f; }
+  function r2(n){ return (Math.round((n||0)*100)/100).toFixed(2); }
+  function xesc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;'); }
+
+  /* ── Générateur UBL 2.1 / Peppol BIS Billing 3.0 ───────────────────────── */
+  function buildUBL(h){
+    var c = conf();
+    var lignes = (h.lignesClient||[]).filter(function(l){ return l && (n15(l.qte)||n15(l.pu)); });
+    if(!lignes.length){ lignes = [{desc:(h.chantierRef||'Prestation'), qte:1, pu:n15(h.totalTTC)/1.21, tva:'0.21'}]; }
+
+    var htBrut=0; lignes.forEach(function(l){ htBrut += n15(l.qte)*n15(l.pu); });
+    var remise = n15(h.remiseEur);
+    var htNet = Math.max(0, htBrut - remise);
+    var factor = htBrut>0 ? (htNet/htBrut) : 1;
+
+    // regrouper par taux de TVA
+    var byRate = {};
+    lignes.forEach(function(l){
+      var ext = n15(l.qte)*n15(l.pu)*factor;
+      var pct = Math.round(n15(l.tva)*100);
+      byRate[pct] = (byRate[pct]||0) + ext;
+    });
+
+    var taxTotal=0, taxSubs='';
+    Object.keys(byRate).sort(function(a,b){return a-b;}).forEach(function(pct){
+      var base=byRate[pct]; var amt=base*(pct/100); taxTotal+=amt;
+      var cat = pct>0 ? 'S' : 'Z';
+      taxSubs +=
+        '    <cac:TaxSubtotal>\n'+
+        '      <cbc:TaxableAmount currencyID="EUR">'+r2(base)+'</cbc:TaxableAmount>\n'+
+        '      <cbc:TaxAmount currencyID="EUR">'+r2(amt)+'</cbc:TaxAmount>\n'+
+        '      <cac:TaxCategory><cbc:ID>'+cat+'</cbc:ID><cbc:Percent>'+pct+'</cbc:Percent>'+
+        '<cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:TaxCategory>\n'+
+        '    </cac:TaxSubtotal>\n';
+    });
+    var ttc = htNet + taxTotal;
+
+    var lineXml=''; var idx=0;
+    lignes.forEach(function(l){
+      idx++;
+      var ext = n15(l.qte)*n15(l.pu);
+      var pct = Math.round(n15(l.tva)*100);
+      var cat = pct>0 ? 'S' : 'Z';
+      lineXml +=
+        '  <cac:InvoiceLine>\n'+
+        '    <cbc:ID>'+idx+'</cbc:ID>\n'+
+        '    <cbc:InvoicedQuantity unitCode="C62">'+(n15(l.qte)||1)+'</cbc:InvoicedQuantity>\n'+
+        '    <cbc:LineExtensionAmount currencyID="EUR">'+r2(ext)+'</cbc:LineExtensionAmount>\n'+
+        '    <cac:Item>\n'+
+        '      <cbc:Name>'+xesc((l.desc||'Prestation').slice(0,200))+'</cbc:Name>\n'+
+        '      <cac:ClassifiedTaxCategory><cbc:ID>'+cat+'</cbc:ID><cbc:Percent>'+pct+'</cbc:Percent>'+
+        '<cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:ClassifiedTaxCategory>\n'+
+        '    </cac:Item>\n'+
+        '    <cac:Price><cbc:PriceAmount currencyID="EUR">'+r2(n15(l.pu))+'</cbc:PriceAmount></cac:Price>\n'+
+        '  </cac:InvoiceLine>\n';
+    });
+
+    var issue=(h.dateEmission||h.savedAt||'').slice(0,10) || new Date().toISOString().slice(0,10);
+    var due=(h.dateValidite||'').slice(0,10) || issue;
+
+    var xml =
+'<?xml version="1.0" encoding="UTF-8"?>\n'+
+'<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"\n'+
+'  xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"\n'+
+'  xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">\n'+
+'  <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0</cbc:CustomizationID>\n'+
+'  <cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID>\n'+
+'  <cbc:ID>'+xesc(h.docNum||'FAC')+'</cbc:ID>\n'+
+'  <cbc:IssueDate>'+issue+'</cbc:IssueDate>\n'+
+'  <cbc:DueDate>'+due+'</cbc:DueDate>\n'+
+'  <cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>\n'+
+'  <cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>\n'+
+'  <cac:AccountingSupplierParty><cac:Party>\n'+
+'    <cbc:EndpointID schemeID="'+xesc(c.sellerScheme)+'">'+xesc(c.sellerEndpoint||c.sellerVat)+'</cbc:EndpointID>\n'+
+'    <cac:PartyName><cbc:Name>'+xesc(c.sellerName)+'</cbc:Name></cac:PartyName>\n'+
+'    <cac:PostalAddress><cbc:StreetName>'+xesc(c.sellerStreet)+'</cbc:StreetName>'+
+'<cbc:CityName>'+xesc(c.sellerCity)+'</cbc:CityName><cbc:PostalZone>'+xesc(c.sellerZip)+'</cbc:PostalZone>'+
+'<cac:Country><cbc:IdentificationCode>'+xesc(c.sellerCountry)+'</cbc:IdentificationCode></cac:Country></cac:PostalAddress>\n'+
+'    <cac:PartyTaxScheme><cbc:CompanyID>'+xesc(c.sellerVat)+'</cbc:CompanyID>'+
+'<cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:PartyTaxScheme>\n'+
+'    <cac:PartyLegalEntity><cbc:RegistrationName>'+xesc(c.sellerName)+'</cbc:RegistrationName>'+
+'<cbc:CompanyID schemeID="0208">'+xesc(String(c.sellerVat).replace(/[^0-9]/g,''))+'</cbc:CompanyID></cac:PartyLegalEntity>\n'+
+'  </cac:Party></cac:AccountingSupplierParty>\n'+
+'  <cac:AccountingCustomerParty><cac:Party>\n'+
+'    <cac:PartyName><cbc:Name>'+xesc(h.clientNom||'Client')+'</cbc:Name></cac:PartyName>\n'+
+'    <cac:PostalAddress><cbc:StreetName>'+xesc(h.clientAdresse||h.chantierAdresse||'')+'</cbc:StreetName>'+
+'<cbc:CityName>'+xesc(h.clientVille||h.chantierVille||'')+'</cbc:CityName><cbc:PostalZone>'+xesc(h.clientCP||h.chantierCP||'')+'</cbc:PostalZone>'+
+'<cac:Country><cbc:IdentificationCode>BE</cbc:IdentificationCode></cac:Country></cac:PostalAddress>\n'+
+'    <cac:PartyLegalEntity><cbc:RegistrationName>'+xesc(h.clientNom||'Client')+'</cbc:RegistrationName></cac:PartyLegalEntity>\n'+
+'  </cac:Party></cac:AccountingCustomerParty>\n'+
+'  <cac:TaxTotal>\n'+
+'    <cbc:TaxAmount currencyID="EUR">'+r2(taxTotal)+'</cbc:TaxAmount>\n'+
+taxSubs+
+'  </cac:TaxTotal>\n'+
+'  <cac:LegalMonetaryTotal>\n'+
+'    <cbc:LineExtensionAmount currencyID="EUR">'+r2(htBrut)+'</cbc:LineExtensionAmount>\n'+
+'    <cbc:TaxExclusiveAmount currencyID="EUR">'+r2(htNet)+'</cbc:TaxExclusiveAmount>\n'+
+'    <cbc:TaxInclusiveAmount currencyID="EUR">'+r2(ttc)+'</cbc:TaxInclusiveAmount>\n'+
+(remise>0?('    <cbc:AllowanceTotalAmount currencyID="EUR">'+r2(remise)+'</cbc:AllowanceTotalAmount>\n'):'')+
+'    <cbc:PayableAmount currencyID="EUR">'+r2(ttc)+'</cbc:PayableAmount>\n'+
+'  </cac:LegalMonetaryTotal>\n'+
+lineXml+
+'</Invoice>\n';
+    return xml;
+  }
+
+  window.ymExportUBL = function(docNum){
+    var h=null;
+    try{ if(typeof window.docEntry==='function') h=window.docEntry(docNum); }catch(e){}
+    if(!h){ try{ var hist=(typeof getHistory==='function')?getHistory():[]; h=hist.find(function(x){return x&&x.docNum===docNum;}); }catch(e){} }
+    if(!h){ try{ if(typeof toast==='function') toast('Facture introuvable','error'); }catch(e){} return; }
+    var xml=buildUBL(h);
+    try{
+      var blob=new Blob([xml], {type:'application/xml'});
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a');
+      a.href=url; a.download='UBL_'+String(docNum||'facture').replace(/[^\w\-]/g,'_')+'.xml';
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
+      if(typeof toast==='function') toast('✓ UBL Peppol exporté','success');
+    }catch(e){ console.warn('[V15] export',e); }
+  };
+
+  /* ── Bouton UBL sur les factures (si activé) ───────────────────────────── */
+  function addUblButtons(){
+    if(!enabled()) return;
+    try{
+      var items=document.querySelectorAll('#historyList .history-item');
+      items.forEach(function(item){
+        if(item.querySelector('.yv15-ubl-btn')) return;
+        var numEl=item.querySelector('.history-num');
+        var doc=numEl?String(numEl.textContent||'').trim():'';
+        if(!doc) return;
+        var h=null; try{ h=window.docEntry?window.docEntry(doc):null; }catch(e){}
+        if(!h || h.docType!=='facture') return;
+        var line=item.querySelector('.yama-v12-statusline') || item.querySelector('.history-info') || item;
+        var b=document.createElement('button');
+        b.className='yama-v12-mini-btn yv15-ubl-btn';
+        b.type='button'; b.textContent='⬇️ UBL';
+        b.title='Exporter au format Peppol BIS 3.0 (e-facturation belge)';
+        b.onclick=function(ev){ ev.stopPropagation(); window.ymExportUBL(doc); };
+        line.appendChild(b);
+      });
+    }catch(e){}
+  }
+  // se brancher après l'enhancement des factures
+  (function wrapEnhance(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.enhanceHistoryInvoices==='function' && !window.enhanceHistoryInvoices.__v15){
+        var orig=window.enhanceHistoryInvoices;
+        window.enhanceHistoryInvoices=function(){ var r=orig.apply(this,arguments); try{ setTimeout(addUblButtons,30); }catch(e){} return r; };
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.enhanceHistoryInvoices[k]=orig[k]; } }catch(e){}
+        window.enhanceHistoryInvoices.__v15=true;
+        clearInterval(iv);
+      }
+      if(tries>60) clearInterval(iv);
+    }, 350);
+  })();
+
+  /* ── Panneau Conformité dans les Réglages ──────────────────────────────── */
+  function renderConfPanel(){
+    var host=document.getElementById('v37-s-content'); if(!host) return;
+    var c=conf();
+    host.innerHTML =
+      '<div style="max-width:620px;">'+
+      '<div style="background:rgba(201,168,76,.07);border:1px solid rgba(201,168,76,.28);border-radius:11px;padding:13px 15px;margin-bottom:16px;font-size:12.5px;color:rgba(255,255,255,.78);line-height:1.55;">'+
+        '⚖️ <strong style="color:#C9A84C;">E-facturation belge (Peppol)</strong><br>'+
+        'Depuis le <strong>01/01/2026</strong>, la facturation électronique structurée (Peppol BIS 3.0 / UBL) '+
+        'est obligatoire entre entreprises assujetties en Belgique. Activez la couche ci-dessous pour exporter '+
+        'vos factures au format UBL, à transmettre via votre point d\'accès Peppol ou votre logiciel comptable.'+
+      '</div>'+
+      '<div class="v37-toggle" style="margin-bottom:14px;">'+
+        '<div><div class="v37-toggle-label">Activer la conformité Peppol</div>'+
+        '<div class="v37-toggle-sub">Affiche le bouton « ⬇️ UBL » sur chaque facture</div></div>'+
+        '<label class="v37-switch"><input type="checkbox" id="yv15-peppol" '+(c.peppolEnabled?'checked':'')+'><span class="v37-switch-slider"></span></label>'+
+      '</div>'+
+      '<div class="v37-s-group"><div class="v37-s-group-title">Identifiants vendeur (votre entreprise)</div>'+
+        fld('yv15-name','Nom / Raison sociale','text',c.sellerName)+
+        fld('yv15-vat','N° TVA (ex : BE0123456789)','text',c.sellerVat)+
+        '<div class="v37-s-field"><label>Schéma d\'endpoint Peppol</label>'+
+          '<select id="yv15-scheme" style="width:100%;background:#111827;border:1px solid rgba(255,255,255,.09);border-radius:8px;color:#e8edf4;padding:9px;font-size:13.5px;">'+
+          '<option value="9925"'+(c.sellerScheme==='9925'?' selected':'')+'>9925 — N° TVA belge</option>'+
+          '<option value="0208"'+(c.sellerScheme==='0208'?' selected':'')+'>0208 — N° d\'entreprise BCE</option>'+
+          '</select></div>'+
+        fld('yv15-endpoint','Endpoint Peppol (identifiant routage)','text',c.sellerEndpoint)+
+        fld('yv15-street','Adresse','text',c.sellerStreet)+
+        '<div class="v37-s-row">'+fld('yv15-zip','Code postal','text',c.sellerZip)+fld('yv15-city','Ville','text',c.sellerCity)+'</div>'+
+      '</div>'+
+      '<button onclick="window.ymV15SaveConf()" style="width:100%;padding:13px;border-radius:11px;border:none;background:linear-gradient(135deg,#C9A84C,#b8973f);color:#1a1206;font-size:14px;font-weight:800;cursor:pointer;margin-top:6px;">💾 Enregistrer la conformité</button>'+
+      '</div>';
+  }
+  function fld(id,label,type,v){
+    return '<div class="v37-s-field"><label>'+label+'</label><input id="'+id+'" type="'+type+'" value="'+xesc(v||'')+'" '+
+      'style="width:100%;background:#111827;border:1px solid rgba(255,255,255,.09);border-radius:8px;color:#e8edf4;padding:9px;font-size:13.5px;box-sizing:border-box;"></div>';
+  }
+  window.ymV15SaveConf = function(){
+    function gv(id){ var e=document.getElementById(id); return e?e.value.trim():''; }
+    setConf({
+      peppolEnabled: !!document.getElementById('yv15-peppol') && document.getElementById('yv15-peppol').checked,
+      sellerName: gv('yv15-name'), sellerVat: gv('yv15-vat'),
+      sellerScheme: gv('yv15-scheme')||'9925', sellerEndpoint: gv('yv15-endpoint')||gv('yv15-vat'),
+      sellerStreet: gv('yv15-street'), sellerZip: gv('yv15-zip'), sellerCity: gv('yv15-city'),
+      sellerCountry: 'BE'
+    });
+    try{ if(typeof toast==='function') toast('✓ Conformité enregistrée','success'); }catch(e){}
+    try{ if(typeof enhanceHistoryInvoices==='function') enhanceHistoryInvoices(); }catch(e){}
+    setTimeout(addUblButtons, 60);
+  };
+  window.ymV15OpenConf = function(){
+    try{
+      var nav=document.querySelector('.v37-s-nav');
+      if(nav){ nav.querySelectorAll('.v37-s-nav-item').forEach(function(x){ x.classList.remove('active'); }); }
+      var mine=document.getElementById('yv15-nav'); if(mine) mine.classList.add('active');
+    }catch(e){}
+    renderConfPanel();
+  };
+
+  /* ── Injecter l'onglet « Conformité » dans la barre Réglages ──────────── */
+  (function injectNav(){
+    var iv=setInterval(function(){
+      try{
+        var nav=document.querySelector('.v37-s-nav');
+        if(nav && !document.getElementById('yv15-nav')){
+          var d=document.createElement('div');
+          d.className='v37-s-nav-item'; d.id='yv15-nav'; d.setAttribute('data-tab','conformite');
+          d.textContent='⚖️ Conformité';
+          d.onclick=window.ymV15OpenConf;
+          nav.appendChild(d);
+        }
+      }catch(e){}
+    }, 1200);
+  })();
+
+  setTimeout(function(){
+    console.info('[YAMA V15] Conformité Peppol / UBL — export e-facturation belge activable — actif.');
+  }, 3400);
+
+})();
+</script>
 </body>
 </html>
