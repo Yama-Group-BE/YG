@@ -3915,20 +3915,54 @@ function generateICS(contact) {
   const desc=['👤 '+(contact.civilite||'')+' '+(contact.nom||''),'📞 '+(contact.tel||''),
     '📍 '+loc, contact.st?'🔧 ST: '+contact.st:'', contact.note?'⚠️ '+contact.note:'',
     '— YAMA Group | 0489 33 77 00'].filter(Boolean).join('\\n');
-  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//YAMA GROUP//FR','BEGIN:VEVENT',
+  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//YAMA GROUP//FR','CALSCALE:GREGORIAN','METHOD:PUBLISH','BEGIN:VEVENT',
     'UID:yama-'+(contact.id||Date.now())+'@yama-group.be','DTSTAMP:'+ts,
     'DTSTART;TZID=Europe/Brussels:'+ds,'DTEND;TZID=Europe/Brussels:'+de,
     'SUMMARY:'+t.trim(),'LOCATION:'+loc.trim(),'DESCRIPTION:'+desc,
     'BEGIN:VALARM','TRIGGER:-PT24H','ACTION:DISPLAY','DESCRIPTION:Rappel 24h','END:VALARM',
     'BEGIN:VALARM','TRIGGER:-PT1H','ACTION:DISPLAY','DESCRIPTION:Rappel 1h','END:VALARM',
     'END:VEVENT','END:VCALENDAR'].join('\r\n');
+
+  // Détection plateforme
+  const ua = navigator.userAgent || navigator.vendor || '';
+  const isApple = /iPad|iPhone|iPod/.test(ua) ||
+                  (/(Macintosh|Mac OS X)/.test(ua) && !window.MSStream) ||
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS 13+
+
+  if (isApple) {
+    /* APPLE (iOS / iPadOS / macOS) → ouvre DIRECTEMENT la fiche « Ajouter au
+       calendrier » d'Apple Calendar via une navigation data:text/calendar.
+       Pas de fichier .ics téléchargé : iOS affiche l'aperçu de l'événement,
+       macOS l'ouvre dans Calendrier. */
+    const dataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+    try {
+      // location.href est le plus fiable pour déclencher la feuille Calendrier iOS
+      window.location.href = dataUri;
+      showToast('📅 Ouverture dans le calendrier Apple…','success');
+      return;
+    } catch(e) { /* fallback ci-dessous */ }
+  } else {
+    /* AUTRES (Android, Windows, Linux) → ouvre DIRECTEMENT Google Agenda
+       (formulaire pré-rempli, aucun fichier). */
+    const descPlain = desc.replace(/\\n/g, '\n');
+    const gcalUrl = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+      + '&text=' + encodeURIComponent(t.trim())
+      + '&dates=' + ds + '/' + de
+      + '&ctz=Europe/Brussels'
+      + '&location=' + encodeURIComponent(loc.trim())
+      + '&details=' + encodeURIComponent(descPlain);
+    const w = window.open(gcalUrl, '_blank');
+    if (w) { showToast('📅 Ouverture dans Google Agenda…','success'); return; }
+  }
+
+  // Fallback ultime (navigateur bloque navigation/popup) → téléchargement .ics
   const blob=new Blob([ics],{type:'text/calendar;charset=utf-8'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a'); a.href=url;
   a.download='RDV_'+(contact.nom||'').replace(/[^a-z0-9]/gi,'_')+'_'+contact.date+'.ics';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast('✅ Fichier .ics téléchargé — Apple Calendar / Google / Outlook','success');
+  showToast('📅 Événement prêt — ouvre-le pour l\'ajouter au calendrier','success');
 }
 
 function exportContactsCSV() {
@@ -5304,7 +5338,7 @@ function renderContactList(containerId, filterType) {
         ${factureBtn || ''}
         ${finishBtn}
         <button class="btn btn-outline btn-sm" title="Modifier" onclick="event.stopPropagation();editContact('${cid}')" style="color:#e8a020;border-color:rgba(232,160,32,0.3);">✏️</button>
-        <button class="btn btn-outline btn-sm" title="Ajouter au calendrier (.ics)" onclick="event.stopPropagation();generateICS(${safeJson})" style="color:#5b9cf6;border-color:rgba(91,156,246,0.3);">📅</button>
+        <button class="btn btn-outline btn-sm" title="Ajouter au calendrier (Apple · Google)" onclick="event.stopPropagation();generateICS(${safeJson})" style="color:#5b9cf6;border-color:rgba(91,156,246,0.3);">📅</button>
         <button class="btn btn-red btn-sm" onclick="event.stopPropagation();deleteContact('${cid}')">🗑</button>
       </div>
     </div>`;
@@ -5608,7 +5642,7 @@ function openContactDetail(cid) {
       ${!isFinishedContact(c) ? `<button class="btn btn-outline btn-sm" style="background:rgba(82,199,127,0.08);border-color:rgba(82,199,127,0.35);color:#52c77f;" onclick="markFollowUpDone('${c.id || c.contact_id}');closeContactDetail();">✅ Fini</button>` : ''}
       <button class="btn btn-red btn-sm" onclick="deleteContact('${c.id || c.contact_id}');closeContactDetail();">🗑 Supprimer</button>
       <button class="btn btn-outline btn-sm" style="background:rgba(232,160,32,0.08);border-color:rgba(232,160,32,0.3);color:#e8a020;" onclick="editContact('${c.id || c.contact_id}')">✏️ Modifier</button>
-      <button class="btn btn-outline btn-sm" style="background:rgba(66,133,244,0.08);border-color:rgba(66,133,244,0.3);color:#5b9cf6;" onclick="generateICS(normalizeContact(getContacts().find(x=>String(x.id)==='${c.id||c.contact_id}'||String(x.contact_id)==='${c.id||c.contact_id}')||{}))">📅 Calendrier (.ics)</button>
+      <button class="btn btn-outline btn-sm" style="background:rgba(66,133,244,0.08);border-color:rgba(66,133,244,0.3);color:#5b9cf6;" onclick="generateICS(normalizeContact(getContacts().find(x=>String(x.id)==='${c.id||c.contact_id}'||String(x.contact_id)==='${c.id||c.contact_id}')||{}))">📅 Calendrier</button>
       <button class="btn btn-outline btn-sm" onclick="closeContactDetail()">Fermer</button>
     </div>
   `;
@@ -6044,7 +6078,7 @@ function renderContactList(containerId, filterType) {
         ${factureBtn}
         ${finishBtn}
         <button class="btn btn-outline btn-sm" title="Modifier" onclick="event.stopPropagation();editContact('${cid}')" style="color:#e8a020;border-color:rgba(232,160,32,0.3);">✏️</button>
-        <button class="btn btn-outline btn-sm" title="Ajouter au calendrier (.ics)" onclick="event.stopPropagation();generateICS(${safeJson})" style="color:#5b9cf6;border-color:rgba(91,156,246,0.3);">📅</button>
+        <button class="btn btn-outline btn-sm" title="Ajouter au calendrier (Apple · Google)" onclick="event.stopPropagation();generateICS(${safeJson})" style="color:#5b9cf6;border-color:rgba(91,156,246,0.3);">📅</button>
         <button class="btn btn-red btn-sm" onclick="event.stopPropagation();deleteContact('${cid}')">🗑</button>
       </div>
     </div>`;
@@ -10557,7 +10591,7 @@ order by table_name;</textarea>
         <div><div class="cr-date">${fmtDateFR(c.date)} · à partir de ${fmtTime(c.heure)}</div><span class="cr-badge ${stage.cls}">${safeEsc(stage.txt)}</span></div>
         <div class="cr-actions crm-follow-actions" onclick="event.stopPropagation()">${followBtn}${devisBtn}${clientRelanceBtn}${stRelanceBtn}${chantierBtn}${reportBtn}${backBtn}
           <button class="btn btn-outline btn-sm" title="Modifier" onclick="event.stopPropagation();editContact('${cid}')" style="color:#e8a020;border-color:rgba(232,160,32,0.3);">✏️</button>
-          <button class="btn btn-outline btn-sm" title="Ajouter au calendrier (.ics)" onclick="event.stopPropagation();generateICS(${safeJson})" style="color:#5b9cf6;border-color:rgba(91,156,246,0.3);">📅</button>
+          <button class="btn btn-outline btn-sm" title="Ajouter au calendrier (Apple · Google)" onclick="event.stopPropagation();generateICS(${safeJson})" style="color:#5b9cf6;border-color:rgba(91,156,246,0.3);">📅</button>
           <button class="btn btn-red btn-sm" onclick="event.stopPropagation();deleteContact('${cid}')">🗑</button>
         </div>
       </div>`;
@@ -26751,31 +26785,37 @@ console.info('[YAMA V43] Settings · Cards · Chantier dates modal · TdB→Cock
       'END:VEVENT','END:VCALENDAR'
     ].join('\r\n');
 
+    // APPLE → ouverture directe Apple Calendar (data URI, aucun fichier)
+    // AUTRES → Google Agenda direct ; fallback .ics
+    var isApple = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                  (/Macintosh/.test(navigator.userAgent) && !window.MSStream) ||
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (isApple) {
+      try {
+        window.location.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+        if (typeof showToast === 'function') showToast('📅 Ouverture dans le calendrier Apple…','success');
+        return;
+      } catch(e){}
+    } else {
+      try {
+        var descPlain = String(desc).replace(/\\n/g,'\n');
+        var gcalUrl = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+          + '&text=' + encodeURIComponent(String(t).trim())
+          + '&dates=' + dt + '/' + de + '&ctz=Europe/Brussels'
+          + '&location=' + encodeURIComponent(String(loc).trim())
+          + '&details=' + encodeURIComponent(descPlain);
+        var win = window.open(gcalUrl, '_blank', 'noopener');
+        if (win) { if (typeof showToast === 'function') showToast('📅 Ouverture dans Google Agenda…','success'); return; }
+      } catch(e){}
+    }
     var blob = new Blob([ics], {type:'text/calendar;charset=utf-8'});
     var url  = URL.createObjectURL(blob);
-
-    // Sur iOS / macOS : ouvrir dans l'app Calendrier directement
-    var isMacOrIOS = /iPad|iPhone|Macintosh/.test(navigator.userAgent);
-    if (isMacOrIOS) {
-      // window.open ouvre le fichier .ics → macOS/iOS propose de l'ajouter au Calendrier
-      var win = window.open(url, '_blank');
-      if (!win) {
-        // Popup bloqué → fallback download
-        var af = document.createElement('a');
-        af.href = url; af.download = 'RDV_' + (c.nom||'').replace(/[^a-z0-9]/gi,'_') + '.ics';
-        document.body.appendChild(af); af.click(); document.body.removeChild(af);
-      }
-    } else {
-      // Windows / Android → télécharger (s'ouvre avec Outlook / Google Calendar)
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = 'RDV_' + (c.nom||'').replace(/[^a-z0-9]/gi,'_') + '_' + (c.date||'') + '.ics';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    }
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'RDV_' + (c.nom||'').replace(/[^a-z0-9]/gi,'_') + '_' + (c.date||'') + '.ics';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
-    if (typeof showToast === 'function') {
-      showToast(isMacOrIOS ? '📅 Ouverture dans Calendrier Apple…' : '✅ Fichier .ics téléchargé — Outlook / Google Calendar', 'success');
-    }
+    if (typeof showToast === 'function') showToast('📅 Événement prêt — ouvre-le pour l\'ajouter','success');
   };
 })();
 
@@ -27024,14 +27064,14 @@ console.info('[YAMA V44] Bank buttons · ICS Calendar · Chantier msg btn · Ded
 
 /* Boutons : les icônes seuls (✏️ 📅 🗑) restent compacts */
 .cr-actions .btn[title="Modifier"],
-.cr-actions .btn[title="Ajouter au calendrier (.ics)"],
+.cr-actions .btn[title="Ajouter au calendrier (Apple · Google)"],
 .cr-actions .btn.btn-red {
   flex: 0 0 auto !important;
   padding: 5px 9px !important;
   min-width: unset !important;
 }
 /* Boutons textuels : s'étirent uniformément */
-.cr-actions .btn:not(.btn-red):not([title="Modifier"]):not([title="Ajouter au calendrier (.ics)"]) {
+.cr-actions .btn:not(.btn-red):not([title="Modifier"]):not([title="Ajouter au calendrier (Apple · Google)"]) {
   flex: 1 1 auto !important;
   min-width: 80px !important;
   justify-content: center !important;
@@ -29244,27 +29284,40 @@ select#f-source option[value=""]{color:rgba(255,255,255,.45);}
       'END:VEVENT','END:VCALENDAR'
     ].join('\r\n');
 
-    /* Sur iOS/macOS Safari : data URI text/calendar → Apple Calendar s'ouvre directement
-       Sur Android/Desktop  : téléchargement blob standard */
-    const isApple = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-                    (/Macintosh/i.test(navigator.userAgent) && 'ontouchend' in document);
+    /* APPLE (iOS/iPadOS/macOS) : navigation data:text/calendar → la fiche
+       « Ajouter au calendrier » d'Apple Calendar s'ouvre DIRECTEMENT (aucun fichier).
+       AUTRES : ouverture directe de Google Agenda (formulaire pré-rempli).
+       Fallback ultime : téléchargement .ics. */
+    const isApple = /iPad|iPhone|iPod/i.test(navigator.userAgent) ||
+                    (/Macintosh/i.test(navigator.userAgent) && !window.MSStream) ||
+                    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const fn = `RDV_${(contact.nom||'').replace(/[^a-z0-9]/gi,'_')}_${contact.date}.ics`;
     if(isApple){
-      /* data URI : iOS ouvre l'app Calendrier native sans télécharger de fichier */
-      const a = document.createElement('a');
-      a.href = 'data:text/calendar;charset=utf-8,'+encodeURIComponent(ics);
-      a.target = '_blank';
-      a.rel = 'noopener';
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      try {
+        window.location.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+        try{showToast('📅 Ouverture dans le calendrier Apple…','success');}catch(e){}
+        return;
+      } catch(e){ /* fallback ci-dessous */ }
     } else {
-      const blob = new Blob([ics],{type:'text/calendar;charset=utf-8'});
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href = url; a.download = fn;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      try {
+        const descPlain = String(desc).replace(/\\n/g,'\n');
+        const gcalUrl = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+          + '&text=' + encodeURIComponent(String(t).trim())
+          + '&dates=' + ds + '/' + de + '&ctz=Europe/Brussels'
+          + '&location=' + encodeURIComponent(String(loc).trim())
+          + '&details=' + encodeURIComponent(descPlain);
+        const w = window.open(gcalUrl, '_blank', 'noopener');
+        if (w) { try{showToast('📅 Ouverture dans Google Agenda…','success');}catch(e){} return; }
+      } catch(e){ /* fallback ci-dessous */ }
     }
-    try{showToast('📅 Calendrier — ouverture de l\'app…','success');}catch(e){}
+    // Fallback : téléchargement .ics (navigation/popup bloquée)
+    const blob = new Blob([ics],{type:'text/calendar;charset=utf-8'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = fn;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+    try{showToast('📅 Événement prêt — ouvre-le pour l\'ajouter','success');}catch(e){}
   };
 
   /* ════════════════════════════════════════════════════════
