@@ -38311,5 +38311,100 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
 
 })();
 </script>
+
+<script id="yama-platform-v12stab">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V12 — Stabilité Sync & Affichage
+   ───────────────────────────────────────────────────────────────────────
+   PROBLÈME : « synchronisation intempestive / instable » + redimensionnement.
+   CAUSE    : renderAll() est appelé sur CHAQUE événement temps-réel (aucun
+              throttle) → cascade de rendus → mutations → reflux → scintillement.
+              syncFullPull('realtime-*') est relancé à chaque changement cloud.
+              Les transitions CSS animent les reflux pendant le resize fenêtre.
+   FIX      : 1) throttle renderAll (leading + trailing, 250 ms)
+              2) coalescence des pulls temps-réel (debounce 700 ms)
+              3) suppression des transitions pendant le redimensionnement
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V12STAB__) return;
+  window.__YAMA_PLATFORM_V12STAB__ = true;
+
+  function now(){ return +new Date(); }
+
+  /* ── 1. Throttle renderAll (leading + trailing) ────────────────────────── */
+  (function throttleRenderAll(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.renderAll==='function' && !window.renderAll.__v12stab){
+        var orig = window.renderAll;
+        var last = 0, timer = null;
+        var wrapped = function(){
+          var since = now() - last;
+          if(since >= 250){
+            last = now();
+            return orig.call(window);
+          }
+          clearTimeout(timer);
+          timer = setTimeout(function(){ last = now(); try{ orig.call(window); }catch(e){} }, 250 - since);
+        };
+        wrapped.__v12stab = true;
+        window.renderAll = wrapped;
+        clearInterval(iv);
+      }
+      if(tries>60) clearInterval(iv);
+    }, 250);
+  })();
+
+  /* ── 2. Coalescence des pulls temps-réel ───────────────────────────────── */
+  (function coalesceRealtimePull(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.syncFullPull==='function' && !window.syncFullPull.__v12stab){
+        var orig = window.syncFullPull;
+        var timer = null;
+        var wrapped = function(reason){
+          if(typeof reason==='string' && reason.indexOf('realtime')===0){
+            // bursts d'événements cloud → un seul pull groupé
+            clearTimeout(timer);
+            timer = setTimeout(function(){ try{ orig.call(window, 'realtime-coalesced'); }catch(e){} }, 700);
+            return Promise.resolve();
+          }
+          return orig.apply(this, arguments);
+        };
+        wrapped.__v12stab = true;
+        // préserver les drapeaux posés par d'autres wrappers (V11)
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) wrapped[k]=orig[k]; } }catch(e){}
+        window.syncFullPull = wrapped;
+        clearInterval(iv);
+      }
+      if(tries>60) clearInterval(iv);
+    }, 350);
+  })();
+
+  /* ── 3. Suppression des transitions pendant le redimensionnement ───────── */
+  (function suppressResizeJank(){
+    try{
+      var st = document.createElement('style');
+      st.id = 'yama-v12stab-style';
+      st.textContent = 'body.yama-resizing *{transition:none !important;animation:none !important;}';
+      (document.head||document.documentElement).appendChild(st);
+    }catch(e){}
+    var rzT = null;
+    window.addEventListener('resize', function(){
+      if(!document.body) return;
+      document.body.classList.add('yama-resizing');
+      clearTimeout(rzT);
+      rzT = setTimeout(function(){ try{ document.body.classList.remove('yama-resizing'); }catch(e){} }, 220);
+    }, { passive:true });
+  })();
+
+  setTimeout(function(){
+    console.info('[YAMA V12] Stabilité — renderAll throttlé · pulls temps-réel groupés · resize sans jank — actif.');
+  }, 2800);
+
+})();
+</script>
 </body>
 </html>
