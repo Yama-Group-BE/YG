@@ -38737,5 +38737,312 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
 
 })();
 </script>
+
+<script id="yama-platform-v14">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V14 — Rapport d'intervention & Avis client
+   ───────────────────────────────────────────────────────────────────────
+   Quand un chantier passe « Terminé », ouvre un flux :
+     1) DEMANDE D'AVIS — message pré-rempli (WhatsApp / Email / Copier)
+        demandant au client : content/mitigé/pas content, points appréciés,
+        axes d'amélioration.
+     2) RAPPORT — éditeur structuré (satisfaction, points positifs, axes
+        d'amélioration, commentaire) stocké dans yama_rapports_v14.
+   Réutilise le vocabulaire clientMood existant (content/mitige/fache) et les
+   coordonnées client de l'historique (docEntry → clientTel/clientEmail).
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V14__) return;
+  window.__YAMA_PLATFORM_V14__ = true;
+
+  var LS_RAP = 'yama_rapports_v14';
+  var LS_CH  = 'yama_chantiers_v12';
+
+  function rd(k,d){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(d)); }catch(e){ return d; } }
+  function wr(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function esc14(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function val(id){ var e=document.getElementById(id); return e?String(e.value||'').trim():''; }
+  function S(){ try{ return (typeof getSettings==='function')?getSettings():{}; }catch(e){ return {}; } }
+  function entrepriseNom(){ try{ var e=S().entreprise||{}; return e.nom||e.raisonSociale||e.name||'YAMA Group'; }catch(x){ return 'YAMA Group'; } }
+  function rapports(){ return rd(LS_RAP, {}); }
+  function saveRapports(m){ wr(LS_RAP, m); }
+
+  function waNormalize(tel){
+    var t=String(tel||'').replace(/[^0-9+]/g,'');
+    if(!t) return '';
+    t=t.replace(/^\+/,'');
+    if(t.charAt(0)==='0') t='32'+t.slice(1);
+    return t;
+  }
+
+  /* ── Résolution coordonnées + référence chantier ───────────────────────── */
+  function resolveTarget(snap){
+    var chs = rd(LS_CH, []);
+    var name=(snap.clientName||'').toLowerCase().trim();
+    var ref =(snap.chantierRef||'').toLowerCase().trim();
+    var match=null, best=-1;
+    chs.forEach(function(c){
+      if(!c) return;
+      var cn=(c.clientName||'').toLowerCase().trim();
+      var cr=(c.chantierRef||'').toLowerCase().trim();
+      var score=0;
+      if(name && cn===name) score+=2; else if(name && cn && (cn.indexOf(name)>=0||name.indexOf(cn)>=0)) score+=1;
+      if(ref && cr===ref) score+=2;
+      if(score>best){ best=score; match=c; }
+    });
+    var docNum = match ? (match.factureNum||match.devisNum||match.sourceDocNum||'') : '';
+    var entry=null;
+    try{ if(docNum && typeof window.docEntry==='function') entry=window.docEntry(docNum); }catch(e){}
+    return {
+      chantier: match,
+      chantierId: match?match.id:'',
+      key: match?match.id:(name+'|'+ref),
+      clientName: snap.clientName || (match?match.clientName:''),
+      chantierRef: snap.chantierRef || (match?match.chantierRef:''),
+      tel: entry?(entry.clientTel||entry.clientTelephone||''):'',
+      email: entry?(entry.clientEmail||''):''
+    };
+  }
+
+  function prenomDe(nom){
+    var n=String(nom||'').replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim();
+    return n.split(/\s+/)[0]||'';
+  }
+
+  function buildFeedbackMsg(t){
+    var p=prenomDe(t.clientName);
+    var chant = t.chantierRef ? (' pour « '+t.chantierRef+' »') : '';
+    return 'Bonjour '+(p||'')+',\n\n'+
+      'Merci de nous avoir fait confiance'+chant+'. '+
+      'Afin de finaliser notre rapport d\'intervention et de toujours nous améliorer, pourriez-vous nous dire en quelques mots :\n\n'+
+      '1️⃣ Êtes-vous plutôt CONTENT, MITIGÉ ou PAS CONTENT ?\n'+
+      '2️⃣ Qu\'avez-vous le plus apprécié ?\n'+
+      '3️⃣ Qu\'aurions-nous pu améliorer ?\n\n'+
+      'Votre retour nous aide énormément. Merci beaucoup !\n— '+entrepriseNom();
+  }
+
+  /* ── Modal Rapport ─────────────────────────────────────────────────────── */
+  var _cur=null; // cible courante
+  function injectStyle(){
+    if(document.getElementById('yama-v14-style')) return;
+    var st=document.createElement('style'); st.id='yama-v14-style';
+    st.textContent=
+      '#yama-v14-overlay{position:fixed;inset:0;z-index:99995;background:rgba(5,9,15,.72);display:none;align-items:flex-end;justify-content:center;}'+
+      '#yama-v14-overlay.show{display:flex;}'+
+      '#yama-v14-modal{background:#0d1420;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;border-radius:18px 18px 0 0;'+
+      'border-top:2px solid rgba(201,168,76,.55);padding:20px 18px 28px;box-shadow:0 -12px 44px rgba(0,0,0,.6);}'+
+      '@media(min-width:780px){#yama-v14-overlay{align-items:center;}#yama-v14-modal{border-radius:16px;border:1px solid rgba(201,168,76,.4);}}'+
+      '#yama-v14-modal h3{margin:0 0 4px;font-size:17px;color:#fff;}'+
+      '.yv14-sub{font-size:12.5px;color:rgba(255,255,255,.5);margin-bottom:16px;}'+
+      '.yv14-sec{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:14px;margin-bottom:14px;}'+
+      '.yv14-sec h4{margin:0 0 10px;font-size:13px;color:#C9A84C;text-transform:uppercase;letter-spacing:.5px;}'+
+      '.yv14-msg{width:100%;min-height:120px;background:#0b1119;border:1px solid rgba(255,255,255,.1);border-radius:9px;color:#e8edf4;font-size:12.5px;padding:10px;resize:vertical;line-height:1.5;font-family:inherit;}'+
+      '.yv14-btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}'+
+      '.yv14-btn{flex:1;min-width:100px;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;border:1px solid;}'+
+      '.yv14-wa{background:rgba(37,211,102,.14);border-color:rgba(37,211,102,.45);color:#25d366;}'+
+      '.yv14-em{background:rgba(90,160,255,.12);border-color:rgba(90,160,255,.45);color:#7db4ff;}'+
+      '.yv14-cp{background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.45);color:#C9A84C;}'+
+      '.yv14-mood{display:flex;gap:8px;margin-bottom:12px;}'+
+      '.yv14-mood button{flex:1;padding:12px 6px;border-radius:11px;border:1.5px solid rgba(255,255,255,.12);background:rgba(255,255,255,.03);'+
+      'color:rgba(255,255,255,.7);font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s;}'+
+      '.yv14-mood button .e{font-size:22px;display:block;margin-bottom:3px;}'+
+      '.yv14-mood button.sel-content{border-color:#52c77f;background:rgba(82,199,127,.14);color:#52c77f;}'+
+      '.yv14-mood button.sel-mitige{border-color:#E07B39;background:rgba(224,123,57,.14);color:#E07B39;}'+
+      '.yv14-mood button.sel-fache{border-color:#e74c3c;background:rgba(231,76,60,.14);color:#e74c3c;}'+
+      '.yv14-field{margin-bottom:11px;}'+
+      '.yv14-field label{display:block;font-size:11.5px;color:rgba(255,255,255,.55);margin-bottom:5px;}'+
+      '.yv14-field textarea{width:100%;min-height:58px;background:#0b1119;border:1px solid rgba(255,255,255,.1);border-radius:9px;color:#e8edf4;font-size:13px;padding:9px;resize:vertical;font-family:inherit;box-sizing:border-box;}'+
+      '.yv14-foot{display:flex;gap:10px;margin-top:6px;}'+
+      '.yv14-save{flex:1;padding:13px;border-radius:11px;border:none;background:linear-gradient(135deg,#C9A84C,#b8973f);color:#1a1206;font-size:14px;font-weight:800;cursor:pointer;}'+
+      '.yv14-later{padding:13px 16px;border-radius:11px;border:1px solid rgba(255,255,255,.15);background:transparent;color:rgba(255,255,255,.6);font-size:13px;cursor:pointer;}';
+    (document.head||document.documentElement).appendChild(st);
+  }
+
+  function ensureModal(){
+    if(document.getElementById('yama-v14-overlay')) return;
+    if(!document.body) return;
+    var ov=document.createElement('div'); ov.id='yama-v14-overlay';
+    ov.innerHTML='<div id="yama-v14-modal"></div>';
+    ov.addEventListener('click', function(e){ if(e.target===ov) closeModal(); });
+    document.body.appendChild(ov);
+  }
+
+  var _mood='content';
+  function selectMood(m){
+    _mood=m;
+    ['content','mitige','fache'].forEach(function(x){
+      var b=document.getElementById('yv14-mood-'+x);
+      if(b) b.className = (x===m ? ('sel-'+m) : '');
+    });
+  }
+  window.ymV14Mood = selectMood;
+
+  function renderModal(){
+    var m=document.getElementById('yama-v14-modal'); if(!m||!_cur) return;
+    var existing = rapports()[_cur.key] || {};
+    _mood = existing.satisfaction || 'content';
+    var msg = buildFeedbackMsg(_cur);
+    m.innerHTML =
+      '<h3>📝 Rapport d\'intervention</h3>'+
+      '<div class="yv14-sub">'+esc14(_cur.clientName||'Client')+(_cur.chantierRef?(' · '+esc14(_cur.chantierRef)):'')+'</div>'+
+
+      '<div class="yv14-sec">'+
+        '<h4>1 · Demander l\'avis du client</h4>'+
+        '<textarea class="yv14-msg" id="yv14-feedmsg">'+esc14(msg)+'</textarea>'+
+        '<div class="yv14-btns">'+
+          (_cur.tel?'<button class="yv14-btn yv14-wa" onclick="window.ymV14Send(\'wa\')">📲 WhatsApp</button>':'<button class="yv14-btn yv14-wa" onclick="window.ymV14Send(\'wa\')">📲 WhatsApp</button>')+
+          (_cur.email?'<button class="yv14-btn yv14-em" onclick="window.ymV14Send(\'email\')">✉️ Email</button>':'')+
+          '<button class="yv14-btn yv14-cp" onclick="window.ymV14Send(\'copy\')">📋 Copier</button>'+
+        '</div>'+
+      '</div>'+
+
+      '<div class="yv14-sec">'+
+        '<h4>2 · Rapport interne</h4>'+
+        '<div class="yv14-mood">'+
+          '<button id="yv14-mood-content" class="'+(_mood==='content'?'sel-content':'')+'" onclick="window.ymV14Mood(\'content\')"><span class="e">😊</span>Content</button>'+
+          '<button id="yv14-mood-mitige" class="'+(_mood==='mitige'?'sel-mitige':'')+'" onclick="window.ymV14Mood(\'mitige\')"><span class="e">😐</span>Mitigé</button>'+
+          '<button id="yv14-mood-fache" class="'+(_mood==='fache'?'sel-fache':'')+'" onclick="window.ymV14Mood(\'fache\')"><span class="e">😞</span>Pas content</button>'+
+        '</div>'+
+        '<div class="yv14-field"><label>👍 Points positifs (ce qui a plu)</label><textarea id="yv14-pos">'+esc14(existing.positifs||'')+'</textarea></div>'+
+        '<div class="yv14-field"><label>🔧 Axes d\'amélioration</label><textarea id="yv14-amel">'+esc14(existing.ameliorations||'')+'</textarea></div>'+
+        '<div class="yv14-field"><label>🗒️ Commentaire / synthèse</label><textarea id="yv14-com">'+esc14(existing.commentaire||'')+'</textarea></div>'+
+      '</div>'+
+
+      '<div class="yv14-foot">'+
+        '<button class="yv14-save" onclick="window.ymV14Save()">💾 Enregistrer le rapport</button>'+
+        '<button class="yv14-later" onclick="window.ymV14Close()">Plus tard</button>'+
+      '</div>';
+  }
+
+  window.ymV14Send = function(channel){
+    var ta=document.getElementById('yv14-feedmsg');
+    var msg = ta ? ta.value : (_cur?buildFeedbackMsg(_cur):'');
+    if(channel==='wa'){
+      var n=waNormalize(_cur && _cur.tel);
+      var url = n ? ('https://wa.me/'+n+'?text='+encodeURIComponent(msg)) : ('https://wa.me/?text='+encodeURIComponent(msg));
+      window.open(url,'_blank');
+    } else if(channel==='email'){
+      var subj='Votre avis sur notre intervention'+(_cur&&_cur.chantierRef?(' — '+_cur.chantierRef):'');
+      window.open('mailto:'+encodeURIComponent(_cur&&_cur.email||'')+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(msg),'_blank');
+    } else {
+      try{ navigator.clipboard.writeText(msg); }catch(e){}
+      try{ if(typeof toast==='function') toast('Message copié — collez-le dans WhatsApp/Email','success'); }catch(e){}
+    }
+    markRequested();
+  };
+
+  function markRequested(){
+    if(!_cur) return;
+    var map=rapports(); var r=map[_cur.key]||{};
+    r.feedbackRequestedAt = new Date().toISOString();
+    r.clientName=_cur.clientName; r.chantierRef=_cur.chantierRef;
+    map[_cur.key]=r; saveRapports(map);
+    flagChantier({avisDemande:true});
+  }
+
+  function flagChantier(patch){
+    if(!_cur || !_cur.chantierId) return;
+    try{
+      var chs=rd(LS_CH, []); var changed=false;
+      chs.forEach(function(c){ if(c && c.id===_cur.chantierId){ Object.assign(c, patch); c.updatedAt=new Date().toISOString(); changed=true; } });
+      if(changed) wr(LS_CH, chs);
+    }catch(e){}
+  }
+
+  window.ymV14Save = function(){
+    if(!_cur) { closeModal(); return; }
+    var map=rapports();
+    var r=map[_cur.key]||{};
+    r.satisfaction=_mood;
+    r.positifs=val('yv14-pos');
+    r.ameliorations=val('yv14-amel');
+    r.commentaire=val('yv14-com');
+    r.clientName=_cur.clientName; r.chantierRef=_cur.chantierRef;
+    r.updatedAt=new Date().toISOString();
+    if(!r.createdAt) r.createdAt=r.updatedAt;
+    map[_cur.key]=r; saveRapports(map);
+    // refléter sur le chantier (note synthèse + mood) — best effort
+    flagChantier({ clientMood:_mood, rapportV14:true, avisDemande:true });
+    try{ if(typeof toast==='function') toast('✓ Rapport enregistré','success'); }catch(e){}
+    closeModal();
+    try{ if(typeof window.renderChantiersTab==='function') window.renderChantiersTab(); }catch(e){}
+  };
+
+  function openModal(snap){
+    injectStyle(); ensureModal();
+    _cur = resolveTarget(snap||{});
+    renderModal();
+    var ov=document.getElementById('yama-v14-overlay');
+    if(ov){ ov.classList.add('show'); setTimeout(function(){ var x=document.getElementById('yv14-mood-'+_mood); },10); }
+  }
+  function closeModal(){ var ov=document.getElementById('yama-v14-overlay'); if(ov) ov.classList.remove('show'); }
+  window.ymV14Close = closeModal;
+  window.ymOpenRapport = function(chantierId){
+    var chs=rd(LS_CH, []); var c=chs.find(function(x){return x&&x.id===chantierId;});
+    openModal(c?{clientName:c.clientName, chantierRef:c.chantierRef}:{});
+  };
+
+  /* ── Hook : ouverture auto à la clôture d'un chantier ──────────────────── */
+  (function wrapSave(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.saveChantierSheetFromModal==='function' && !window.saveChantierSheetFromModal.__v14){
+        var orig=window.saveChantierSheetFromModal;
+        window.saveChantierSheetFromModal=function(){
+          var statusEl=document.getElementById('v12ChStatus');
+          var closing = statusEl && statusEl.value==='closed';
+          var snap = closing ? { clientName: val('v12ChClient'), chantierRef: val('v12ChRef') } : null;
+          var r = orig.apply(this, arguments);
+          if(closing && snap){ setTimeout(function(){ try{ openModal(snap); }catch(e){ console.warn('[V14]',e); } }, 480); }
+          return r;
+        };
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.saveChantierSheetFromModal[k]=orig[k]; } }catch(e){}
+        window.saveChantierSheetFromModal.__v14=true;
+        clearInterval(iv);
+      }
+      if(tries>60) clearInterval(iv);
+    }, 350);
+  })();
+
+  /* ── Bouton « Rapport & avis » dans la fiche chantier ──────────────────── */
+  (function wrapOpenSheet(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.openChantierSheetModal==='function' && !window.openChantierSheetModal.__v14){
+        var orig=window.openChantierSheetModal;
+        window.openChantierSheetModal=function(chantierId){
+          var r=orig.apply(this, arguments);
+          if(chantierId){
+            setTimeout(function(){
+              try{
+                var bar=document.querySelector('#v12ChantierModal .yama-v12-btnbar');
+                if(bar && !document.getElementById('yv14-openrap')){
+                  var b=document.createElement('button');
+                  b.id='yv14-openrap'; b.className='yama-v12-mini-btn'; b.type='button';
+                  b.textContent='📝 Rapport & avis';
+                  b.onclick=function(){ window.ymOpenRapport(chantierId); };
+                  bar.insertBefore(b, bar.firstChild);
+                }
+              }catch(e){}
+            }, 120);
+          }
+          return r;
+        };
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.openChantierSheetModal[k]=orig[k]; } }catch(e){}
+        window.openChantierSheetModal.__v14=true;
+        clearInterval(iv);
+      }
+      if(tries>60) clearInterval(iv);
+    }, 350);
+  })();
+
+  setTimeout(function(){
+    console.info('[YAMA V14] Rapport d\'intervention & avis client — flux clôture chantier — actif.');
+  }, 3200);
+
+})();
+</script>
 </body>
 </html>
