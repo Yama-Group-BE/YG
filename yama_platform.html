@@ -38406,5 +38406,336 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
 
 })();
 </script>
+
+<script id="yama-platform-v13">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V13 — Centre de Notifications & Automatisations
+   ───────────────────────────────────────────────────────────────────────
+   • Rend ENFIN actifs les toggles d'automatisation (relance facture/devis,
+     client dormant, avis Google, notifications navigateur) — ils étaient
+     présents dans Réglages mais aucun code ne les lisait.
+   • Cloche flottante + panneau « Résumé du jour » : impayés, retards,
+     devis à relancer, chantiers à facturer, avis à demander.
+   • Notifications téléphone (Web Notification API — fonctionne en PWA iOS
+     16.4+ installée) : résumé quotidien « X impayés · Y à relancer ».
+   • S'appuie sur la vérité paiements réconciliée par V11 (calcKPIs).
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V13__) return;
+  window.__YAMA_PLATFORM_V13__ = true;
+
+  var LS_PUSH = 'yama_notif_lastpush_v13';  // 'YYYY-MM-DD' du dernier push quotidien
+
+  /* ── Helpers ──────────────────────────────────────────────────────────── */
+  function euro(n){ try{ return new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(n||0); }catch(e){ return (Math.round((n||0)*100)/100)+' €'; } }
+  function todayStr(){ return new Date().toISOString().slice(0,10); }
+  function daysSince(d){ if(!d) return 0; var t=new Date(d).getTime(); if(isNaN(t)) return 0; return Math.floor((Date.now()-t)/86400000); }
+  function S(){ try{ return (typeof getSettings==='function')?getSettings():{}; }catch(e){ return {}; } }
+  function aut(k){ try{ var a=S().automatisations||{}; return !!a[k]; }catch(e){ return false; } }
+  function hist(){ try{ return (typeof getHistory==='function')?getHistory():JSON.parse(localStorage.getItem('yama_history_v3')||'[]'); }catch(e){ return []; } }
+  function devStatuses(){ try{ return (typeof getDevisStatuses==='function')?getDevisStatuses():{}; }catch(e){ return {}; } }
+  function chantiers(){ try{ return JSON.parse(localStorage.getItem('yama_chantiers_v12')||'[]'); }catch(e){ return []; } }
+  function kpis(){ try{ return (typeof calcKPIs==='function')?calcKPIs():null; }catch(e){ return null; } }
+
+  /* ── Calcul des alertes ───────────────────────────────────────────────── */
+  function computeAlerts(){
+    var out = [];
+    var k = kpis();
+
+    // 1) Factures impayées / en retard (toggle relanceFactureActif, défaut ON si absent)
+    if(aut('relanceFactureActif') !== false && k && k.impayees){
+      k.impayees.forEach(function(f){
+        var retard = f.jourRetard||0;
+        out.push({
+          id:'imp-'+f.docNum,
+          type:'unpaid',
+          severity: retard > 0 ? (retard >= 15 ? 'high':'mid') : 'low',
+          title: (retard>0?'⚠️ Facture en retard':'💶 Facture impayée') + ' · ' + (f.clientNom||'Client'),
+          detail: (f.docNum||'') + ' — reste ' + euro(f.restant) + (retard>0?(' · +'+retard+' j de retard'):''),
+          docNum: f.docNum, clientNom: f.clientNom, restant: f.restant, jourRetard: retard,
+          action:'relance'
+        });
+      });
+    }
+
+    // 2) Devis en attente à relancer (toggle relanceDevisActif)
+    if(aut('relanceDevisActif')){
+      var ds = devStatuses();
+      var delai = 7;
+      try{ var d = parseInt(S().pipeline && S().pipeline.relanceDevisJours,10); if(d>0) delai=d; }catch(e){}
+      hist().forEach(function(h){
+        if(!h || h.docType!=='devis') return;
+        var st = (ds[h.docNum]||{}).status || 'pending';
+        if(st!=='pending') return;
+        var age = daysSince(h.dateEmission||h.savedAt);
+        if(age >= delai){
+          out.push({
+            id:'dev-'+h.docNum, type:'devis',
+            severity: age >= delai*2 ? 'mid':'low',
+            title:'📋 Devis sans réponse · '+(h.clientNom||'Client'),
+            detail:(h.docNum||'')+' — '+euro(h.totalTTC)+' · '+age+' j sans nouvelle',
+            docNum:h.docNum, clientNom:h.clientNom, action:'tab-devis'
+          });
+        }
+      });
+    }
+
+    // 3) Chantiers terminés à facturer
+    if(k && k.aFacturer && k.aFacturer.length){
+      k.aFacturer.forEach(function(ch){
+        out.push({
+          id:'fac-'+(ch.id||ch.chantierRef||ch.clientName||Math.random()),
+          type:'toInvoice', severity:'mid',
+          title:'🧾 Chantier terminé à facturer · '+(ch.clientName||ch.clientNom||'Client'),
+          detail:(ch.chantierRef||'')+' — CA '+euro(ch.caReel||ch.ca_reel_ht||0),
+          action:'tab-cockpit'
+        });
+      });
+    }
+
+    // 4) Chantiers terminés sans demande d'avis (toggle demandeAvisGoogleActif)
+    if(aut('demandeAvisGoogleActif')){
+      chantiers().forEach(function(ch){
+        var done = ch.status==='closed' || ch.statut==='Termine' || ch.statut==='Terminé';
+        if(done && !ch.avisDemande && !ch.reviewRequestedAt){
+          out.push({
+            id:'avis-'+(ch.id||ch.chantierRef||ch.clientName),
+            type:'review', severity:'low',
+            title:'⭐ Demander un avis · '+(ch.clientName||ch.clientNom||'Client'),
+            detail:(ch.chantierRef||'')+' — chantier terminé, avis client non demandé',
+            action:'none'
+          });
+        }
+      });
+    }
+
+    // 5) Clients dormants (toggle rappelClientDormantActif)
+    if(aut('rappelClientDormantActif')){
+      var contacts=[]; try{ contacts=JSON.parse(localStorage.getItem('yama_crm_v2')||'[]'); }catch(e){}
+      contacts.forEach(function(c){
+        if(!c || c.finished) return;
+        var ref = c.savedAt || c.date || c.followUpLastAt;
+        var age = daysSince(ref);
+        if(age >= 60){
+          out.push({
+            id:'dorm-'+(c.contact_id||c.id||c.nom),
+            type:'dormant', severity:'low',
+            title:'😴 Client dormant · '+(c.nom||'Client'),
+            detail:'Aucun contact depuis '+age+' jours',
+            action:'none'
+          });
+        }
+      });
+    }
+
+    // tri par sévérité puis retard
+    var rank={high:0,mid:1,low:2};
+    out.sort(function(a,b){ return (rank[a.severity]-rank[b.severity]) || ((b.jourRetard||0)-(a.jourRetard||0)); });
+    return out;
+  }
+
+  /* ── Résumé compact ───────────────────────────────────────────────────── */
+  function summary(alerts){
+    var k=kpis();
+    var nImp = alerts.filter(function(a){return a.type==='unpaid';}).length;
+    var nRet = alerts.filter(function(a){return a.type==='unpaid'&&(a.jourRetard||0)>0;}).length;
+    var nDev = alerts.filter(function(a){return a.type==='devis';}).length;
+    var nFac = alerts.filter(function(a){return a.type==='toInvoice';}).length;
+    var restant = k ? (k.caEnAttente||0) : 0;
+    return { nImp:nImp, nRet:nRet, nDev:nDev, nFac:nFac, restant:restant, total:alerts.length };
+  }
+
+  /* ── UI : cloche + panneau ────────────────────────────────────────────── */
+  function injectStyles(){
+    if(document.getElementById('yama-v13-style')) return;
+    var st=document.createElement('style'); st.id='yama-v13-style';
+    st.textContent =
+      '#yama-v13-bell{position:fixed;left:18px;bottom:18px;z-index:99990;width:52px;height:52px;border-radius:50%;'+
+      'background:linear-gradient(135deg,#1a2233,#0f1622);border:1px solid rgba(201,168,76,.45);color:#C9A84C;'+
+      'font-size:22px;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s;}'+
+      '#yama-v13-bell:hover{transform:scale(1.06);}'+
+      '#yama-v13-badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;'+
+      'background:#e74c3c;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #0f1622;}'+
+      '#yama-v13-panel{position:fixed;left:0;right:0;bottom:0;z-index:99991;max-height:78vh;overflow-y:auto;'+
+      'background:#0d1420;border-top:2px solid rgba(201,168,76,.5);border-radius:18px 18px 0 0;padding:18px 16px 28px;'+
+      'box-shadow:0 -10px 40px rgba(0,0,0,.6);transform:translateY(110%);transition:transform .28s cubic-bezier(.2,.8,.2,1);}'+
+      '#yama-v13-panel.open{transform:translateY(0);}'+
+      '@media(min-width:780px){#yama-v13-panel{left:auto;right:18px;bottom:84px;width:420px;max-height:70vh;border-radius:16px;border:1px solid rgba(201,168,76,.4);}}'+
+      '.yv13-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}'+
+      '.yv13-h h3{margin:0;font-size:16px;color:#fff;font-weight:700;}'+
+      '.yv13-close{background:none;border:none;color:rgba(255,255,255,.5);font-size:22px;cursor:pointer;line-height:1;}'+
+      '.yv13-sum{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;}'+
+      '.yv13-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;}'+
+      '.yv13-card .v{font-size:19px;font-weight:800;}'+
+      '.yv13-card .l{font-size:10.5px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.4px;margin-top:2px;}'+
+      '.yv13-item{display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border-radius:10px;margin-bottom:8px;'+
+      'background:rgba(255,255,255,.03);border-left:3px solid rgba(255,255,255,.15);}'+
+      '.yv13-item.high{border-left-color:#e74c3c;background:rgba(231,76,60,.07);}'+
+      '.yv13-item.mid{border-left-color:#E07B39;}'+
+      '.yv13-item.low{border-left-color:#C9A84C;}'+
+      '.yv13-item .tx{flex:1;min-width:0;}'+
+      '.yv13-item .tt{font-size:13px;color:#fff;font-weight:600;}'+
+      '.yv13-item .dt{font-size:11.5px;color:rgba(255,255,255,.55);margin-top:2px;}'+
+      '.yv13-item .ab{background:rgba(201,168,76,.14);border:1px solid rgba(201,168,76,.4);color:#C9A84C;'+
+      'border-radius:7px;padding:5px 10px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;align-self:center;}'+
+      '.yv13-empty{text-align:center;color:rgba(255,255,255,.45);padding:26px 10px;font-size:13px;}'+
+      '.yv13-push{width:100%;margin-top:6px;padding:11px;border-radius:10px;border:1px solid rgba(201,168,76,.45);'+
+      'background:rgba(201,168,76,.12);color:#C9A84C;font-size:12.5px;font-weight:700;cursor:pointer;}';
+    (document.head||document.documentElement).appendChild(st);
+  }
+
+  function ensureBell(){
+    if(document.getElementById('yama-v13-bell')) return;
+    if(!document.body) return;
+    var b=document.createElement('button');
+    b.id='yama-v13-bell'; b.type='button'; b.title='Notifications & résumé du jour';
+    b.innerHTML='🔔<span id="yama-v13-badge" style="display:none;">0</span>';
+    b.onclick=togglePanel;
+    document.body.appendChild(b);
+  }
+
+  function updateBadge(){
+    var badge=document.getElementById('yama-v13-badge'); if(!badge) return;
+    var n=computeAlerts().filter(function(a){return a.severity!=='low';}).length || computeAlerts().length;
+    var total=computeAlerts().length;
+    if(total>0){ badge.style.display='flex'; badge.textContent=total>99?'99+':String(total); }
+    else { badge.style.display='none'; }
+  }
+
+  function actionFor(a){
+    if(a.action==='relance' && typeof window.v37OpenRelanceModal==='function'){
+      return {label:'Relancer', fn:function(){ closePanel(); window.v37OpenRelanceModal(a.docNum, a.clientNom, a.restant, a.jourRetard); }};
+    }
+    if(a.action==='tab-cockpit' || a.action==='relance'){
+      return {label:'Voir', fn:function(){ closePanel(); goTab('cockpit'); }};
+    }
+    if(a.action==='tab-devis'){
+      return {label:'Voir', fn:function(){ closePanel(); goTab('devis'); }};
+    }
+    return null;
+  }
+
+  function goTab(name){
+    try{
+      if(typeof window.switchTab==='function'){ window.switchTab(name); return; }
+      var t=document.querySelector('[data-tab="'+name+'"]'); if(t) t.click();
+    }catch(e){}
+  }
+
+  function renderPanel(){
+    var p=document.getElementById('yama-v13-panel'); if(!p) return;
+    var alerts=computeAlerts(); var s=summary(alerts);
+    var notifSupported = ('Notification' in window);
+    var notifGranted = notifSupported && Notification.permission==='granted';
+    var html='';
+    html+='<div class="yv13-h"><h3>🔔 Résumé du jour</h3><button class="yv13-close" onclick="window.ymV13Close()">×</button></div>';
+    html+='<div class="yv13-sum">'+
+      '<div class="yv13-card"><div class="v" style="color:#e74c3c;">'+s.nImp+'</div><div class="l">Impayées</div></div>'+
+      '<div class="yv13-card"><div class="v" style="color:#E07B39;">'+s.nRet+'</div><div class="l">En retard</div></div>'+
+      '<div class="yv13-card"><div class="v" style="color:#C9A84C;">'+s.nDev+'</div><div class="l">Devis à relancer</div></div>'+
+      '<div class="yv13-card"><div class="v" style="color:#52c77f;">'+s.nFac+'</div><div class="l">À facturer</div></div>'+
+      '</div>';
+    if(s.restant>0){
+      html+='<div style="font-size:12.5px;color:rgba(255,255,255,.7);margin:-4px 0 12px;">💰 Total en attente d\'encaissement : <strong style="color:#C9A84C;">'+euro(s.restant)+'</strong></div>';
+    }
+    if(alerts.length===0){
+      html+='<div class="yv13-empty">✅ Rien d\'urgent aujourd\'hui.<br>Tout est à jour !</div>';
+    } else {
+      alerts.slice(0,40).forEach(function(a,i){
+        var act=actionFor(a);
+        html+='<div class="yv13-item '+a.severity+'">'+
+          '<div class="tx"><div class="tt">'+esc13(a.title)+'</div><div class="dt">'+esc13(a.detail)+'</div></div>'+
+          (act?('<button class="ab" data-i="'+i+'">'+act.label+'</button>'):'')+
+          '</div>';
+      });
+    }
+    if(notifSupported && !notifGranted){
+      html+='<button class="yv13-push" onclick="window.ymV13EnablePush()">📲 Activer les notifications sur ce téléphone</button>';
+    } else if(notifGranted){
+      html+='<div style="text-align:center;font-size:11.5px;color:#52c77f;margin-top:8px;">📲 Notifications activées sur cet appareil</div>';
+    }
+    p.innerHTML=html;
+    // brancher les boutons d'action
+    var btns=p.querySelectorAll('.ab[data-i]');
+    btns.forEach(function(btn){
+      var i=parseInt(btn.getAttribute('data-i'),10);
+      var act=actionFor(alerts[i]);
+      if(act) btn.onclick=act.fn;
+    });
+  }
+  function esc13(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function ensurePanel(){
+    if(document.getElementById('yama-v13-panel')) return;
+    if(!document.body) return;
+    var p=document.createElement('div'); p.id='yama-v13-panel'; document.body.appendChild(p);
+  }
+  function togglePanel(){
+    ensurePanel();
+    var p=document.getElementById('yama-v13-panel');
+    if(p.classList.contains('open')){ closePanel(); }
+    else { renderPanel(); p.classList.add('open'); }
+  }
+  function closePanel(){ var p=document.getElementById('yama-v13-panel'); if(p) p.classList.remove('open'); }
+  window.ymV13Close = closePanel;
+  window.ymV13Open  = togglePanel;
+
+  /* ── Notifications navigateur ─────────────────────────────────────────── */
+  window.ymV13EnablePush = function(){
+    if(!('Notification' in window)){ alert('Notifications non supportées sur cet appareil.'); return; }
+    Notification.requestPermission().then(function(perm){
+      if(perm==='granted'){
+        // activer aussi le toggle réglages pour cohérence
+        try{ var s=getSettings(); s.automatisations=s.automatisations||{}; s.automatisations.notificationsNavigateur=true; saveSettings(s); }catch(e){}
+        try{ new Notification('YAMA — Notifications activées', { body:'Vous recevrez le résumé quotidien (impayés, relances, à facturer).' }); }catch(e){}
+        maybeDailyPush(true);
+      }
+      renderPanel();
+    }).catch(function(){});
+  };
+
+  function maybeDailyPush(force){
+    if(!('Notification' in window) || Notification.permission!=='granted') return;
+    if(!aut('notificationsNavigateur')) return;
+    var today=todayStr();
+    var last=''; try{ last=localStorage.getItem(LS_PUSH)||''; }catch(e){}
+    if(!force && last===today) return;
+    var alerts=computeAlerts(); var s=summary(alerts);
+    if(alerts.length===0 && !force) { try{ localStorage.setItem(LS_PUSH,today); }catch(e){} return; }
+    var parts=[];
+    if(s.nImp) parts.push(s.nImp+' impayée'+(s.nImp>1?'s':'')+(s.restant>0?(' ('+euro(s.restant)+')'):''));
+    if(s.nDev) parts.push(s.nDev+' devis à relancer');
+    if(s.nFac) parts.push(s.nFac+' à facturer');
+    var body = parts.length ? parts.join(' · ') : 'Tout est à jour ✅';
+    try{
+      new Notification('YAMA — Résumé du jour', { body:body, tag:'yama-daily', renotify:false });
+      localStorage.setItem(LS_PUSH,today);
+    }catch(e){}
+  }
+
+  /* ── Boot & rafraîchissement ──────────────────────────────────────────── */
+  function boot(){
+    injectStyles(); ensureBell(); ensurePanel();
+    try{ updateBadge(); }catch(e){}
+    // push quotidien à l'ouverture (si activé + permission)
+    setTimeout(function(){ try{ maybeDailyPush(false); }catch(e){} }, 3500);
+    // rafraîchir le badge périodiquement (léger, calcKPIs idempotent)
+    setInterval(function(){ try{ updateBadge(); if(document.getElementById('yama-v13-panel').classList.contains('open')) renderPanel(); }catch(e){} }, 180000);
+    // au retour sur l'onglet
+    document.addEventListener('visibilitychange', function(){ if(!document.hidden){ try{ updateBadge(); maybeDailyPush(false); }catch(e){} } });
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 1800); });
+  } else { setTimeout(boot, 1800); }
+
+  // réagir aux changements de réglages (toggles)
+  document.addEventListener('yama-settings-changed', function(){ try{ updateBadge(); }catch(e){} });
+
+  setTimeout(function(){
+    console.info('[YAMA V13] Centre notifications & automatisations — cloche · résumé du jour · push téléphone — actif.');
+  }, 3000);
+
+})();
+</script>
 </body>
 </html>
