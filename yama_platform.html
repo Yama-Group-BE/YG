@@ -38272,6 +38272,7 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
         try{ if(reconcile()) refreshIfVisible(); }catch(e){}
         return r;
       };
+      try{ for(var k in _o){ if(_o.hasOwnProperty(k)) window[name][k]=_o[k]; } }catch(e){}
       window[name].__v11 = true;
     }
   }
@@ -38349,6 +38350,7 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
           timer = setTimeout(function(){ last = now(); try{ orig.call(window); }catch(e){} }, 250 - since);
         };
         wrapped.__v12stab = true;
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) wrapped[k]=orig[k]; } }catch(e){}
         window.renderAll = wrapped;
         clearInterval(iv);
       }
@@ -39124,7 +39126,11 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
     var lineXml=''; var idx=0;
     lignes.forEach(function(l){
       idx++;
-      var ext = n15(l.qte)*n15(l.pu);
+      // Remise répartie proportionnellement dans le prix de chaque ligne (montants NETS)
+      // → cohérence EN16931 : Σ LineExtension(ligne) = LineExtension(doc) = TaxExclusive,
+      //   et TaxableAmount(catégorie TVA) = Σ montants nets de la catégorie.
+      var puNet = n15(l.pu)*factor;
+      var ext = n15(l.qte)*puNet;
       var pct = Math.round(n15(l.tva)*100);
       var cat = pct>0 ? 'S' : 'Z';
       lineXml +=
@@ -39137,7 +39143,7 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
         '      <cac:ClassifiedTaxCategory><cbc:ID>'+cat+'</cbc:ID><cbc:Percent>'+pct+'</cbc:Percent>'+
         '<cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme></cac:ClassifiedTaxCategory>\n'+
         '    </cac:Item>\n'+
-        '    <cac:Price><cbc:PriceAmount currencyID="EUR">'+r2(n15(l.pu))+'</cbc:PriceAmount></cac:Price>\n'+
+        '    <cac:Price><cbc:PriceAmount currencyID="EUR">'+r2(puNet)+'</cbc:PriceAmount></cac:Price>\n'+
         '  </cac:InvoiceLine>\n';
     });
 
@@ -39179,10 +39185,9 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
 taxSubs+
 '  </cac:TaxTotal>\n'+
 '  <cac:LegalMonetaryTotal>\n'+
-'    <cbc:LineExtensionAmount currencyID="EUR">'+r2(htBrut)+'</cbc:LineExtensionAmount>\n'+
+'    <cbc:LineExtensionAmount currencyID="EUR">'+r2(htNet)+'</cbc:LineExtensionAmount>\n'+
 '    <cbc:TaxExclusiveAmount currencyID="EUR">'+r2(htNet)+'</cbc:TaxExclusiveAmount>\n'+
 '    <cbc:TaxInclusiveAmount currencyID="EUR">'+r2(ttc)+'</cbc:TaxInclusiveAmount>\n'+
-(remise>0?('    <cbc:AllowanceTotalAmount currencyID="EUR">'+r2(remise)+'</cbc:AllowanceTotalAmount>\n'):'')+
 '    <cbc:PayableAmount currencyID="EUR">'+r2(ttc)+'</cbc:PayableAmount>\n'+
 '  </cac:LegalMonetaryTotal>\n'+
 lineXml+
@@ -39452,7 +39457,7 @@ lineXml+
         var d=document.createElement('div'); d.className='yv16-dossiers';
         d.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07);';
         d.innerHTML='<div style="font-size:11.5px;color:rgba(255,255,255,.6);">📁 <strong style="color:#C9A84C;">'+r.count+'</strong> dossier'+(r.count>1?'s':'')+' apporté'+(r.count>1?'s':'')+' · <strong style="color:#52c77f;">'+euro16(r.ca)+'</strong></div>'+
-          '<button onclick="event.stopPropagation();ymV16Dossiers(\''+e16(st.id)+'\',\''+e16(st.nom)+'\')" style="padding:5px 11px;border-radius:7px;border:1px solid rgba(201,168,76,.4);background:rgba(201,168,76,.08);color:#C9A84C;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">Voir</button>';
+          '<button onclick="event.stopPropagation();window.ymV16Dossiers(\''+e16(st.id)+'\',\''+e16(st.nom)+'\')" style="padding:5px 11px;border-radius:7px;border:1px solid rgba(201,168,76,.4);background:rgba(201,168,76,.08);color:#C9A84C;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">Voir</button>';
         card.appendChild(d);
       }
     });
