@@ -39325,5 +39325,266 @@ lineXml+
 
 })();
 </script>
+
+<script id="yama-platform-v16">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V16 — Sous-traitants : Code · Apporteur d'affaires · Dossiers
+   ───────────────────────────────────────────────────────────────────────
+   Beaucoup de clients sont AMENÉS par un sous-traitant (apporteur d'affaires).
+   • CODE unique attribué à chaque sous-traitant (ST-001…), affiché au carnet.
+   • Champ « Client apporté par » injecté dans la fiche chantier → on trace
+     l'origine du dossier (corrélation entre nous & le sous-traitant).
+   • Rollup par sous-traitant : nb de dossiers apportés, CA total, et accès à
+     la liste des dossiers (client, montant, statut paiement réconcilié V11).
+   Complète le système d'évaluation par étoiles déjà présent (yamaEvalST).
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V16__) return;
+  window.__YAMA_PLATFORM_V16__ = true;
+
+  var LS_ST  = 'yama_soustraitants_v1';
+  var LS_CH  = 'yama_chantiers_v12';
+  var LS_APP = 'yama_st_apporteur_v16';   // { chantierId : {stId, nom} }
+  var LS_CP  = 'yama_client_paid_v1';
+  var LS_V12 = 'yama_invoice_status_v12';
+
+  function rd(k,d){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(d)); }catch(e){ return d; } }
+  function wr(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function e16(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function n16(v){ var f=parseFloat(String(v==null?'':v).replace(',','.')); return isNaN(f)?0:f; }
+  function euro16(n){ try{ return new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(n||0); }catch(e){ return (Math.round((n||0)*100)/100)+' €'; } }
+  function stList(){ return rd(LS_ST, []); }
+  function saveStList(a){ try{ if(typeof window.saveSTList==='function'){ window.saveSTList(a); return; } }catch(e){} wr(LS_ST, a); try{ localStorage.setItem('yama_soustraitants_v1_ts', new Date().toISOString()); }catch(e){} }
+  function apporteurs(){ return rd(LS_APP, {}); }
+  function saveApporteurs(m){ wr(LS_APP, m); }
+
+  /* ── Codes uniques ST-XXX ──────────────────────────────────────────────── */
+  function ensureCodes(){
+    var list=stList(); var changed=false; var maxN=0;
+    list.forEach(function(s){ if(s&&s.code){ var m=/(\d+)/.exec(s.code); if(m){ maxN=Math.max(maxN, parseInt(m[1],10)); } } });
+    list.forEach(function(s){
+      if(s && !s.code){ maxN++; s.code='ST-'+String(maxN).padStart(3,'0'); changed=true; }
+    });
+    if(changed) saveStList(list);
+    return list;
+  }
+
+  /* ── Statut paiement réconcilié (réutilise la vérité V11) ──────────────── */
+  function isPaid(docNum, ttc){
+    if(!docNum) return false;
+    var cp=rd(LS_CP,{}); if(cp[docNum]===true) return true;
+    var v12=rd(LS_V12,{}); if(v12[docNum] && v12[docNum].status==='paid') return true;
+    return false;
+  }
+
+  /* ── Dossiers apportés par un ST ───────────────────────────────────────── */
+  function dossiersFor(stId, stNom){
+    var chs=rd(LS_CH, []); var app=apporteurs(); var out=[];
+    chs.forEach(function(ch){
+      if(!ch) return;
+      var a=app[ch.id];
+      var match = (a && a.stId===stId) || (!a && stNom && (ch.apporteurNom||'').toLowerCase()===String(stNom).toLowerCase());
+      if(!match) return;
+      var docNum = ch.factureNum || ch.devisNum || ch.sourceDocNum || '';
+      var ca = n16(ch.revenueHT) || n16(ch.totalTTC);
+      out.push({
+        client: ch.clientName||'Client', ref: ch.chantierRef||'',
+        ca: ca, ttc: n16(ch.totalTTC), docNum: docNum,
+        status: ch.status, paye: isPaid(docNum, n16(ch.totalTTC))
+      });
+    });
+    return out;
+  }
+  function rollup(stId, stNom){
+    var d=dossiersFor(stId, stNom);
+    var caTot=d.reduce(function(s,x){return s+(x.ca||0);},0);
+    return { count:d.length, ca:caTot, dossiers:d };
+  }
+
+  /* ── Overlay liste dossiers ────────────────────────────────────────────── */
+  window.ymV16Dossiers=function(stId, stNom){
+    var r=rollup(stId, stNom);
+    var st=stList().find(function(s){return s&&s.id===stId;})||{};
+    var old=document.getElementById('yv16-overlay'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='yv16-overlay';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(5,9,15,.74);z-index:999998;display:flex;align-items:center;justify-content:center;padding:16px;';
+    var rows = r.dossiers.length ? r.dossiers.map(function(x){
+      var badge = x.paye ? '<span style="color:#52c77f;font-weight:700;">payé</span>' : (x.status==='closed'?'<span style="color:#E07B39;font-weight:700;">à encaisser</span>':'<span style="color:rgba(255,255,255,.45);">en cours</span>');
+      return '<div style="display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);">'+
+        '<div style="min-width:0;"><div style="font-size:13px;color:#fff;font-weight:600;">'+e16(x.client)+'</div>'+
+        '<div style="font-size:11px;color:rgba(255,255,255,.5);">'+e16(x.ref||x.docNum||'')+'</div></div>'+
+        '<div style="text-align:right;white-space:nowrap;"><div style="font-size:13px;color:#C9A84C;font-weight:700;">'+euro16(x.ttc||x.ca)+'</div>'+
+        '<div style="font-size:11px;">'+badge+'</div></div></div>';
+    }).join('') : '<div style="text-align:center;color:rgba(255,255,255,.45);padding:24px;font-size:13px;">Aucun dossier apporté pour le moment.</div>';
+    ov.innerHTML=
+      '<div style="background:#0d1420;border:1px solid rgba(201,168,76,.4);border-radius:16px;padding:20px 18px;max-width:480px;width:100%;max-height:84vh;overflow-y:auto;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'+
+          '<div style="font-size:16px;font-weight:800;color:#fff;">📁 Dossiers apportés</div>'+
+          '<button onclick="document.getElementById(\'yv16-overlay\').remove()" style="background:none;border:none;color:rgba(255,255,255,.5);font-size:22px;cursor:pointer;">×</button>'+
+        '</div>'+
+        '<div style="font-size:12.5px;color:rgba(255,255,255,.55);margin-bottom:14px;">'+e16(st.nom||stNom||'')+(st.code?(' · <span style="color:#C9A84C;font-weight:700;">'+e16(st.code)+'</span>'):'')+'</div>'+
+        '<div style="display:flex;gap:10px;margin-bottom:14px;">'+
+          '<div style="flex:1;background:rgba(255,255,255,.04);border-radius:10px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:800;color:#C9A84C;">'+r.count+'</div><div style="font-size:10.5px;color:rgba(255,255,255,.5);text-transform:uppercase;">Dossiers</div></div>'+
+          '<div style="flex:1;background:rgba(255,255,255,.04);border-radius:10px;padding:10px;text-align:center;"><div style="font-size:20px;font-weight:800;color:#52c77f;">'+euro16(r.ca)+'</div><div style="font-size:10.5px;color:rgba(255,255,255,.5);text-transform:uppercase;">CA apporté</div></div>'+
+        '</div>'+
+        rows+
+      '</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function(x){ if(x.target===ov) ov.remove(); });
+  };
+
+  /* ── Enhancement du carnet : code + dossiers apportés ──────────────────── */
+  function enhanceCarnet(){
+    var carnet=document.getElementById('stCarnet'); if(!carnet) return;
+    var list=ensureCodes();
+    carnet.querySelectorAll('.st-card').forEach(function(card, idx){
+      var st=list[idx]; if(!st) return;
+      // badge code
+      if(!card.querySelector('.yv16-code')){
+        var b=document.createElement('span'); b.className='yv16-code';
+        b.style.cssText='display:inline-block;background:rgba(201,168,76,.16);border:1px solid rgba(201,168,76,.4);color:#C9A84C;font-size:11px;font-weight:800;border-radius:6px;padding:2px 8px;margin-bottom:8px;letter-spacing:.5px;';
+        b.textContent=st.code||'ST';
+        card.insertBefore(b, card.firstChild);
+      }
+      // bloc dossiers apportés
+      if(!card.querySelector('.yv16-dossiers')){
+        var r=rollup(st.id, st.nom);
+        var d=document.createElement('div'); d.className='yv16-dossiers';
+        d.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.07);';
+        d.innerHTML='<div style="font-size:11.5px;color:rgba(255,255,255,.6);">📁 <strong style="color:#C9A84C;">'+r.count+'</strong> dossier'+(r.count>1?'s':'')+' apporté'+(r.count>1?'s':'')+' · <strong style="color:#52c77f;">'+euro16(r.ca)+'</strong></div>'+
+          '<button onclick="event.stopPropagation();ymV16Dossiers(\''+e16(st.id)+'\',\''+e16(st.nom)+'\')" style="padding:5px 11px;border-radius:7px;border:1px solid rgba(201,168,76,.4);background:rgba(201,168,76,.08);color:#C9A84C;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">Voir</button>';
+        card.appendChild(d);
+      }
+    });
+  }
+  (function wrapRenderST(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.renderSTTab==='function' && !window.renderSTTab.__v16){
+        var orig=window.renderSTTab;
+        window.renderSTTab=function(){ var r=orig.apply(this,arguments); try{ setTimeout(enhanceCarnet,60); }catch(e){} return r; };
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.renderSTTab[k]=orig[k]; } }catch(e){}
+        window.renderSTTab.__v16=true;
+        clearInterval(iv);
+      }
+      if(tries>60) clearInterval(iv);
+    }, 350);
+  })();
+
+  /* ── Champ « Client apporté par » dans la fiche chantier ───────────────── */
+  function injectApporteurField(chantierId){
+    var stField = document.querySelector('#v12ChantierModal #v12ChST');
+    if(!stField) return;
+    var fieldDiv = stField.closest('.field') || stField.parentNode;
+    if(!fieldDiv) return;
+    if(document.getElementById('yv16-app-field')) {
+      // re-populer
+      populateAppSelect(chantierId);
+      return;
+    }
+    var wrap=document.createElement('div'); wrap.className='field'; wrap.id='yv16-app-field';
+    wrap.innerHTML='<label>🔗 Client apporté par (sous-traitant)</label><select id="yv16-app-select"></select>';
+    fieldDiv.parentNode.insertBefore(wrap, fieldDiv.nextSibling);
+    populateAppSelect(chantierId);
+  }
+  function populateAppSelect(chantierId){
+    var sel=document.getElementById('yv16-app-select'); if(!sel) return;
+    var list=ensureCodes();
+    var cur = chantierId ? (apporteurs()[chantierId]||{}) : {};
+    var html='<option value="">— Aucun / direct —</option>';
+    list.forEach(function(s){ if(!s||!s.id) return; html+='<option value="'+e16(s.id)+'"'+(cur.stId===s.id?' selected':'')+'>'+e16((s.code?s.code+' · ':'')+(s.nom||''))+'</option>'; });
+    sel.innerHTML=html;
+  }
+  (function wrapOpenSheet(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.openChantierSheetModal==='function' && !window.openChantierSheetModal.__v16){
+        var orig=window.openChantierSheetModal;
+        window.openChantierSheetModal=function(chantierId){
+          var r=orig.apply(this, arguments);
+          setTimeout(function(){ try{ injectApporteurField(chantierId||''); }catch(e){} }, 130);
+          return r;
+        };
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.openChantierSheetModal[k]=orig[k]; } }catch(e){}
+        window.openChantierSheetModal.__v16=true;
+        clearInterval(iv);
+      }
+      if(tries>60) clearInterval(iv);
+    }, 350);
+  })();
+  // openSmartInvoiceModal ouvre aussi #v12ChantierModal → injecter aussi
+  (function wrapOpenInvoice(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.openSmartInvoiceModal==='function' && !window.openSmartInvoiceModal.__v16){
+        var orig=window.openSmartInvoiceModal;
+        window.openSmartInvoiceModal=function(){ var r=orig.apply(this,arguments); setTimeout(function(){ try{ injectApporteurField(''); }catch(e){} }, 130); return r; };
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.openSmartInvoiceModal[k]=orig[k]; } }catch(e){}
+        window.openSmartInvoiceModal.__v16=true;
+        clearInterval(iv);
+      }
+      if(tries>60) clearInterval(iv);
+    }, 350);
+  })();
+
+  /* ── Persister l'apporteur à l'enregistrement de la fiche ──────────────── */
+  function val(id){ var e=document.getElementById(id); return e?String(e.value||'').trim():''; }
+  function findChantierId(clientName, ref){
+    var chs=rd(LS_CH, []); var name=(clientName||'').toLowerCase().trim(), rf=(ref||'').toLowerCase().trim();
+    var best=null, bestScore=-1, bestTime=0;
+    chs.forEach(function(c){
+      if(!c) return;
+      var cn=(c.clientName||'').toLowerCase().trim(), cr=(c.chantierRef||'').toLowerCase().trim();
+      var sc=0; if(name&&cn===name) sc+=2; if(rf&&cr===rf) sc+=2;
+      var t=new Date(c.updatedAt||c.createdAt||0).getTime()||0;
+      if(sc>bestScore || (sc===bestScore && t>bestTime)){ bestScore=sc; best=c; bestTime=t; }
+    });
+    return (bestScore>0 && best) ? best.id : '';
+  }
+  (function wrapSave(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.saveChantierSheetFromModal==='function' && !window.saveChantierSheetFromModal.__v16){
+        var orig=window.saveChantierSheetFromModal;
+        window.saveChantierSheetFromModal=function(){
+          var appStId = val('yv16-app-select');
+          var client = val('v12ChClient'); var ref = val('v12ChRef');
+          var r=orig.apply(this, arguments);
+          try{
+            setTimeout(function(){
+              var chId=findChantierId(client, ref);
+              if(!chId) return;
+              var map=apporteurs();
+              if(appStId){
+                var st=stList().find(function(s){return s&&s.id===appStId;})||{};
+                map[chId]={stId:appStId, nom:st.nom||''};
+              } else { delete map[chId]; }
+              saveApporteurs(map);
+            }, 200);
+          }catch(e){}
+          return r;
+        };
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.saveChantierSheetFromModal[k]=orig[k]; } }catch(e){}
+        window.saveChantierSheetFromModal.__v16=true;
+        clearInterval(iv);
+      }
+      if(tries>60) clearInterval(iv);
+    }, 350);
+  })();
+
+  /* ── Boot : assurer les codes ──────────────────────────────────────────── */
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(ensureCodes, 1800); }); }
+  else { setTimeout(ensureCodes, 1800); }
+
+  setTimeout(function(){
+    console.info('[YAMA V16] Sous-traitants — code · apporteur d\'affaires · dossiers corrélés — actif.');
+  }, 3600);
+
+})();
+</script>
 </body>
 </html>
