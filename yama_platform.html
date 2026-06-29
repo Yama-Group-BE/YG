@@ -38112,5 +38112,204 @@ L('Pipeline V2 chargé — clôture facture · CRM retard · timeline');
 
 })();
 </script>
+
+<script id="yama-platform-v11">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V11 — Paiements : Source Unique de Vérité
+   ───────────────────────────────────────────────────────────────────────
+   PROBLÈME : une facture mise « payée » repasse « impayée ».
+   CAUSE    : 3 stores de paiement divergent —
+              • yama_invoice_status_v12 (modal · status/paidAmount)  ← intention utilisateur
+              • yama_client_paid_v1     (booléen · SYNCHRONISÉ multi-appareils)
+              • yama_paiements_v1       (V37 · montantPaye)          ← SEUL lu par calcKPIs()
+              calcKPIs() (cockpit) ne lit QUE montantPaye → ignore V12 + client_paid.
+              De plus montantPaye n'est PAS synchronisé → sur un autre appareil = 0 = impayé.
+   FIX      : passe de réconciliation idempotente qui résout 1 vérité et la
+              ré-écrit dans les 3 stores AVANT calcKPIs, au chargement, et
+              après chaque synchronisation. « Payé » devient persistant et
+              cross-appareil (via client_paid, déjà synchronisé).
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V11__) return;
+  window.__YAMA_PLATFORM_V11__ = true;
+
+  var K_V12 = 'yama_invoice_status_v12';   // {docNum:{status,paidAmount,dueDate,note,updatedAt}}
+  var K_CP  = 'yama_client_paid_v1';        // {docNum:boolean}  ← synchronisé
+  var K_V37 = 'yama_paiements_v1';          // {docNum:{montantPaye,statutPaiement,...}}
+  var K_HIST= 'yama_history_v3';
+
+  function rd(k,def){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(def)); }catch(e){ return def; } }
+  function wr(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function n11(v){ var f=parseFloat(String(v==null?'':v).replace(',','.')); return isNaN(f)?0:f; }
+  function hist11(){ try{ return (typeof getHistory==='function')?getHistory():rd(K_HIST,[]); }catch(e){ return rd(K_HIST,[]); } }
+
+  /* ── Résolution de la vérité pour une facture ───────────────────────────
+     Ordre de confiance :
+       1) V12.status  — intention explicite (le modal de statut écrit ici)
+       2) client_paid — booléen synchronisé (vérité cross-appareil)
+       3) V37.statutPaiement / montantPaye — saisie paiement / legacy
+  ────────────────────────────────────────────────────────────────────────*/
+  function resolveTruth(docNum, ttc, v12map, cpmap, p37map){
+    ttc = n11(ttc);
+    var v12 = v12map[docNum] || null;
+    var cpHas = Object.prototype.hasOwnProperty.call(cpmap, docNum);
+    var cpVal = cpmap[docNum] === true;
+    var p37 = p37map[docNum] || null;
+    var mp  = p37 ? n11(p37.montantPaye) : 0;
+
+    var status;
+    if (v12 && v12.status){
+      status = v12.status;                         // 1) intention explicite
+    } else if (cpHas){
+      status = cpVal ? 'paid' : (mp > 0 && mp < ttc - 0.01 ? 'partial' : 'unpaid'); // 2) flag synchro
+    } else if (p37 && p37.statutPaiement){
+      status = p37.statutPaiement==='paye' ? 'paid' : p37.statutPaiement==='partiel' ? 'partial' : 'unpaid';
+    } else {
+      status = (mp >= ttc - 0.01 && ttc > 0) ? 'paid' : (mp > 0 ? 'partial' : 'unpaid'); // 4) legacy
+    }
+
+    var paye;
+    if (status === 'paid')         paye = ttc;
+    else if (status === 'partial') paye = Math.max(mp, v12 ? n11(v12.paidAmount) : 0);
+    else                           paye = 0;
+
+    return { status: status, montantPaye: paye };
+  }
+
+  /* ── Passe de réconciliation : converge les 3 stores ───────────────────── */
+  var _reconciling = false;
+  function reconcile(){
+    if(_reconciling) return false;
+    _reconciling = true;
+    var changed = false;
+    try{
+      var hist = hist11();
+      var v12  = rd(K_V12, {});
+      var cp   = rd(K_CP, {});
+      var p37  = rd(K_V37, {});
+
+      hist.forEach(function(h){
+        if(!h || h.docType !== 'facture') return;
+        var dn = h.docNum; if(!dn) return;
+        var ttc = n11(h.totalTTC);
+        var t = resolveTruth(dn, ttc, v12, cp, p37);
+
+        // 1) V37 montantPaye (lu par calcKPIs) — la correction critique
+        var prev37 = p37[dn] || {};
+        var newMp  = t.montantPaye;
+        var newStat= t.status==='paid' ? 'paye' : t.status==='partial' ? 'partiel' : 'none';
+        if (n11(prev37.montantPaye) !== newMp || (prev37.statutPaiement||'none') !== newStat){
+          p37[dn] = Object.assign({}, prev37, { montantPaye: newMp, statutPaiement: newStat });
+          changed = true;
+        }
+
+        // 2) client_paid (synchronisé) — rendre « payé » persistant cross-appareil
+        var wantCp = (t.status === 'paid');
+        if (cp[dn] !== wantCp){
+          if (wantCp) { cp[dn] = true; changed = true; }
+          else if (Object.prototype.hasOwnProperty.call(cp, dn)) { cp[dn] = false; changed = true; }
+        }
+
+        // 3) V12 — refléter le statut résolu (pour la pastille historique)
+        var prev12 = v12[dn] || null;
+        if (!prev12 || prev12.status !== t.status){
+          v12[dn] = Object.assign({}, prev12||{}, {
+            status: t.status,
+            paidAmount: t.status==='paid' ? ttc : (t.status==='partial' ? t.montantPaye : 0)
+          });
+          changed = true;
+        }
+      });
+
+      if(changed){
+        wr(K_V37, p37);
+        wr(K_CP, cp);
+        wr(K_V12, v12);
+      }
+    }catch(e){ console.warn('[V11] reconcile:', e); }
+    _reconciling = false;
+    return changed;
+  }
+  window.yamaReconcilePayments = reconcile;
+
+  /* ── 1. Wrap calcKPIs → réconcilier AVANT le calcul du cockpit ─────────── */
+  (function patchCalc(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(typeof window.calcKPIs==='function' && !window.calcKPIs.__v11){
+        var _orig = window.calcKPIs;
+        window.calcKPIs = function(){
+          try{ reconcile(); }catch(e){}
+          return _orig.apply(this, arguments);
+        };
+        window.calcKPIs.__v11 = true;
+        clearInterval(iv);
+      }
+      if(tries>60) clearInterval(iv);
+    }, 300);
+  })();
+
+  /* ── 2. Rafraîchir le cockpit si la réconciliation change des données ──── */
+  function refreshIfVisible(){
+    try{
+      var ck = document.getElementById('tab-cockpit');
+      if(ck && ck.classList.contains('active') && typeof window.renderCockpit==='function'){
+        window.renderCockpit();
+      }
+    }catch(e){}
+  }
+
+  /* ── 3. Réconcilier après une synchronisation cloud (pull) ─────────────── */
+  function wrapSync(name){
+    if(typeof window[name]==='function' && !window[name].__v11){
+      var _o = window[name];
+      window[name] = function(){
+        var r = _o.apply(this, arguments);
+        if(r && typeof r.then==='function'){
+          return r.then(function(v){ try{ if(reconcile()) refreshIfVisible(); }catch(e){} return v; });
+        }
+        try{ if(reconcile()) refreshIfVisible(); }catch(e){}
+        return r;
+      };
+      window[name].__v11 = true;
+    }
+  }
+  (function pollSync(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      wrapSync('syncFullPull');
+      wrapSync('syncFullPullV32');
+      if(tries>40) clearInterval(iv);
+    }, 400);
+  })();
+
+  /* ── 4. Réconcilier sur changement localStorage (autre onglet / sync) ──── */
+  var _stTimer=null;
+  window.addEventListener('storage', function(e){
+    if(!e || !e.key) return;
+    if(e.key===K_CP || e.key===K_V12 || e.key===K_V37 || e.key===K_HIST){
+      clearTimeout(_stTimer);
+      _stTimer = setTimeout(function(){ if(reconcile()) refreshIfVisible(); }, 500);
+    }
+  });
+
+  /* ── 5. Boot ───────────────────────────────────────────────────────────── */
+  function bootReconcile(){ if(reconcile()) refreshIfVisible(); }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', function(){ setTimeout(bootReconcile, 1500); });
+  } else {
+    setTimeout(bootReconcile, 1500);
+  }
+  // Seconde passe après que la synchro initiale a eu le temps de tourner
+  setTimeout(bootReconcile, 4000);
+
+  setTimeout(function(){
+    console.info('[YAMA V11] Paiements — source unique de vérité (V12·client_paid·V37 réconciliés) — actif.');
+  }, 2600);
+
+})();
+</script>
 </body>
 </html>
