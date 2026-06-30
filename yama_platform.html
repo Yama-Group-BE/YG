@@ -18334,7 +18334,14 @@ order by table_name;</textarea>
 
   function ensureCorrectTabOrder(){
     const bar = q('#app-platform .tabs'); if (!bar) return;
-    ['priorites','calculator','devis','chantiers','history','soustraitants','articles','analyse'].forEach(name => {
+    const _ordE = ['priorites','calculator','devis','chantiers','history','soustraitants','articles','analyse'];
+    /* Sortie rapide si l'ordre est déjà correct → évite appendChild/reflow
+       inutiles à chaque resize/switch (stabilité V25, additif). */
+    try {
+      const _curE = Array.from(bar.children).map(t => t.dataset && t.dataset.tab).filter(t => _ordE.indexOf(t) >= 0);
+      if (_curE.join(',') === _ordE.filter(n => _curE.indexOf(n) >= 0).join(',')) return;
+    } catch(e){}
+    _ordE.forEach(name => {
       const tab = q(`.tab[data-tab="${name}"]`, bar);
       if (tab && tab.parentNode === bar) { tab.style.display = ''; bar.appendChild(tab); }
     });
@@ -18926,7 +18933,15 @@ order by table_name;</textarea>
 
   function reorderPlatformTabs(){
     const bar = q('#app-platform .tabs'); if (!bar) return;
-    ['priorites','calculator','devis','chantiers','history','soustraitants','articles','analyse'].forEach(name => {
+    const _ord = ['priorites','calculator','devis','chantiers','history','soustraitants','articles','analyse'];
+    /* Sortie rapide si déjà ordonné + labellisé → évite appendChild/reflow à
+       CHAQUE clic d'onglet (cause de flicker). Additif, stabilité V25. */
+    try {
+      const _cur = Array.from(bar.children).map(t => t.dataset && t.dataset.tab).filter(t => _ord.indexOf(t) >= 0);
+      const _first = q('.tab[data-tab="priorites"]', bar);
+      if (_first && _first.dataset.yamaFinalLabel && _cur.join(',') === _ord.filter(n => _cur.indexOf(n) >= 0).join(',')) return;
+    } catch(e){}
+    _ord.forEach(name => {
       const tab = q(`.tab[data-tab="${name}"]`, bar);
       if (tab) bar.appendChild(tab);
     });
@@ -40495,5 +40510,69 @@ html { scrollbar-gutter: stable; }
 
 })();
 </script>
+
+<style id="yama-platform-v25-responsive">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V25 — Responsive & densité mobile (additif, non destructif)
+   Issu de l'audit : encadrés/cartes qui ne suivent pas le redimensionnement,
+   colonnes à largeur fixe, densité trop forte sur téléphone. CSS pur, appendé
+   en dernier → gagne la cascade sans modifier les règles existantes.
+   On NE TOUCHE PAS aux max-width des modales (pour ne pas rétrécir le bureau).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 1. Aucune carte/encadré ne dépasse la largeur dispo (se redimensionne AVEC
+      la page) — archives & vieilles factures incluses. */
+.container, .container-wide,
+.card, .section, .section-body,
+.history-item, .devis-item, .st-card, .contact-card,
+.impaye-item, .yf-arch-items, .archive-card {
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+img, canvas, video, svg, table { max-width: 100%; }
+
+/* 2. Toast & cloche notifications : bornés au viewport + safe-area iOS. */
+#toast {
+  max-width: min(340px, calc(100vw - 24px)) !important;
+  right: max(12px, env(safe-area-inset-right, 0px)) !important;
+  bottom: max(12px, env(safe-area-inset-bottom, 0px)) !important;
+  box-sizing: border-box;
+}
+
+/* 3. Sidebar des Réglages : largeur fluide. */
+.v37-s-sidebar { min-width: clamp(140px, 30vw, 230px) !important; }
+.v37-s-content { box-sizing: border-box; }
+
+/* 4. Colonnes de tableau à largeur fixe → fluides sur petit écran. */
+@media (max-width: 640px) {
+  .devis-item th[style*="width"],
+  .pdf-template th[style*="width"],
+  table th[style*="width"] { width: auto !important; min-width: 42px; }
+}
+
+/* 5. Densité mobile — alléger le « paquet visuel » au démarrage. */
+@media (max-width: 768px) {
+  .section { margin-bottom: 12px !important; }
+}
+@media (max-width: 480px) {
+  .container { padding: 14px 10px !important; }
+  .page-title-block { margin-bottom: 16px !important; }
+  .page-title { font-size: 17px !important; }
+  .card { margin-bottom: 12px; }
+  .card-head { padding: 11px 14px; }
+  .card-head-label { letter-spacing: .3px; }
+  .card-body { padding: 14px; }
+  .nav-tab { padding: 8px 10px; font-size: 11px; }
+  .extracted-grid { gap: 10px; }
+}
+@media (max-width: 380px) {
+  #kpiCards { grid-template-columns: 1fr !important; }
+  .extracted-grid { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 320px) {
+  .container { padding: 8px 6px !important; }
+  .card-body { padding: 12px; }
+}
+</style>
 </body>
 </html>
