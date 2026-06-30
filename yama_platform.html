@@ -40242,5 +40242,123 @@ html { scrollbar-gutter: stable; }
 
 })();
 </script>
+
+<script id="yama-platform-v23">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V23 — Demande d'avis Google (acquisition)
+   ───────────────────────────────────────────────────────────────────────
+   Au bon moment (facture payée), bouton « ⭐ Avis Google » → message
+   pré-rempli avec le lien d'avis (WhatsApp / Email / Copier). Lien configuré
+   une fois (stocké). Purement additif.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V23__) return;
+  window.__YAMA_PLATFORM_V23__ = true;
+
+  var K_HIST='yama_history_v3', K_CP='yama_client_paid_v1', K_V12='yama_invoice_status_v12', K_URL='yama_google_review_url_v23';
+  function rd(k,d){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(d)); }catch(e){ return d; } }
+  function entryOf(dn){ try{ if(typeof window.docEntry==='function'){ var e=window.docEntry(dn); if(e) return e; } }catch(x){} return rd(K_HIST,[]).find(function(h){return h&&h.docNum===dn;})||null; }
+  function S(){ try{ return (typeof getSettings==='function')?getSettings():{}; }catch(e){ return {}; } }
+  function entrepriseNom(){ var s=S(); return (s.entreprise&&s.entreprise.nom)||'YAMA Group'; }
+  function prenom(nom){ var n=String(nom||'').replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim(); return n.split(/\s+/)[0]||''; }
+  function waNorm(t){ t=String(t||'').replace(/[^0-9+]/g,'').replace(/^\+/,''); if(!t) return ''; if(t.charAt(0)==='0') t='32'+t.slice(1); return t; }
+  function isPaid(dn){ if(!dn) return false; var cp=rd(K_CP,{}); if(cp[dn]===true) return true; var v=rd(K_V12,{}); return !!(v[dn]&&v[dn].status==='paid'); }
+  function reviewUrl(){
+    var u=''; try{ u=localStorage.getItem(K_URL)||''; }catch(e){}
+    if(!u){ var s=S(); u=(s.entreprise&&(s.entreprise.googleReviewUrl||s.entreprise.avisGoogle))||''; }
+    return u;
+  }
+  function setReviewUrl(u){ try{ localStorage.setItem(K_URL, u); }catch(e){} }
+
+  function msg(e, url){
+    var p=prenom(e.clientNom);
+    return 'Bonjour '+(p||'')+',\n\nMerci pour votre confiance ! Si vous êtes satisfait de notre intervention, '+
+      'votre avis nous aiderait énormément à développer '+entrepriseNom()+' :\n'+url+'\n\nMerci beaucoup et à bientôt !\n'+entrepriseNom();
+  }
+
+  function injectStyle(){
+    if(document.getElementById('yama-v23-style')) return;
+    var st=document.createElement('style'); st.id='yama-v23-style';
+    st.textContent=
+      '#yv23-ov{position:fixed;inset:0;z-index:99996;background:rgba(5,9,15,.74);display:none;align-items:center;justify-content:center;padding:16px;}'+
+      '#yv23-ov.show{display:flex;}'+
+      '#yv23-card{background:#0d1420;border:1px solid rgba(201,168,76,.4);border-radius:16px;padding:18px;max-width:480px;width:100%;}'+
+      '#yv23-card h3{margin:0 0 4px;font-size:16px;color:#fff;}'+
+      '.yv23-sub{font-size:12px;color:rgba(255,255,255,.5);margin-bottom:12px;}'+
+      '#yv23-msg{width:100%;min-height:130px;background:#0b1119;border:1px solid rgba(255,255,255,.1);border-radius:9px;color:#e8edf4;font-size:12.5px;padding:10px;resize:vertical;line-height:1.5;font-family:inherit;box-sizing:border-box;}'+
+      '.yv23-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}'+
+      '.yv23-btn{flex:1;min-width:96px;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;border:1px solid;}'+
+      '.yv23-wa{background:rgba(37,211,102,.14);border-color:rgba(37,211,102,.45);color:#25d366;}'+
+      '.yv23-em{background:rgba(90,160,255,.12);border-color:rgba(90,160,255,.45);color:#7db4ff;}'+
+      '.yv23-cp{background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.45);color:#C9A84C;}'+
+      '.yv23-x{background:transparent;border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.5);margin-top:8px;}'+
+      '.yv23-avbtn{background:rgba(255,196,0,.1)!important;border:1px solid rgba(255,196,0,.4)!important;color:#ffc400!important;font-size:12px;padding:6px 12px;border-radius:7px;cursor:pointer;margin-left:6px;}';
+    (document.head||document.documentElement).appendChild(st);
+  }
+  var _cur=null;
+  function ensureOv(){
+    if(document.getElementById('yv23-ov')||!document.body) return;
+    var ov=document.createElement('div'); ov.id='yv23-ov';
+    ov.innerHTML='<div id="yv23-card"><h3>⭐ Demander un avis Google</h3><div class="yv23-sub" id="yv23-sub"></div>'+
+      '<textarea id="yv23-msg"></textarea>'+
+      '<div class="yv23-row">'+
+        '<button class="yv23-btn yv23-wa" onclick="window.ymV23Send(\'wa\')">📲 WhatsApp</button>'+
+        '<button class="yv23-btn yv23-em" onclick="window.ymV23Send(\'email\')">✉️ Email</button>'+
+        '<button class="yv23-btn yv23-cp" onclick="window.ymV23Send(\'copy\')">📋 Copier</button>'+
+      '</div><div class="yv23-row"><button class="yv23-btn yv23-x" onclick="window.ymV23Close()">Fermer</button></div></div>';
+    ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
+    document.body.appendChild(ov);
+  }
+  function close(){ var o=document.getElementById('yv23-ov'); if(o) o.classList.remove('show'); }
+  window.ymV23Close=close;
+  window.ymV23Send=function(ch){
+    var ta=document.getElementById('yv23-msg'); var m=ta?ta.value:''; if(!_cur) return;
+    if(ch==='wa'){ var n=waNorm(_cur.tel); window.open((n?('https://wa.me/'+n):'https://wa.me/')+'?text='+encodeURIComponent(m),'_blank'); }
+    else if(ch==='email'){ window.open('mailto:'+encodeURIComponent(_cur.email||'')+'?subject='+encodeURIComponent('Votre avis nous aiderait beaucoup')+'&body='+encodeURIComponent(m),'_blank'); }
+    else { try{ navigator.clipboard.writeText(m); }catch(e){} try{ if(typeof toast==='function') toast('Message copié','success'); }catch(e){} }
+  };
+  window.ymV23Avis=function(docNum){
+    var url=reviewUrl();
+    if(!url){
+      url=(window.prompt('Collez le lien d\'avis Google de votre établissement (une seule fois) :','https://g.page/r/…/review')||'').trim();
+      if(!url) return;
+      setReviewUrl(url);
+    }
+    injectStyle(); ensureOv();
+    var e=entryOf(docNum)||{};
+    _cur={ docNum:docNum, tel:e.clientTel||'', email:e.clientEmail||'', clientNom:e.clientNom||'' };
+    var sub=document.getElementById('yv23-sub'); if(sub) sub.textContent=(e.clientNom||'Client')+' · '+(docNum||'');
+    var ta=document.getElementById('yv23-msg'); if(ta) ta.value=msg(e, url);
+    var ov=document.getElementById('yv23-ov'); if(ov) ov.classList.add('show');
+  };
+
+  function addButtons(){
+    injectStyle();
+    try{
+      document.querySelectorAll('#historyList .history-item').forEach(function(item){
+        if(item.querySelector('.yv23-injected')) return;
+        var numEl=item.querySelector('.history-num'); var doc=numEl?String(numEl.textContent||'').trim():''; if(!doc) return;
+        var e=entryOf(doc); if(!e || e.docType!=='facture' || !isPaid(doc)) return;   // seulement factures PAYÉES
+        var b=document.createElement('button'); b.className='yv23-avbtn yv23-injected'; b.type='button';
+        b.textContent='⭐ Avis Google'; b.onclick=function(ev){ ev.stopPropagation(); window.ymV23Avis(doc); };
+        (item.querySelector('.yama-v12-statusline')||item.querySelector('.history-info')||item).appendChild(b);
+      });
+    }catch(x){ console.warn('[V23]',x); }
+  }
+  function wrapEnh(name){
+    if(typeof window[name]==='function' && !window[name].__v23){
+      var orig=window[name];
+      window[name]=function(){ var r=orig.apply(this,arguments); try{ setTimeout(addButtons,50); }catch(e){} return r; };
+      try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window[name][k]=orig[k]; } }catch(e){}
+      window[name].__v23=true;
+    }
+  }
+  (function poll(){ var t=0; var iv=setInterval(function(){ t++; wrapEnh('enhanceHistoryInvoices'); if(t>50) clearInterval(iv); }, 430); })();
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(addButtons, 1800); }); } else { setTimeout(addButtons, 1800); }
+
+  setTimeout(function(){ console.info('[YAMA V23] Demande d\'avis Google (factures payées) — actif.'); }, 4600);
+
+})();
+</script>
 </body>
 </html>
