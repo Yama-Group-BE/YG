@@ -40065,5 +40065,102 @@ html { scrollbar-gutter: stable; }
 
 })();
 </script>
+
+<script id="yama-platform-v21">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V21 — Modèles de devis par corps de métier (démarrage rapide)
+   ───────────────────────────────────────────────────────────────────────
+   Quick-win benchmark : insérer en 1 clic des lignes pré-remplies (intitulé +
+   unité) par métier, l'artisan n'a plus qu'à saisir quantités et prix.
+   Utilise addLigne('client', …) existant. Purement additif.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V21__) return;
+  window.__YAMA_PLATFORM_V21__ = true;
+
+  var TVA='0.21';
+  function L(desc,unit,qte){ return {desc:desc, unit:unit, qte:qte||'1', pu:'', tva:TVA}; }
+  var TRADES = {
+    '⚡ Électricité': [ L('Mise en conformité tableau électrique','Forfait'), L('Point lumineux (fourniture + pose)','Pièce'), L('Prise de courant (fourniture + pose)','Pièce'), L('Tirage de câble','ml'), L('Tableau divisionnaire','Pièce') ],
+    '🚿 Plomberie': [ L('Alimentation eau froide / chaude','ml'), L('Évacuation PVC','ml'), L('Pose sanitaire (lavabo / WC / douche)','Pièce'), L('Raccordement chauffe-eau','Forfait') ],
+    '◼️ Carrelage': [ L('Préparation et ragréage du support','m²'), L('Pose carrelage sol','m²'), L('Pose faïence murale','m²'), L('Joints et finitions','m²') ],
+    '🎨 Peinture': [ L('Préparation murs (rebouchage, ponçage)','m²'), L('Sous-couche','m²'), L('Peinture murs (2 couches)','m²'), L('Peinture plafond','m²') ],
+    '🧱 Plâtrerie / Cloisons': [ L('Cloison placo (ossature + plaques)','m²'), L('Doublage isolant','m²'), L('Faux plafond','m²'), L('Enduit et bandes','m²') ],
+    '🛁 Salle de bain (rénovation)': [ L('Démolition de l\'existant','Forfait'), L('Plomberie sanitaire','Forfait'), L('Étanchéité + carrelage','m²'), L('Pose meuble + robinetterie','Forfait'), L('Électricité (éclairage, prises)','Forfait') ],
+    '🚪 Menuiserie': [ L('Fourniture et pose porte intérieure','Pièce'), L('Pose châssis / fenêtre','Pièce'), L('Plinthes','ml') ],
+    '🏠 Toiture': [ L('Dépose couverture existante','m²'), L('Sous-toiture + lattage','m²'), L('Couverture (tuiles / ardoises)','m²'), L('Zinguerie (gouttières, solins)','ml') ],
+    '🔥 Chauffage': [ L('Dépose ancienne installation','Forfait'), L('Fourniture et pose chaudière','Pièce'), L('Radiateur (fourniture + pose)','Pièce'), L('Mise en service + réglages','Forfait') ],
+    '🧰 Maçonnerie': [ L('Terrassement / fondations','m³'), L('Élévation murs','m²'), L('Chape','m²') ],
+    '❄️ Isolation': [ L('Isolation toiture / combles','m²'), L('Isolation murs','m²'), L('Isolation sol','m²') ],
+    '🚧 Démolition': [ L('Démolition cloisons','m²'), L('Évacuation gravats + container','Forfait'), L('Nettoyage chantier','Forfait') ]
+  };
+
+  function applyTrade(name){
+    var lines=TRADES[name]; if(!lines) return;
+    try{
+      lines.forEach(function(l){ if(typeof window.addLigne==='function') window.addLigne('client', {desc:l.desc, qte:l.qte, unit:l.unit, pu:l.pu, tva:l.tva}); });
+      if(typeof window.recalcTotals==='function') window.recalcTotals();
+      if(typeof window.saveCurrentState==='function') window.saveCurrentState();
+      if(typeof toast==='function') toast('✓ Modèle « '+name.replace(/^[^\s]+\s/,'')+' » inséré','success');
+    }catch(e){ console.warn('[V21]',e); }
+    close();
+  }
+  window.ymV21Apply=applyTrade;
+
+  function injectStyle(){
+    if(document.getElementById('yama-v21-style')) return;
+    var st=document.createElement('style'); st.id='yama-v21-style';
+    st.textContent=
+      '#yv21-launch{margin-left:8px;background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.4);color:#C9A84C;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;}'+
+      '#yv21-ov{position:fixed;inset:0;z-index:99996;background:rgba(5,9,15,.74);display:none;align-items:center;justify-content:center;padding:16px;}'+
+      '#yv21-ov.show{display:flex;}'+
+      '#yv21-card{background:#0d1420;border:1px solid rgba(201,168,76,.4);border-radius:16px;padding:18px;max-width:520px;width:100%;max-height:84vh;overflow-y:auto;}'+
+      '#yv21-card h3{margin:0 0 4px;font-size:16px;color:#fff;}'+
+      '.yv21-sub{font-size:12px;color:rgba(255,255,255,.5);margin-bottom:14px;}'+
+      '.yv21-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}'+
+      '@media(max-width:520px){.yv21-grid{grid-template-columns:1fr;}}'+
+      '.yv21-trade{text-align:left;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:11px 13px;color:#e8edf4;font-size:13px;font-weight:600;cursor:pointer;}'+
+      '.yv21-trade:hover{border-color:rgba(201,168,76,.5);background:rgba(201,168,76,.08);}'+
+      '.yv21-trade small{display:block;font-weight:400;color:rgba(255,255,255,.45);font-size:11px;margin-top:2px;}'+
+      '.yv21-x{width:100%;margin-top:14px;padding:11px;border-radius:9px;border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.55);cursor:pointer;}';
+    (document.head||document.documentElement).appendChild(st);
+  }
+  function ensureOv(){
+    if(document.getElementById('yv21-ov')||!document.body) return;
+    var ov=document.createElement('div'); ov.id='yv21-ov';
+    var cards=Object.keys(TRADES).map(function(name){
+      var n=TRADES[name].length;
+      return '<button class="yv21-trade" onclick="window.ymV21Apply(\''+name.replace(/'/g,"\\'")+'\')">'+name+'<small>'+n+' lignes pré-remplies</small></button>';
+    }).join('');
+    ov.innerHTML='<div id="yv21-card"><h3>⚡ Modèles par corps de métier</h3>'+
+      '<div class="yv21-sub">Insère des lignes pré-remplies (intitulé + unité). Vous complétez quantités et prix.</div>'+
+      '<div class="yv21-grid">'+cards+'</div>'+
+      '<button class="yv21-x" onclick="window.ymV21Close()">Fermer</button></div>';
+    ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
+    document.body.appendChild(ov);
+  }
+  function open(){ injectStyle(); ensureOv(); var o=document.getElementById('yv21-ov'); if(o) o.classList.add('show'); }
+  function close(){ var o=document.getElementById('yv21-ov'); if(o) o.classList.remove('show'); }
+  window.ymV21Open=open; window.ymV21Close=close;
+
+  /* ── Injecter le bouton lanceur à côté de « + Ajouter une prestation » ── */
+  function injectLauncher(){
+    if(document.getElementById('yv21-launch')) return;
+    var btns=document.querySelectorAll('.btn-add-ligne');
+    var target=null;
+    btns.forEach(function(b){ var oc=b.getAttribute('onclick')||''; if(oc.indexOf("addLigne('client'")>=0||oc.indexOf('addLigne("client"')>=0) target=b; });
+    if(!target) return;
+    injectStyle();
+    var b=document.createElement('button'); b.id='yv21-launch'; b.type='button';
+    b.textContent='⚡ Modèle métier'; b.onclick=open;
+    target.parentNode.insertBefore(b, target.nextSibling);
+  }
+  (function poll(){ var t=0; var iv=setInterval(function(){ t++; injectLauncher(); if(document.getElementById('yv21-launch')||t>60) clearInterval(iv); }, 500); })();
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(injectLauncher, 1500); }); } else { setTimeout(injectLauncher, 1500); }
+
+  setTimeout(function(){ console.info('[YAMA V21] Modèles de devis par corps de métier — démarrage rapide — actif.'); }, 4200);
+
+})();
+</script>
 </body>
 </html>
