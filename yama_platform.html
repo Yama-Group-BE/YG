@@ -39917,5 +39917,153 @@ html { scrollbar-gutter: stable; }
 
 })();
 </script>
+
+<script id="yama-platform-v20">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V20 — Relance en un tap (devis & factures)
+   ───────────────────────────────────────────────────────────────────────
+   • Devis sans réponse → message de suivi pré-rempli.
+   • Facture impayée → rappel de paiement avec IBAN.
+   Envoi en 1 tap : WhatsApp / Email / Copier. Coordonnées tirées de
+   l'historique, statut payé réconcilié (V11). Modèles depuis les Réglages
+   (s.messages.relanceFacture) si présents, sinon valeurs par défaut.
+   Purement additif.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V20__) return;
+  window.__YAMA_PLATFORM_V20__ = true;
+
+  var K_HIST='yama_history_v3', K_CP='yama_client_paid_v1', K_V12='yama_invoice_status_v12';
+  function rd(k,d){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(d)); }catch(e){ return d; } }
+  function e20(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function S(){ try{ return (typeof getSettings==='function')?getSettings():{}; }catch(e){ return {}; } }
+  function euro20(n){ try{ return new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(parseFloat(n)||0); }catch(e){ return (n||'')+' €'; } }
+  function entryOf(dn){ try{ if(typeof window.docEntry==='function'){ var e=window.docEntry(dn); if(e) return e; } }catch(x){} return rd(K_HIST,[]).find(function(h){return h&&h.docNum===dn;})||null; }
+  function company(){ try{ if(typeof window.getCompany==='function') return window.getCompany()||{}; }catch(e){} var s=S(); return (s.banque&&s.banque[0])||{}; }
+  function entrepriseNom(){ var s=S(); return (s.entreprise&&s.entreprise.nom)||'YAMA Group'; }
+  function ibanOf(){ var s=S(); var b=(s.banque&&s.banque[0])||company()||{}; return b.iban||''; }
+  function prenom(nom){ var n=String(nom||'').replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim(); return n.split(/\s+/)[0]||''; }
+  function waNorm(tel){ var t=String(tel||'').replace(/[^0-9+]/g,'').replace(/^\+/,''); if(!t) return ''; if(t.charAt(0)==='0') t='32'+t.slice(1); return t; }
+
+  function isPaid(dn){ if(!dn) return false; var cp=rd(K_CP,{}); if(cp[dn]===true) return true; var v=rd(K_V12,{}); return !!(v[dn]&&v[dn].status==='paid'); }
+
+  function fill(tpl, vars){ return String(tpl||'').replace(/\{(\w+)\}/g, function(m,k){ return vars[k]!=null?vars[k]:''; }); }
+
+  function devisMsg(e){
+    var p=prenom(e.clientNom);
+    return 'Bonjour '+(p||'')+',\n\n'+
+      'Je me permets de revenir vers vous concernant votre devis '+(e.docNum||'')+
+      (e.totalTTC?(' (montant '+euro20(e.totalTTC)+')'):'')+'.\n\n'+
+      'Souhaitez-vous avancer avec l\'intervention ? Cela me permettra d\'organiser le planning. '+
+      'Je reste à votre disposition pour toute question.\n\nBien à vous,\n'+entrepriseNom();
+  }
+  function factureMsg(e){
+    var s=S(); var tpl=s.messages&&s.messages.relanceFacture;
+    var iban=ibanOf();
+    if(tpl){
+      return fill(tpl, { prenom:prenom(e.clientNom), numero_facture:e.docNum||'', montant:euro20(e.totalTTC),
+        iban: iban||'[IBAN à compléter]', nom_entreprise:entrepriseNom(), communication:e.docNum||'' });
+    }
+    return 'Bonjour '+(prenom(e.clientNom)||'')+',\n\n'+
+      'Sauf erreur de notre part, la facture '+(e.docNum||'')+' d\'un montant de '+euro20(e.totalTTC)+' reste ouverte.\n\n'+
+      (iban?('IBAN : '+iban+'\nCommunication : '+(e.docNum||'')+'\n\n'):'')+
+      'Merci de régulariser dans les meilleurs délais ou de nous transmettre une preuve de paiement.\n\nCordialement,\n'+entrepriseNom();
+  }
+
+  /* ── Overlay chooser ──────────────────────────────────────────────────── */
+  function injectStyle(){
+    if(document.getElementById('yama-v20-style')) return;
+    var st=document.createElement('style'); st.id='yama-v20-style';
+    st.textContent=
+      '#yv20-ov{position:fixed;inset:0;z-index:99996;background:rgba(5,9,15,.74);display:none;align-items:center;justify-content:center;padding:16px;}'+
+      '#yv20-ov.show{display:flex;}'+
+      '#yv20-card{background:#0d1420;border:1px solid rgba(201,168,76,.4);border-radius:16px;padding:18px;max-width:480px;width:100%;}'+
+      '#yv20-card h3{margin:0 0 4px;font-size:16px;color:#fff;}'+
+      '.yv20-sub{font-size:12px;color:rgba(255,255,255,.5);margin-bottom:12px;}'+
+      '#yv20-msg{width:100%;min-height:150px;background:#0b1119;border:1px solid rgba(255,255,255,.1);border-radius:9px;color:#e8edf4;font-size:12.5px;padding:10px;resize:vertical;line-height:1.5;font-family:inherit;box-sizing:border-box;}'+
+      '.yv20-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}'+
+      '.yv20-btn{flex:1;min-width:96px;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;border:1px solid;}'+
+      '.yv20-wa{background:rgba(37,211,102,.14);border-color:rgba(37,211,102,.45);color:#25d366;}'+
+      '.yv20-em{background:rgba(90,160,255,.12);border-color:rgba(90,160,255,.45);color:#7db4ff;}'+
+      '.yv20-cp{background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.45);color:#C9A84C;}'+
+      '.yv20-x{background:transparent;border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.5);margin-top:8px;}'+
+      '.yv20-relbtn{background:rgba(224,123,57,.1)!important;border:1px solid rgba(224,123,57,.4)!important;color:#E07B39!important;font-size:12px;padding:6px 12px;border-radius:7px;cursor:pointer;margin-left:6px;}';
+    (document.head||document.documentElement).appendChild(st);
+  }
+  var _cur=null;
+  function ensureOv(){
+    if(document.getElementById('yv20-ov')||!document.body) return;
+    var ov=document.createElement('div'); ov.id='yv20-ov';
+    ov.innerHTML='<div id="yv20-card"><h3 id="yv20-title">🔔 Relance</h3><div class="yv20-sub" id="yv20-sub"></div>'+
+      '<textarea id="yv20-msg"></textarea>'+
+      '<div class="yv20-row">'+
+        '<button class="yv20-btn yv20-wa" onclick="window.ymV20Send(\'wa\')">📲 WhatsApp</button>'+
+        '<button class="yv20-btn yv20-em" onclick="window.ymV20Send(\'email\')">✉️ Email</button>'+
+        '<button class="yv20-btn yv20-cp" onclick="window.ymV20Send(\'copy\')">📋 Copier</button>'+
+      '</div><div class="yv20-row"><button class="yv20-btn yv20-x" onclick="window.ymV20Close()">Fermer</button></div></div>';
+    ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
+    document.body.appendChild(ov);
+  }
+  function close(){ var o=document.getElementById('yv20-ov'); if(o) o.classList.remove('show'); }
+  window.ymV20Close=close;
+  window.ymV20Send=function(ch){
+    var ta=document.getElementById('yv20-msg'); var msg=ta?ta.value:''; if(!_cur) return;
+    if(ch==='wa'){ var n=waNorm(_cur.tel); window.open((n?('https://wa.me/'+n):'https://wa.me/')+'?text='+encodeURIComponent(msg),'_blank'); }
+    else if(ch==='email'){ var subj=(_cur.kind==='facture'?'Rappel facture ':'Suivi devis ')+(_cur.docNum||''); window.open('mailto:'+encodeURIComponent(_cur.email||'')+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(msg),'_blank'); }
+    else { try{ navigator.clipboard.writeText(msg); }catch(e){} try{ if(typeof toast==='function') toast('Message copié','success'); }catch(e){} }
+    // marque relancé (additif)
+    try{ var h=rd(K_HIST,[]); var i=h.findIndex(function(x){return x&&x.docNum===_cur.docNum;}); if(i>=0){ h[i].relanceAt=new Date().toISOString(); localStorage.setItem(K_HIST,JSON.stringify(h)); if(typeof window.syncPushHistory==='function') window.syncPushHistory(h[i]); } }catch(e){}
+  };
+  window.ymV20Relance=function(docNum){
+    injectStyle(); ensureOv();
+    var e=entryOf(docNum)||{}; var kind=(e.docType==='facture')?'facture':'devis';
+    _cur={ docNum:docNum, tel:e.clientTel||'', email:e.clientEmail||'', clientNom:e.clientNom||'', kind:kind };
+    var title=document.getElementById('yv20-title'); if(title) title.textContent = kind==='facture'?'🔔 Rappel de paiement':'🔔 Relance devis';
+    var sub=document.getElementById('yv20-sub'); if(sub) sub.textContent=(docNum||'')+' · '+(e.clientNom||'Client');
+    var ta=document.getElementById('yv20-msg'); if(ta) ta.value = kind==='facture'?factureMsg(e):devisMsg(e);
+    var ov=document.getElementById('yv20-ov'); if(ov) ov.classList.add('show');
+  };
+
+  /* ── Injection des boutons « Relancer » ───────────────────────────────── */
+  function makeBtn(docNum){
+    var b=document.createElement('button'); b.className='yv20-relbtn yv20-injected'; b.type='button';
+    b.textContent='🔔 Relancer'; b.onclick=function(ev){ ev.stopPropagation(); window.ymV20Relance(docNum); };
+    return b;
+  }
+  function addButtons(){
+    injectStyle();
+    try{
+      document.querySelectorAll('#historyList .history-item').forEach(function(item){
+        if(item.querySelector('.yv20-injected')) return;
+        var numEl=item.querySelector('.history-num'); var doc=numEl?String(numEl.textContent||'').trim():''; if(!doc) return;
+        var e=entryOf(doc); if(!e) return;
+        if(e.docType==='facture'){ if(isPaid(doc)) return; }       // pas de relance si payé
+        else if(e.docType==='devis'){ if(e.signatureDataUrl) return; } // pas de relance si déjà signé
+        else return;
+        (item.querySelector('.yama-v12-statusline')||item.querySelector('.history-info')||item).appendChild(makeBtn(doc));
+      });
+      document.querySelectorAll('#devisList .devis-item').forEach(function(card){
+        if(card.querySelector('.yv20-injected')) return;
+        var numEl=card.querySelector('.devis-item-num'); var doc=numEl?String(numEl.textContent||'').trim():''; if(!doc) return;
+        var e=entryOf(doc); if(!e||e.docType!=='devis'||e.signatureDataUrl) return;
+        (card.querySelector('.devis-item-actions')||card).appendChild(makeBtn(doc));
+      });
+    }catch(x){ console.warn('[V20]',x); }
+  }
+  function wrapEnh(name){
+    if(typeof window[name]==='function' && !window[name].__v20){
+      var orig=window[name];
+      window[name]=function(){ var r=orig.apply(this,arguments); try{ setTimeout(addButtons,45); }catch(e){} return r; };
+      try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window[name][k]=orig[k]; } }catch(e){}
+      window[name].__v20=true;
+    }
+  }
+  (function poll(){ var t=0; var iv=setInterval(function(){ t++; wrapEnh('enhanceHistoryInvoices'); wrapEnh('enhanceDevisCards'); if(t>50) clearInterval(iv); }, 420); })();
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(addButtons, 1700); }); } else { setTimeout(addButtons, 1700); }
+
+  setTimeout(function(){ console.info('[YAMA V20] Relance en un tap (devis & factures) — WhatsApp/Email/Copier — actif.'); }, 4000);
+
+})();
+</script>
 </body>
 </html>
