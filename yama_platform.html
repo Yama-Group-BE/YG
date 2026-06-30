@@ -39273,6 +39273,7 @@ lineXml+
 
   /* ── Bouton UBL sur les factures (si activé) ───────────────────────────── */
   function addUblButtons(){
+    if(window.__YAMA_ACTION_HUB__) return; /* regroupé dans le menu Actions V24 */
     if(!enabled()) return;
     try{
       var items=document.querySelectorAll('#historyList .history-item');
@@ -39877,6 +39878,7 @@ html { scrollbar-gutter: stable; }
     return b;
   }
   function addSignButtons(){
+    if(window.__YAMA_ACTION_HUB__) return; /* regroupé dans le menu Actions V24 */
     injectStyle();
     try{
       // Historique
@@ -40037,6 +40039,7 @@ html { scrollbar-gutter: stable; }
     return b;
   }
   function addButtons(){
+    if(window.__YAMA_ACTION_HUB__) return; /* regroupé dans le menu Actions V24 */
     injectStyle();
     try{
       document.querySelectorAll('#historyList .history-item').forEach(function(item){
@@ -40336,6 +40339,7 @@ html { scrollbar-gutter: stable; }
   };
 
   function addButtons(){
+    if(window.__YAMA_ACTION_HUB__) return; /* regroupé dans le menu Actions V24 */
     injectStyle();
     try{
       document.querySelectorAll('#historyList .history-item').forEach(function(item){
@@ -40360,6 +40364,134 @@ html { scrollbar-gutter: stable; }
   if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(addButtons, 1800); }); } else { setTimeout(addButtons, 1800); }
 
   setTimeout(function(){ console.info('[YAMA V23] Demande d\'avis Google (factures payées) — actif.'); }, 4600);
+
+})();
+</script>
+
+<script id="yama-platform-v24">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V24 — Action Hub : un seul bouton « ⋯ Actions » par document
+   ───────────────────────────────────────────────────────────────────────
+   PROBLÈME : trop de boutons injectés (UBL, Signer, Relancer, Avis…) saturent
+   visuellement chaque ligne et provoquent des reflows/instabilité.
+   FIX : un unique bouton « ⋯ » par document ouvre un pop-up listant SEULEMENT
+   les actions applicables. Les injections individuelles (V15/V19/V20/V23)
+   sont désactivées (flag __YAMA_ACTION_HUB__). Pop-up en top-layer (stable,
+   aucun décalage de mise en page). Allège la densité, surtout sur mobile.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V24__) return;
+  window.__YAMA_PLATFORM_V24__ = true;
+  window.__YAMA_ACTION_HUB__ = true; // désactive les boutons individuels V15/V19/V20/V23
+
+  var K_HIST='yama_history_v3', K_CP='yama_client_paid_v1', K_V12='yama_invoice_status_v12';
+  function rd(k,d){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(d)); }catch(e){ return d; } }
+  function entryOf(dn){ try{ if(typeof window.docEntry==='function'){ var e=window.docEntry(dn); if(e) return e; } }catch(x){} return rd(K_HIST,[]).find(function(h){return h&&h.docNum===dn;})||null; }
+  function isPaid(dn){ if(!dn) return false; var cp=rd(K_CP,{}); if(cp[dn]===true) return true; var v=rd(K_V12,{}); return !!(v[dn]&&v[dn].status==='paid'); }
+  function peppolOn(){ try{ var s=getSettings(); return !!(s.conformite&&s.conformite.peppolEnabled); }catch(e){ return false; } }
+  function has(fn){ return typeof window[fn]==='function'; }
+
+  /* ── Liste des actions applicables à un document ──────────────────────── */
+  function actionsFor(e){
+    if(!e || !e.docNum) return [];
+    var dn=e.docNum, out=[];
+    if(e.docType==='facture'){
+      if(has('openInvoiceStatusModal')) out.push({ic:'💶',label:'Statut paiement',run:function(){ window.openInvoiceStatusModal(dn); }});
+      if(!isPaid(dn) && has('ymV20Relance')) out.push({ic:'🔔',label:'Relancer le paiement',run:function(){ window.ymV20Relance(dn); }});
+      if(isPaid(dn) && has('ymV23Avis')) out.push({ic:'⭐',label:'Demander un avis Google',run:function(){ window.ymV23Avis(dn); }});
+      if(peppolOn() && has('ymExportUBL')) out.push({ic:'⬇️',label:'Export UBL (Peppol)',run:function(){ window.ymExportUBL(dn); }});
+    } else if(e.docType==='devis'){
+      if(e.signatureDataUrl){ if(has('ymV19View')) out.push({ic:'✔',label:'Voir la signature',run:function(){ window.ymV19View(dn); }}); }
+      else { if(has('ymV19Sign')) out.push({ic:'✍️',label:'Faire signer le devis',run:function(){ window.ymV19Sign(dn); }}); }
+      if(!e.signatureDataUrl && has('ymV20Relance')) out.push({ic:'🔔',label:'Relancer le devis',run:function(){ window.ymV20Relance(dn); }});
+    }
+    return out;
+  }
+
+  /* ── Styles ───────────────────────────────────────────────────────────── */
+  function injectStyle(){
+    if(document.getElementById('yama-v24-style')) return;
+    var st=document.createElement('style'); st.id='yama-v24-style';
+    st.textContent=
+      '.yv24-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#cdd6e6;border-radius:8px;'+
+      'padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px;white-space:nowrap;}'+
+      '.yv24-btn:hover{border-color:rgba(201,168,76,.5);color:#C9A84C;}'+
+      '#yv24-ov{position:fixed;inset:0;z-index:99998;background:rgba(5,9,15,.6);display:none;align-items:flex-end;justify-content:center;}'+
+      '#yv24-ov.show{display:flex;}'+
+      '#yv24-sheet{background:#0d1420;border-top:2px solid rgba(201,168,76,.5);border-radius:18px 18px 0 0;width:100%;max-width:520px;'+
+      'padding:14px 14px calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -12px 44px rgba(0,0,0,.6);}'+
+      '@media(min-width:780px){#yv24-ov{align-items:center;}#yv24-sheet{border-radius:16px;border:1px solid rgba(201,168,76,.4);}}'+
+      '#yv24-sheet .yv24-h{font-size:13px;color:rgba(255,255,255,.55);text-align:center;margin:2px 0 12px;}'+
+      '.yv24-act{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:rgba(255,255,255,.04);'+
+      'border:1px solid rgba(255,255,255,.08);border-radius:11px;padding:14px 14px;margin-bottom:8px;color:#e8edf4;font-size:14px;font-weight:600;cursor:pointer;}'+
+      '.yv24-act:hover{border-color:rgba(201,168,76,.45);background:rgba(201,168,76,.08);}'+
+      '.yv24-act .ic{font-size:18px;width:24px;text-align:center;}'+
+      '.yv24-x{width:100%;padding:13px;border-radius:11px;border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.55);font-size:13px;cursor:pointer;margin-top:4px;}';
+    (document.head||document.documentElement).appendChild(st);
+  }
+  function ensureOv(){
+    if(document.getElementById('yv24-ov')||!document.body) return;
+    var ov=document.createElement('div'); ov.id='yv24-ov';
+    ov.innerHTML='<div id="yv24-sheet"><div class="yv24-h" id="yv24-h"></div><div id="yv24-list"></div><button class="yv24-x" onclick="window.ymV24Close()">Fermer</button></div>';
+    ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
+    document.body.appendChild(ov);
+  }
+  function close(){ var o=document.getElementById('yv24-ov'); if(o) o.classList.remove('show'); }
+  window.ymV24Close=close;
+  window.ymV24Open=function(docNum){
+    injectStyle(); ensureOv();
+    var e=entryOf(docNum)||{}; var acts=actionsFor(e);
+    var h=document.getElementById('yv24-h'); if(h) h.textContent=(docNum||'')+' · '+(e.clientNom||'');
+    var list=document.getElementById('yv24-list'); if(!list) return;
+    if(!acts.length){ list.innerHTML='<div style="text-align:center;color:rgba(255,255,255,.45);padding:14px;font-size:13px;">Aucune action disponible.</div>'; }
+    else {
+      list.innerHTML='';
+      acts.forEach(function(a){
+        var b=document.createElement('button'); b.className='yv24-act';
+        b.innerHTML='<span class="ic">'+a.ic+'</span><span>'+a.label+'</span>';
+        b.onclick=function(){ close(); setTimeout(a.run, 60); };
+        list.appendChild(b);
+      });
+    }
+    var ov=document.getElementById('yv24-ov'); if(ov) ov.classList.add('show');
+  };
+
+  /* ── Injection du bouton unique ───────────────────────────────────────── */
+  function addHubButtons(){
+    injectStyle();
+    try{
+      document.querySelectorAll('#historyList .history-item').forEach(function(item){
+        if(item.querySelector('.yv24-btn')) return;
+        var numEl=item.querySelector('.history-num'); var doc=numEl?String(numEl.textContent||'').trim():''; if(!doc) return;
+        var e=entryOf(doc); if(!e || (e.docType!=='facture'&&e.docType!=='devis')) return;
+        if(!actionsFor(e).length) return;
+        var b=document.createElement('button'); b.className='yv24-btn'; b.type='button';
+        b.textContent='⋯ Actions'; b.onclick=function(ev){ ev.stopPropagation(); window.ymV24Open(doc); };
+        (item.querySelector('.yama-v12-statusline')||item.querySelector('.history-info')||item).appendChild(b);
+      });
+      document.querySelectorAll('#devisList .devis-item').forEach(function(card){
+        if(card.querySelector('.yv24-btn')) return;
+        var numEl=card.querySelector('.devis-item-num'); var doc=numEl?String(numEl.textContent||'').trim():''; if(!doc) return;
+        var e=entryOf(doc); if(!e || e.docType!=='devis') return;
+        if(!actionsFor(e).length) return;
+        var b=document.createElement('button'); b.className='yv24-btn'; b.type='button';
+        b.textContent='⋯ Actions'; b.onclick=function(ev){ ev.stopPropagation(); window.ymV24Open(doc); };
+        (card.querySelector('.devis-item-actions')||card).appendChild(b);
+      });
+    }catch(x){ console.warn('[V24]',x); }
+  }
+  function wrapEnh(name){
+    if(typeof window[name]==='function' && !window[name].__v24){
+      var orig=window[name];
+      window[name]=function(){ var r=orig.apply(this,arguments); try{ setTimeout(addHubButtons,55); }catch(e){} return r; };
+      try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window[name][k]=orig[k]; } }catch(e){}
+      window[name].__v24=true;
+    }
+  }
+  (function poll(){ var t=0; var iv=setInterval(function(){ t++; wrapEnh('enhanceHistoryInvoices'); wrapEnh('enhanceDevisCards'); if(t>60) clearInterval(iv); }, 420); })();
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(addHubButtons, 1900); }); } else { setTimeout(addHubButtons, 1900); }
+
+  setTimeout(function(){ console.info('[YAMA V24] Action Hub — menu Actions unique par document (désature l\'UI) — actif.'); }, 4800);
 
 })();
 </script>
