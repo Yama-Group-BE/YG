@@ -5490,6 +5490,7 @@ function normalizeContact(c) {
     heure:    c.heure_rdv || c.heure || '',
     type:     c.type_visite || c.type || 'devis',
     st:       c.st || '',
+    source:   c.source || c.client_source || '',
     savedAt:  c.saved_at || c.savedAt || '',
     gcal:     c.gcal_added || c.gcal || false,
     followUpStatus: c.followUpStatus || c.status || '',
@@ -6447,6 +6448,7 @@ async function saveContact() {
     heure:    document.getElementById('f-heure').value,
     type:     typeState,
     st,
+    source:   (document.getElementById('f-source') ? document.getElementById('f-source').value : '') || '',
     gcal:     false,
     savedAt:  new Date().toISOString(),
   };
@@ -6469,6 +6471,7 @@ async function saveContact() {
       contact.devisStartedAt = previous.devisStartedAt || '';
       contact.waitingResponse = previous.waitingResponse || false;
       contact.finished = previous.finished || false;
+      contact.source = contact.source || previous.source || ''; // préserver l'origine du client si non re-sélectionnée
       contacts[idx] = contact;
     } else {
       contacts.unshift(contact);
