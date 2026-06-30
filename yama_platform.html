@@ -40887,7 +40887,9 @@ img, canvas, video, svg, table { max-width: 100%; }
   (function css(){
     var st=document.createElement('style'); st.id='yama-v28-style';
     st.textContent=
-      '.yv28-hidden{display:none !important;}'+
+      /* Masquage CSS instantané : tout bouton non-gardé d'un conteneur géré est
+         caché AVANT peinture → aucune réapparition d'1 frame (anti-spasme). */
+      '.yv28-managed button:not(.yv28-keep):not(.yv28-more){display:none !important;}'+
       '.yv28-more{cursor:pointer;font-weight:800;min-width:40px;}'+
       '#yv28-ov{position:fixed;inset:0;z-index:99996;background:rgba(5,9,15,.6);display:none;align-items:flex-end;justify-content:center;}'+
       '#yv28-ov.show{display:flex;}'+
@@ -40959,7 +40961,7 @@ img, canvas, video, svg, table { max-width: 100%; }
     var list=document.getElementById('yv28-list'); if(!list) return;
     list.innerHTML='';
     // boutons masqués (live) + actions document
-    Array.prototype.slice.call(container.querySelectorAll('button.yv28-hidden')).forEach(function(b){
+    Array.prototype.slice.call(container.querySelectorAll('button:not(.yv28-keep):not(.yv28-more)')).forEach(function(b){
       var a=document.createElement('button'); a.className='yv28-act';
       a.textContent=lbl(b);
       a.onclick=function(){ close(); setTimeout(function(){ try{ b.click(); }catch(e){} },60); };
@@ -40977,29 +40979,29 @@ img, canvas, video, svg, table { max-width: 100%; }
 
   /* ── Consolidation d'un conteneur ─────────────────────────────────────── */
   function consolidateOne(container, withPrimary){
-    var more=container.querySelector('.yv28-more');
     var btns=Array.prototype.slice.call(container.querySelectorAll('button')).filter(function(b){
       return !b.classList.contains('yv28-more');
     });
     if(!btns.length) return;
+    container.classList.add('yv28-managed');        // active le masquage CSS instantané
     var keptPrimary=false;
     btns.forEach(function(b){
-      if(b.classList.contains('yv28-hidden')) return;
-      if(isDelete(b)) return;                       // corbeille reste visible
-      if(withPrimary && !keptPrimary && isPrimary(b)){ keptPrimary=true; return; } // 1 primaire visible
-      b.classList.add('yv28-hidden');               // le reste → masqué (menu)
+      var keep=false;
+      if(isDelete(b)) keep=true;                    // corbeille reste visible
+      else if(withPrimary && !keptPrimary && isPrimary(b)){ keep=true; keptPrimary=true; } // 1 primaire
+      if(keep) b.classList.add('yv28-keep'); else b.classList.remove('yv28-keep');
     });
-    var hiddenCount=container.querySelectorAll('button.yv28-hidden').length;
+    var hidden=container.querySelectorAll('button:not(.yv28-keep):not(.yv28-more)').length;
     var docCount=withPrimary?docActions(docNumOf(container)).length:0;
-    if(hiddenCount+docCount===0){ if(more) more.remove(); return; }
+    var more=container.querySelector('.yv28-more');
+    if(hidden+docCount===0){ if(more) more.remove(); container.classList.remove('yv28-managed'); return; }
     if(!more){
       more=document.createElement('button');
       more.className='btn btn-outline btn-sm yv28-more';
       more.type='button'; more.textContent='⋯'; more.title='Plus d\'actions';
       more.style.cssText='color:#cdd6e6;border-color:rgba(255,255,255,.18);';
       more.onclick=function(ev){ ev.stopPropagation(); openMenu(container); };
-      // placer le ⋯ juste avant la corbeille si présente, sinon à la fin
-      var del=null; Array.prototype.slice.call(container.querySelectorAll('button')).forEach(function(b){ if(!del&&isDelete(b)) del=b; });
+      var del=null; btns.forEach(function(b){ if(!del&&isDelete(b)) del=b; });
       if(del && del.parentNode===container) container.insertBefore(more, del); else container.appendChild(more);
     }
   }
