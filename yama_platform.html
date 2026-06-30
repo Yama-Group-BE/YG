@@ -40574,5 +40574,175 @@ img, canvas, video, svg, table { max-width: 100%; }
   .card-body { padding: 12px; }
 }
 </style>
+
+<script id="yama-platform-v26">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V26 — Refonte panneau notifications + relocalisation relevé
+   ───────────────────────────────────────────────────────────────────────
+   • L'ancien panneau V13 s'affichait vide/géant en bas à gauche → on le
+     masque et on REPREND la cloche pour ouvrir un panneau COMPACT, robuste
+     (jamais vide, try/catch), bien dimensionné.
+   • Le bouton flottant « 🏦 Relevé bancaire » (plein milieu) est masqué et
+     déplacé dans Réglages ▸ Banque.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V26__) return;
+  window.__YAMA_PLATFORM_V26__ = true;
+
+  /* ── 1. CSS : masquer l'ancien panneau + le bouton banque, cloche compacte ── */
+  (function css(){
+    var st=document.createElement('style'); st.id='yama-v26-style';
+    st.textContent=
+      '#yama-v13-panel{display:none !important;}'+                      /* ancien panneau cassé masqué */
+      '#yama-bank-btn{display:none !important;}'+                       /* bouton flottant relevé masqué (déplacé en Réglages) */
+      '#yama-v13-bell{width:46px !important;height:46px !important;font-size:19px !important;'+
+        'left:calc(14px + env(safe-area-inset-left,0px)) !important;bottom:calc(14px + env(safe-area-inset-bottom,0px)) !important;}'+
+      '#yv26-ov{position:fixed;inset:0;z-index:99993;background:rgba(5,9,15,.55);display:none;}'+
+      '#yv26-ov.show{display:block;}'+
+      '#yv26-notif{position:fixed;z-index:99994;left:calc(14px + env(safe-area-inset-left,0px));'+
+        'bottom:calc(70px + env(safe-area-inset-bottom,0px));width:min(360px,calc(100vw - 28px));'+
+        'max-height:min(56vh,520px);overflow-y:auto;background:#0d1420;border:1px solid rgba(201,168,76,.45);'+
+        'border-radius:16px;box-shadow:0 12px 44px rgba(0,0,0,.6);padding:14px;transform:translateY(8px);opacity:0;'+
+        'transition:opacity .16s,transform .16s;pointer-events:none;}'+
+      '#yv26-ov.show #yv26-notif{transform:translateY(0);opacity:1;pointer-events:auto;}'+
+      '.yv26-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}'+
+      '.yv26-h b{font-size:14px;color:#fff;}'+
+      '.yv26-h span{cursor:pointer;color:rgba(255,255,255,.5);font-size:20px;line-height:1;}'+
+      '.yv26-stats{display:flex;gap:7px;margin-bottom:10px;}'+
+      '.yv26-stat{flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:9px;padding:8px 6px;text-align:center;}'+
+      '.yv26-stat .v{font-size:17px;font-weight:800;}'+
+      '.yv26-stat .l{font-size:9.5px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.3px;margin-top:2px;}'+
+      '.yv26-item{display:flex;gap:8px;align-items:center;padding:9px 10px;border-radius:9px;margin-bottom:6px;background:rgba(255,255,255,.03);border-left:3px solid #C9A84C;}'+
+      '.yv26-item.hot{border-left-color:#e74c3c;background:rgba(231,76,60,.07);}'+
+      '.yv26-item .tx{flex:1;min-width:0;}'+
+      '.yv26-item .tt{font-size:12.5px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'+
+      '.yv26-item .dt{font-size:10.5px;color:rgba(255,255,255,.5);}'+
+      '.yv26-item button{background:rgba(224,123,57,.14);border:1px solid rgba(224,123,57,.45);color:#E07B39;border-radius:7px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;}'+
+      '.yv26-empty{text-align:center;color:rgba(255,255,255,.45);padding:18px 8px;font-size:12.5px;}'+
+      '.yv26-push{width:100%;margin-top:8px;padding:9px;border-radius:9px;border:1px solid rgba(201,168,76,.45);background:rgba(201,168,76,.12);color:#C9A84C;font-size:11.5px;font-weight:700;cursor:pointer;}';
+    (document.head||document.documentElement).appendChild(st);
+  })();
+
+  /* ── 2. Données (robustes) ────────────────────────────────────────────── */
+  function euro(n){ try{ return new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(n||0); }catch(e){ return (Math.round((n||0))||0)+' €'; } }
+  function daysSince(d){ if(!d) return 0; var t=new Date(d).getTime(); if(isNaN(t)) return 0; return Math.floor((Date.now()-t)/86400000); }
+  function kpis(){ try{ return (typeof calcKPIs==='function')?calcKPIs():null; }catch(e){ return null; } }
+  function hist(){ try{ return (typeof getHistory==='function')?getHistory():JSON.parse(localStorage.getItem('yama_history_v3')||'[]'); }catch(e){ return []; } }
+  function dstat(){ try{ return (typeof getDevisStatuses==='function')?getDevisStatuses():{}; }catch(e){ return {}; } }
+  function devisToRelance(){
+    try{
+      var ds=dstat();
+      return hist().filter(function(h){
+        if(!h||h.docType!=='devis'||h.signatureDataUrl) return false;
+        var s=(ds[h.docNum]||{}).status||'pending';
+        if(s==='accepted'||s==='refused'||s==='invoiced') return false;
+        return daysSince(h.dateEmission||h.savedAt)>=7;
+      });
+    }catch(e){ return []; }
+  }
+
+  /* ── 3. Rendu compact + robuste ───────────────────────────────────────── */
+  function render(){
+    var box=document.getElementById('yv26-notif'); if(!box) return;
+    var html='<div class="yv26-h"><b>🔔 Notifications</b><span onclick="window.ymV26Close()">×</span></div>';
+    try{
+      var k=kpis()||{impayees:[],aFacturer:[],nImpayees:0,caEnAttente:0};
+      var dr=devisToRelance();
+      var notifSupp=('Notification' in window), granted=notifSupp&&Notification.permission==='granted';
+      html+='<div class="yv26-stats">'+
+        '<div class="yv26-stat"><div class="v" style="color:#e74c3c;">'+(k.nImpayees||0)+'</div><div class="l">Impayées</div></div>'+
+        '<div class="yv26-stat"><div class="v" style="color:#C9A84C;">'+dr.length+'</div><div class="l">À relancer</div></div>'+
+        '<div class="yv26-stat"><div class="v" style="color:#52c77f;">'+((k.aFacturer&&k.aFacturer.length)||0)+'</div><div class="l">À facturer</div></div>'+
+        '</div>';
+      var items=(k.impayees||[]).slice(0,5);
+      if(!items.length && !dr.length){
+        html+='<div class="yv26-empty">✅ Rien d\'urgent.<br>Tout est à jour.</div>';
+      } else {
+        items.forEach(function(f){
+          var hot=(f.jourRetard||0)>0;
+          html+='<div class="yv26-item'+(hot?' hot':'')+'"><div class="tx"><div class="tt">'+esc(f.clientNom||'Client')+'</div>'+
+            '<div class="dt">'+esc(f.docNum||'')+' · reste '+euro(f.restant)+(hot?(' · +'+f.jourRetard+'j'):'')+'</div></div>'+
+            '<button data-relance="'+esc(f.docNum||'')+'">Relancer</button></div>';
+        });
+        dr.slice(0,4).forEach(function(h){
+          html+='<div class="yv26-item"><div class="tx"><div class="tt">'+esc(h.clientNom||'Client')+'</div>'+
+            '<div class="dt">Devis '+esc(h.docNum||'')+' · '+daysSince(h.dateEmission||h.savedAt)+'j sans réponse</div></div>'+
+            '<button data-relance="'+esc(h.docNum||'')+'">Relancer</button></div>';
+        });
+      }
+      if(notifSupp && !granted){ html+='<button class="yv26-push" onclick="window.ymV26Push()">📲 Activer les notifications téléphone</button>'; }
+    }catch(e){
+      html+='<div class="yv26-empty">Résumé indisponible pour le moment.</div>';
+    }
+    box.innerHTML=html;
+    // brancher les boutons relancer
+    box.querySelectorAll('button[data-relance]').forEach(function(b){
+      b.onclick=function(){ var dn=b.getAttribute('data-relance'); close(); setTimeout(function(){
+        if(typeof window.ymV20Relance==='function') window.ymV20Relance(dn);
+        else if(typeof window.v37OpenRelanceModal==='function'){ var e=(typeof docEntry==='function')?docEntry(dn):null; window.v37OpenRelanceModal(dn,(e&&e.clientNom)||'',0,0); }
+      },60); };
+    });
+  }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function ensureOv(){
+    if(document.getElementById('yv26-ov')||!document.body) return;
+    var ov=document.createElement('div'); ov.id='yv26-ov';
+    ov.innerHTML='<div id="yv26-notif"></div>';
+    ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
+    document.body.appendChild(ov);
+  }
+  function open(){ ensureOv(); render(); var o=document.getElementById('yv26-ov'); if(o) o.classList.add('show'); }
+  function close(){ var o=document.getElementById('yv26-ov'); if(o) o.classList.remove('show'); }
+  window.ymV26Open=open; window.ymV26Close=close;
+  window.ymV26Push=function(){
+    if(!('Notification' in window)) return;
+    Notification.requestPermission().then(function(p){ if(p==='granted'){ try{ new Notification('YAMA','✓ Notifications activées'); }catch(e){} } render(); }).catch(function(){});
+  };
+
+  /* ── 4. Reprendre la cloche ───────────────────────────────────────────── */
+  (function rebind(){
+    var t=0; var iv=setInterval(function(){
+      t++;
+      var bell=document.getElementById('yama-v13-bell');
+      if(bell && !bell.__v26){ bell.__v26=true; bell.onclick=function(ev){ ev&&ev.stopPropagation(); open(); }; }
+      if(t>60) clearInterval(iv);
+    }, 500);
+  })();
+
+  /* ── 5. Relevé bancaire → dans Réglages ▸ Banque ──────────────────────── */
+  (function relocateBank(){
+    var t=0; var iv=setInterval(function(){
+      t++;
+      if(typeof window.v37ShowSettingsTab==='function' && !window.v37ShowSettingsTab.__v26){
+        var orig=window.v37ShowSettingsTab;
+        window.v37ShowSettingsTab=function(tab){
+          var r=orig.apply(this,arguments);
+          if(tab==='banque'){
+            setTimeout(function(){
+              try{
+                var host=document.getElementById('v37-s-content'); if(!host||document.getElementById('yv26-bankbtn')) return;
+                var b=document.createElement('button'); b.id='yv26-bankbtn'; b.type='button';
+                b.style.cssText='width:100%;margin-bottom:14px;padding:12px;border-radius:10px;border:1px solid rgba(201,168,76,.45);background:rgba(201,168,76,.12);color:#C9A84C;font-size:13px;font-weight:700;cursor:pointer;';
+                b.textContent='🏦 Importer un relevé bancaire (réconciliation des paiements)';
+                b.onclick=function(){ var src=document.getElementById('yama-bank-btn'); if(src) src.click(); };
+                host.insertBefore(b, host.firstChild);
+              }catch(e){}
+            }, 60);
+          }
+          return r;
+        };
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.v37ShowSettingsTab[k]=orig[k]; } }catch(e){}
+        window.v37ShowSettingsTab.__v26=true;
+        clearInterval(iv);
+      }
+      if(t>60) clearInterval(iv);
+    }, 500);
+  })();
+
+  setTimeout(function(){ console.info('[YAMA V26] Panneau notifications compact + relevé bancaire déplacé en Réglages — actif.'); }, 4000);
+
+})();
+</script>
 </body>
 </html>
