@@ -39698,5 +39698,24 @@ html { scrollbar-gutter: stable; }
 }
 
 </style>
+
+<style id="yama-platform-v18-tabstable">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V18 — Onglets sans saut visuel (override final décisif)
+   CAUSE : .tab-content.active anime translateY(4-6px) à CHAQUE clic d'onglet
+   (yamaTabIn / fade / yamaV20Fade), et des couches V20/V21 se disputent la
+   règle en !important → contenu qui « saute »/se redimensionne au clic.
+   FIX : dernière règle de la cascade = gagne ; on neutralise tout mouvement
+   d'entrée d'onglet, affichage instantané. 100% additif.
+   ═══════════════════════════════════════════════════════════════════════ */
+.tab-content.active,
+#app-platform .tab-content.active,
+#app-crm .tab-content.active {
+  animation: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+  transition: none !important;
+}
+</style>
 </body>
 </html>
