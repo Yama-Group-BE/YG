@@ -40796,10 +40796,12 @@ img, canvas, video, svg, table { max-width: 100%; }
   }
   function close(){ var o=document.getElementById('yv27-ov'); if(o) o.classList.remove('show'); }
   window.ymV27Close=close;
-  function openMenu(btns){
+  function openMenu(box){
     ensureOv();
-    var list=document.getElementById('yv27-list'); if(!list) return;
+    var list=document.getElementById('yv27-list'); if(!list||!box) return;
     list.innerHTML='';
+    // lecture LIVE des boutons masqués (capte ceux ajoutés après coup par decorateRows)
+    var btns=Array.prototype.slice.call(box.querySelectorAll('button.yv27-hidden'));
     btns.forEach(function(b){
       var a=document.createElement('button'); a.className='yv27-act';
       a.textContent=labelOf(b);
@@ -40812,16 +40814,24 @@ img, canvas, video, svg, table { max-width: 100%; }
   function consolidate(){
     try{
       document.querySelectorAll('.cr-actions').forEach(function(box){
-        if(box.querySelector('.yv27-more')) return;
-        var btns=Array.prototype.slice.call(box.children).filter(function(el){ return el.tagName==='BUTTON' && !el.classList.contains('yv27-more'); });
-        if(btns.length < 2) return; // déjà léger
-        btns.forEach(function(b){ b.classList.add('yv27-hidden'); });
-        var more=document.createElement('button');
-        more.className='btn btn-outline btn-sm yv27-more';
-        more.type='button'; more.textContent='⋯'; more.title='Actions du dossier';
-        more.style.cssText='color:#cdd6e6;border-color:rgba(255,255,255,.18);min-width:40px;';
-        more.onclick=function(ev){ ev.stopPropagation(); openMenu(btns); };
-        box.appendChild(more);
+        var more=box.querySelector('.yv27-more');
+        // boutons réels non encore masqués (y compris ceux injectés après coup)
+        var fresh=Array.prototype.slice.call(box.children).filter(function(el){
+          return el.tagName==='BUTTON' && !el.classList.contains('yv27-more') && !el.classList.contains('yv27-hidden');
+        });
+        if(more){
+          // un menu existe déjà → masquer simplement les nouveaux boutons (anti-réapparition)
+          fresh.forEach(function(b){ b.classList.add('yv27-hidden'); });
+          return;
+        }
+        if(fresh.length < 2) return; // déjà léger
+        fresh.forEach(function(b){ b.classList.add('yv27-hidden'); });
+        var mb=document.createElement('button');
+        mb.className='btn btn-outline btn-sm yv27-more';
+        mb.type='button'; mb.textContent='⋯'; mb.title='Actions du dossier';
+        mb.style.cssText='color:#cdd6e6;border-color:rgba(255,255,255,.18);min-width:40px;';
+        mb.onclick=function(ev){ ev.stopPropagation(); openMenu(box); };
+        box.appendChild(mb);
       });
     }catch(e){ console.warn('[V27]',e); }
   }
@@ -40835,9 +40845,21 @@ img, canvas, video, svg, table { max-width: 100%; }
     }
   }
   (function poll(){ var t=0; var iv=setInterval(function(){ t++; wrap('renderContactList'); if(t>60) clearInterval(iv); }, 450); })();
-  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(consolidate, 2000); }); } else { setTimeout(consolidate, 2000); }
-  // re-consolider quand on revient/charge des listes
-  document.addEventListener('click', function(e){ if(e.target && e.target.closest && e.target.closest('.nav-tab,.crm-timeline-tabs')) setTimeout(consolidate, 200); }, true);
+
+  /* Observer débounce (rAF) : quand decorateRows/le timer 20s ré-injectent des
+     boutons, on les regroupe aussitôt sous « ⋯ » → fin de la réapparition
+     périodique (spasme). On n'observe que childList → l'ajout de classe pour
+     masquer ne re-déclenche PAS l'observer (pas de boucle). */
+  var _v27pending=false;
+  function schedule(){ if(_v27pending) return; _v27pending=true; (window.requestAnimationFrame||window.setTimeout)(function(){ _v27pending=false; consolidate(); }, 0); }
+  function observeCrm(){
+    ['contacts-all','contacts-devis','contacts-recontact','contacts-waiting','contacts-finished','app-crm'].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el && !el.__v27obs){ el.__v27obs=true; try{ new MutationObserver(schedule).observe(el,{childList:true,subtree:true}); }catch(e){} }
+    });
+  }
+  var _ob=0; var obIv=setInterval(function(){ _ob++; observeCrm(); if(_ob>20) clearInterval(obIv); }, 600);
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ observeCrm(); consolidate(); }, 1800); }); } else { setTimeout(function(){ observeCrm(); consolidate(); }, 1800); }
 
   setTimeout(function(){ console.info('[YAMA V27] CRM — actions regroupées sous « ⋯ » — actif.'); }, 4200);
 
