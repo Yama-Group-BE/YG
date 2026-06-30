@@ -39717,5 +39717,205 @@ html { scrollbar-gutter: stable; }
   transition: none !important;
 }
 </style>
+
+<script id="yama-platform-v19">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V19 — Signature électronique du devis (sur l'appareil)
+   ───────────────────────────────────────────────────────────────────────
+   Standard du marché (Obat/Vertuoza) : faire signer le client en 1 clic.
+   • Bouton « ✍️ Faire signer » sur les devis (historique + cartes Documents).
+   • Pavé de signature tactile (canvas) ; signature + nom + date stockés sur
+     l'entrée d'historique (signatureDataUrl/signedAt/signedName) et
+     SYNCHRONISÉS (syncPushHistory). Badge « ✔ Signé le … ».
+   • 100% hors-ligne, aucune structure existante modifiée.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V19__) return;
+  window.__YAMA_PLATFORM_V19__ = true;
+
+  var K_HIST='yama_history_v3';
+  function rd(k,d){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(d)); }catch(e){ return d; } }
+  function wr(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function e19(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function entryOf(docNum){
+    try{ if(typeof window.docEntry==='function'){ var e=window.docEntry(docNum); if(e) return e; } }catch(x){}
+    var hist=rd(K_HIST,[]); return hist.find(function(h){ return h && h.docNum===docNum; }) || null;
+  }
+  function fmtD(iso){ if(!iso) return ''; try{ return new Date(iso).toLocaleDateString('fr-BE'); }catch(e){ return ''; } }
+
+  function saveSignature(docNum, dataUrl, name){
+    var hist=rd(K_HIST,[]); var idx=hist.findIndex(function(h){ return h && h.docNum===docNum; });
+    if(idx<0) return false;
+    hist[idx].signatureDataUrl = dataUrl;
+    hist[idx].signedAt = new Date().toISOString();
+    hist[idx].signedName = name||'';
+    wr(K_HIST, hist);
+    try{ if(typeof window.syncPushHistory==='function') window.syncPushHistory(hist[idx]); }catch(e){}
+    return true;
+  }
+
+  /* ── Styles ───────────────────────────────────────────────────────────── */
+  function injectStyle(){
+    if(document.getElementById('yama-v19-style')) return;
+    var st=document.createElement('style'); st.id='yama-v19-style';
+    st.textContent=
+      '#yv19-ov{position:fixed;inset:0;z-index:99996;background:rgba(5,9,15,.74);display:none;align-items:center;justify-content:center;padding:16px;}'+
+      '#yv19-ov.show{display:flex;}'+
+      '#yv19-card{background:#0d1420;border:1px solid rgba(201,168,76,.4);border-radius:16px;padding:18px;max-width:480px;width:100%;}'+
+      '#yv19-card h3{margin:0 0 4px;font-size:16px;color:#fff;}'+
+      '.yv19-sub{font-size:12px;color:rgba(255,255,255,.5);margin-bottom:12px;}'+
+      '#yv19-pad{width:100%;height:200px;background:#fff;border-radius:10px;touch-action:none;display:block;cursor:crosshair;}'+
+      '.yv19-name{width:100%;margin-top:10px;background:#0b1119;border:1px solid rgba(255,255,255,.12);border-radius:9px;color:#e8edf4;padding:10px;font-size:13px;box-sizing:border-box;}'+
+      '.yv19-row{display:flex;gap:8px;margin-top:12px;}'+
+      '.yv19-btn{flex:1;padding:12px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid;}'+
+      '.yv19-clear{background:transparent;border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.6);}'+
+      '.yv19-ok{background:linear-gradient(135deg,#C9A84C,#b8973f);border:none;color:#1a1206;}'+
+      '.yv19-cancel{background:transparent;border-color:rgba(255,255,255,.12);color:rgba(255,255,255,.5);}'+
+      '.yv19-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#52c77f;background:rgba(82,199,127,.12);border:1px solid rgba(82,199,127,.35);border-radius:6px;padding:2px 8px;margin-left:6px;}'+
+      '.yv19-signbtn{background:rgba(201,168,76,.1)!important;border:1px solid rgba(201,168,76,.4)!important;color:#C9A84C!important;}';
+    (document.head||document.documentElement).appendChild(st);
+  }
+
+  /* ── Overlay + pavé de signature ──────────────────────────────────────── */
+  var _ctx=null, _drawing=false, _dirty=false, _curDoc=null;
+  function ensureOverlay(){
+    if(document.getElementById('yv19-ov')) return;
+    if(!document.body) return;
+    var ov=document.createElement('div'); ov.id='yv19-ov';
+    ov.innerHTML=
+      '<div id="yv19-card">'+
+        '<h3>✍️ Signature du devis</h3>'+
+        '<div class="yv19-sub" id="yv19-sub"></div>'+
+        '<canvas id="yv19-pad"></canvas>'+
+        '<input class="yv19-name" id="yv19-name" type="text" placeholder="Nom du signataire (client)">'+
+        '<div class="yv19-row">'+
+          '<button class="yv19-btn yv19-clear" onclick="window.ymV19Clear()">Effacer</button>'+
+          '<button class="yv19-btn yv19-ok" onclick="window.ymV19Save()">✔ Valider la signature</button>'+
+        '</div>'+
+        '<div class="yv19-row"><button class="yv19-btn yv19-cancel" onclick="window.ymV19CloseOv()">Annuler</button></div>'+
+      '</div>';
+    ov.addEventListener('click', function(e){ if(e.target===ov) closeOv(); });
+    document.body.appendChild(ov);
+  }
+  function setupPad(){
+    var c=document.getElementById('yv19-pad'); if(!c) return;
+    var rect=c.getBoundingClientRect();
+    var dpr=window.devicePixelRatio||1;
+    c.width=Math.max(300,rect.width)*dpr; c.height=200*dpr;
+    _ctx=c.getContext('2d'); _ctx.scale(dpr,dpr);
+    _ctx.lineWidth=2.2; _ctx.lineCap='round'; _ctx.lineJoin='round'; _ctx.strokeStyle='#10243f';
+    _dirty=false;
+    function pos(ev){ var r=c.getBoundingClientRect(); var t=(ev.touches&&ev.touches[0])||ev; return {x:t.clientX-r.left, y:t.clientY-r.top}; }
+    function down(ev){ ev.preventDefault(); _drawing=true; var p=pos(ev); _ctx.beginPath(); _ctx.moveTo(p.x,p.y); }
+    function move(ev){ if(!_drawing) return; ev.preventDefault(); var p=pos(ev); _ctx.lineTo(p.x,p.y); _ctx.stroke(); _dirty=true; }
+    function up(){ _drawing=false; }
+    c.onpointerdown=down; c.onpointermove=move; c.onpointerup=up; c.onpointerleave=up;
+    // fallback tactile
+    c.ontouchstart=down; c.ontouchmove=move; c.ontouchend=up;
+  }
+  window.ymV19Clear=function(){ var c=document.getElementById('yv19-pad'); if(c&&_ctx){ _ctx.clearRect(0,0,c.width,c.height); _dirty=false; } };
+  window.ymV19CloseOv=function(){ closeOv(); };
+  function closeOv(){ var ov=document.getElementById('yv19-ov'); if(ov) ov.classList.remove('show'); }
+  window.ymV19Save=function(){
+    if(!_curDoc){ closeOv(); return; }
+    if(!_dirty){ try{ if(typeof toast==='function') toast('Veuillez signer dans le cadre','error'); }catch(e){} return; }
+    var c=document.getElementById('yv19-pad');
+    var name=(document.getElementById('yv19-name')||{}).value||'';
+    var dataUrl='';
+    try{ dataUrl=c.toDataURL('image/png'); }catch(e){}
+    if(saveSignature(_curDoc, dataUrl, name)){
+      try{ if(typeof toast==='function') toast('✔ Devis signé','success'); }catch(e){}
+      closeOv();
+      setTimeout(function(){
+        try{ if(typeof window.renderHistory==='function') window.renderHistory(); }catch(e){}
+        try{ if(typeof window.renderDevisTab==='function') window.renderDevisTab(); }catch(e){}
+        setTimeout(addSignButtons, 60);
+      }, 50);
+    }
+  };
+  window.ymV19Sign=function(docNum){
+    injectStyle(); ensureOverlay();
+    _curDoc=docNum;
+    var e=entryOf(docNum)||{};
+    var sub=document.getElementById('yv19-sub'); if(sub) sub.textContent=(docNum||'')+' · '+(e.clientNom||'Client');
+    var nm=document.getElementById('yv19-name'); if(nm) nm.value=e.signedName||e.clientNom||'';
+    var ov=document.getElementById('yv19-ov'); if(ov) ov.classList.add('show');
+    setTimeout(setupPad, 40);
+  };
+  window.ymV19View=function(docNum){
+    var e=entryOf(docNum)||{}; if(!e.signatureDataUrl){ window.ymV19Sign(docNum); return; }
+    injectStyle();
+    var old=document.getElementById('yv19-view'); if(old) old.remove();
+    var ov=document.createElement('div'); ov.id='yv19-view';
+    ov.style.cssText='position:fixed;inset:0;z-index:99997;background:rgba(5,9,15,.78);display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML='<div style="background:#0d1420;border:1px solid rgba(201,168,76,.4);border-radius:16px;padding:18px;max-width:460px;width:100%;text-align:center;">'+
+      '<div style="font-size:14px;color:#fff;font-weight:700;margin-bottom:8px;">✔ Devis signé</div>'+
+      '<div style="font-size:12px;color:rgba(255,255,255,.55);margin-bottom:12px;">'+e19(e.signedName||e.clientNom||'')+' · '+fmtD(e.signedAt)+'</div>'+
+      '<img src="'+e.signatureDataUrl+'" style="max-width:100%;background:#fff;border-radius:10px;">'+
+      '<div style="display:flex;gap:8px;margin-top:14px;">'+
+        '<button onclick="document.getElementById(\'yv19-view\').remove();window.ymV19Sign(\''+e19(docNum)+'\')" style="flex:1;padding:11px;border-radius:9px;border:1px solid rgba(201,168,76,.4);background:rgba(201,168,76,.1);color:#C9A84C;font-weight:700;cursor:pointer;">Re-signer</button>'+
+        '<button onclick="document.getElementById(\'yv19-view\').remove()" style="flex:1;padding:11px;border-radius:9px;border:1px solid rgba(255,255,255,.15);background:transparent;color:rgba(255,255,255,.6);cursor:pointer;">Fermer</button>'+
+      '</div></div>';
+    ov.addEventListener('click', function(x){ if(x.target===ov) ov.remove(); });
+    document.body.appendChild(ov);
+  };
+
+  /* ── Injection des boutons sur les devis ──────────────────────────────── */
+  function makeBtn(docNum, signed){
+    var b=document.createElement('button');
+    b.className='btn-action yv19-injected '+(signed?'':'yv19-signbtn');
+    b.type='button';
+    b.style.cssText='font-size:12px;padding:6px 12px;border-radius:7px;cursor:pointer;margin-left:6px;';
+    if(signed){ b.innerHTML='<span class="yv19-badge">✔ Signé</span>'; b.style.cssText+='background:none;border:none;'; b.onclick=function(ev){ ev.stopPropagation(); window.ymV19View(docNum); }; }
+    else { b.textContent='✍️ Faire signer'; b.onclick=function(ev){ ev.stopPropagation(); window.ymV19Sign(docNum); }; }
+    return b;
+  }
+  function addSignButtons(){
+    injectStyle();
+    try{
+      // Historique
+      document.querySelectorAll('#historyList .history-item').forEach(function(item){
+        if(item.querySelector('.yv19-injected')) return;
+        var numEl=item.querySelector('.history-num'); var doc=numEl?String(numEl.textContent||'').trim():'';
+        if(!doc) return;
+        var e=entryOf(doc); if(!e || e.docType!=='devis') return;
+        var line=item.querySelector('.yama-v12-statusline') || item.querySelector('.history-info') || item;
+        line.appendChild(makeBtn(doc, !!e.signatureDataUrl));
+      });
+      // Cartes Documents (devis)
+      document.querySelectorAll('#devisList .devis-item').forEach(function(card){
+        if(card.querySelector('.yv19-injected')) return;
+        var numEl=card.querySelector('.devis-item-num'); var doc=numEl?String(numEl.textContent||'').trim():'';
+        if(!doc) return;
+        var e=entryOf(doc); if(!e || e.docType!=='devis') return;
+        var actions=card.querySelector('.devis-item-actions')||card;
+        actions.appendChild(makeBtn(doc, !!e.signatureDataUrl));
+      });
+    }catch(x){ console.warn('[V19]',x); }
+  }
+
+  function wrapEnh(name){
+    if(typeof window[name]==='function' && !window[name].__v19){
+      var orig=window[name];
+      window[name]=function(){ var r=orig.apply(this,arguments); try{ setTimeout(addSignButtons,40); }catch(e){} return r; };
+      try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window[name][k]=orig[k]; } }catch(e){}
+      window[name].__v19=true;
+    }
+  }
+  (function poll(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      wrapEnh('enhanceHistoryInvoices'); wrapEnh('enhanceDevisCards');
+      if(tries>50) clearInterval(iv);
+    }, 400);
+  })();
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(addSignButtons, 1600); }); }
+  else { setTimeout(addSignButtons, 1600); }
+
+  setTimeout(function(){ console.info('[YAMA V19] Signature électronique du devis (pavé tactile, stockée + synchronisée) — actif.'); }, 3800);
+
+})();
+</script>
 </body>
 </html>
