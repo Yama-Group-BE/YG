@@ -40473,6 +40473,7 @@ html { scrollbar-gutter: stable; }
 
   /* ── Injection du bouton unique ───────────────────────────────────────── */
   function addHubButtons(){
+    if(window.__YAMA_CONSOLIDATOR_V28__) return; /* remplacé par le consolidateur universel V28 */
     injectStyle();
     try{
       document.querySelectorAll('#historyList .history-item').forEach(function(item){
@@ -40812,6 +40813,7 @@ img, canvas, video, svg, table { max-width: 100%; }
   }
 
   function consolidate(){
+    if(window.__YAMA_CONSOLIDATOR_V28__) return; /* remplacé par le consolidateur universel V28 */
     try{
       document.querySelectorAll('.cr-actions').forEach(function(box){
         var more=box.querySelector('.yv27-more');
@@ -40862,6 +40864,166 @@ img, canvas, video, svg, table { max-width: 100%; }
   if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ observeCrm(); consolidate(); }, 1800); }); } else { setTimeout(function(){ observeCrm(); consolidate(); }, 1800); }
 
   setTimeout(function(){ console.info('[YAMA V27] CRM — actions regroupées sous « ⋯ » — actif.'); }, 4200);
+
+})();
+</script>
+
+<script id="yama-platform-v28">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V28 — Consolidateur UNIVERSEL d'actions (règle unique partout)
+   ───────────────────────────────────────────────────────────────────────
+   Règle demandée : chaque carte ne montre que 1 action PRIMAIRE
+   (Facturer / Terminer) + « ⋯ » (toutes les autres) + 🗑 (corbeille).
+   Couvre les cartes Documents/Chantiers (.devis-item-actions) et CRM
+   (.cr-actions). Remplace V24/V27 (désactivés). Pilote par MutationObserver
+   débouncé → aucune réapparition (anti-spasme). Non destructif : les boutons
+   d'origine sont masqués (handlers conservés), le menu déclenche leur clic.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V28__) return;
+  window.__YAMA_PLATFORM_V28__ = true;
+  window.__YAMA_CONSOLIDATOR_V28__ = true; // désactive les ⋯ de V24 et V27
+
+  (function css(){
+    var st=document.createElement('style'); st.id='yama-v28-style';
+    st.textContent=
+      '.yv28-hidden{display:none !important;}'+
+      '.yv28-more{cursor:pointer;font-weight:800;min-width:40px;}'+
+      '#yv28-ov{position:fixed;inset:0;z-index:99996;background:rgba(5,9,15,.6);display:none;align-items:flex-end;justify-content:center;}'+
+      '#yv28-ov.show{display:flex;}'+
+      '#yv28-sheet{background:#0d1420;border-top:2px solid rgba(201,168,76,.5);border-radius:18px 18px 0 0;width:100%;max-width:480px;'+
+      'padding:14px 14px calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -12px 44px rgba(0,0,0,.6);}'+
+      '@media(min-width:780px){#yv28-ov{align-items:center;}#yv28-sheet{border-radius:16px;border:1px solid rgba(201,168,76,.4);}}'+
+      '#yv28-sheet .h{font-size:13px;color:rgba(255,255,255,.55);text-align:center;margin:2px 0 12px;}'+
+      '.yv28-act{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:rgba(255,255,255,.04);'+
+      'border:1px solid rgba(255,255,255,.08);border-radius:11px;padding:13px 14px;margin-bottom:8px;color:#e8edf4;font-size:14px;font-weight:600;cursor:pointer;}'+
+      '.yv28-act:hover{border-color:rgba(201,168,76,.45);background:rgba(201,168,76,.08);}'+
+      '.yv28-act .ic{font-size:17px;width:22px;text-align:center;}'+
+      '.yv28-x{width:100%;padding:13px;border-radius:11px;border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.55);font-size:13px;cursor:pointer;margin-top:4px;}'+
+      /* En-tête : empêche le chevauchement boutons/recherche (photo 1).
+         La recherche rétrécit (min-width:0) au lieu de passer SOUS les boutons. */
+      '.u-header{flex-wrap:nowrap !important;align-items:center;gap:8px;overflow:hidden;}'+
+      '.u-header>*{min-width:0;}'+
+      '.u-btn{white-space:nowrap;flex:0 0 auto;}'+
+      '.u-search-wrap{min-width:0;flex:1 1 60px;}'+
+      '.u-search{min-width:0;width:100%;}';
+    (document.head||document.documentElement).appendChild(st);
+  })();
+
+  function lbl(btn){
+    var t=(btn.getAttribute&&btn.getAttribute('title')||'').trim(), x=(btn.textContent||'').trim();
+    if(/🗑/.test(x)||/corbeille|supprim/i.test(t)) return 'Supprimer';
+    return (x||t||'Action').replace(/\s+/g,' ').slice(0,40);
+  }
+  function isDelete(btn){ return (btn.classList&&btn.classList.contains('btn-red')) || /🗑/.test(btn.textContent||'') || /corbeille|supprim/i.test(btn.getAttribute&&btn.getAttribute('title')||''); }
+  function isPrimary(btn){ var s=((btn.textContent||'')+' '+(btn.getAttribute&&btn.getAttribute('title')||'')); return /facturer/i.test(s) || /terminer/i.test(s); }
+
+  function docNumOf(container){
+    var card=container.closest('.devis-item,.history-item'); if(!card) return '';
+    var el=card.querySelector('.devis-item-num,.history-num'); return el?String(el.textContent||'').trim():'';
+  }
+  function docActions(docNum){
+    var out=[]; if(!docNum) return out;
+    var e=null; try{ e=window.docEntry?window.docEntry(docNum):null; }catch(x){}
+    if(!e) return out;
+    var cp={},v12={}; try{ cp=JSON.parse(localStorage.getItem('yama_client_paid_v1')||'{}'); }catch(x){}
+    try{ v12=JSON.parse(localStorage.getItem('yama_invoice_status_v12')||'{}'); }catch(x){}
+    var paid = cp[docNum]===true || (v12[docNum]&&v12[docNum].status==='paid');
+    var peppol=false; try{ var s=getSettings(); peppol=!!(s.conformite&&s.conformite.peppolEnabled); }catch(x){}
+    function H(fn){ return typeof window[fn]==='function'; }
+    if(e.docType==='facture'){
+      if(H('openInvoiceStatusModal')) out.push({ic:'💶',label:'Statut paiement',run:function(){window.openInvoiceStatusModal(docNum);}});
+      if(!paid && H('ymV20Relance')) out.push({ic:'🔔',label:'Relancer le paiement',run:function(){window.ymV20Relance(docNum);}});
+      if(paid && H('ymV23Avis')) out.push({ic:'⭐',label:'Demander un avis Google',run:function(){window.ymV23Avis(docNum);}});
+      if(peppol && H('ymExportUBL')) out.push({ic:'⬇️',label:'Export UBL (Peppol)',run:function(){window.ymExportUBL(docNum);}});
+    } else if(e.docType==='devis'){
+      if(e.signatureDataUrl){ if(H('ymV19View')) out.push({ic:'✔',label:'Voir la signature',run:function(){window.ymV19View(docNum);}}); }
+      else if(H('ymV19Sign')){ out.push({ic:'✍️',label:'Faire signer le devis',run:function(){window.ymV19Sign(docNum);}}); }
+      if(!e.signatureDataUrl && H('ymV20Relance')) out.push({ic:'🔔',label:'Relancer le devis',run:function(){window.ymV20Relance(docNum);}});
+    }
+    return out;
+  }
+
+  /* ── Overlay menu ─────────────────────────────────────────────────────── */
+  function ensureOv(){
+    if(document.getElementById('yv28-ov')||!document.body) return;
+    var ov=document.createElement('div'); ov.id='yv28-ov';
+    ov.innerHTML='<div id="yv28-sheet"><div class="h">Actions</div><div id="yv28-list"></div><button class="yv28-x" onclick="window.ymV28Close()">Fermer</button></div>';
+    ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
+    document.body.appendChild(ov);
+  }
+  function close(){ var o=document.getElementById('yv28-ov'); if(o) o.classList.remove('show'); }
+  window.ymV28Close=close;
+  function openMenu(container){
+    ensureOv();
+    var list=document.getElementById('yv28-list'); if(!list) return;
+    list.innerHTML='';
+    // boutons masqués (live) + actions document
+    Array.prototype.slice.call(container.querySelectorAll('button.yv28-hidden')).forEach(function(b){
+      var a=document.createElement('button'); a.className='yv28-act';
+      a.textContent=lbl(b);
+      a.onclick=function(){ close(); setTimeout(function(){ try{ b.click(); }catch(e){} },60); };
+      list.appendChild(a);
+    });
+    docActions(docNumOf(container)).forEach(function(d){
+      var a=document.createElement('button'); a.className='yv28-act';
+      a.innerHTML='<span class="ic">'+d.ic+'</span><span>'+d.label+'</span>';
+      a.onclick=function(){ close(); setTimeout(d.run,60); };
+      list.appendChild(a);
+    });
+    if(!list.children.length){ list.innerHTML='<div style="text-align:center;color:rgba(255,255,255,.45);padding:14px;font-size:13px;">Aucune autre action.</div>'; }
+    var ov=document.getElementById('yv28-ov'); if(ov) ov.classList.add('show');
+  }
+
+  /* ── Consolidation d'un conteneur ─────────────────────────────────────── */
+  function consolidateOne(container, withPrimary){
+    var more=container.querySelector('.yv28-more');
+    var btns=Array.prototype.slice.call(container.querySelectorAll('button')).filter(function(b){
+      return !b.classList.contains('yv28-more');
+    });
+    if(!btns.length) return;
+    var keptPrimary=false;
+    btns.forEach(function(b){
+      if(b.classList.contains('yv28-hidden')) return;
+      if(isDelete(b)) return;                       // corbeille reste visible
+      if(withPrimary && !keptPrimary && isPrimary(b)){ keptPrimary=true; return; } // 1 primaire visible
+      b.classList.add('yv28-hidden');               // le reste → masqué (menu)
+    });
+    var hiddenCount=container.querySelectorAll('button.yv28-hidden').length;
+    var docCount=withPrimary?docActions(docNumOf(container)).length:0;
+    if(hiddenCount+docCount===0){ if(more) more.remove(); return; }
+    if(!more){
+      more=document.createElement('button');
+      more.className='btn btn-outline btn-sm yv28-more';
+      more.type='button'; more.textContent='⋯'; more.title='Plus d\'actions';
+      more.style.cssText='color:#cdd6e6;border-color:rgba(255,255,255,.18);';
+      more.onclick=function(ev){ ev.stopPropagation(); openMenu(container); };
+      // placer le ⋯ juste avant la corbeille si présente, sinon à la fin
+      var del=null; Array.prototype.slice.call(container.querySelectorAll('button')).forEach(function(b){ if(!del&&isDelete(b)) del=b; });
+      if(del && del.parentNode===container) container.insertBefore(more, del); else container.appendChild(more);
+    }
+  }
+  function runAll(){
+    try{
+      document.querySelectorAll('.devis-item-actions').forEach(function(c){ consolidateOne(c, true); });
+      document.querySelectorAll('.cr-actions').forEach(function(c){ consolidateOne(c, false); });
+    }catch(e){ console.warn('[V28]',e); }
+  }
+
+  /* ── Observer débouncé (anti-spasme) ──────────────────────────────────── */
+  var pending=false;
+  function schedule(){ if(pending) return; pending=true; (window.requestAnimationFrame||window.setTimeout)(function(){ pending=false; runAll(); },0); }
+  function observe(){
+    ['app-platform','app-crm'].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el && !el.__v28obs){ el.__v28obs=true; try{ new MutationObserver(schedule).observe(el,{childList:true,subtree:true}); }catch(e){} }
+    });
+  }
+  var n=0, iv=setInterval(function(){ n++; observe(); if(n>20) clearInterval(iv); }, 600);
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ observe(); runAll(); }, 1800); }); }
+  else { setTimeout(function(){ observe(); runAll(); }, 1800); }
+
+  setTimeout(function(){ console.info('[YAMA V28] Consolidateur universel d\'actions (1 primaire + ⋯ + 🗑) — actif.'); }, 4400);
 
 })();
 </script>
