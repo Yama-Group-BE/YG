@@ -40744,5 +40744,104 @@ img, canvas, video, svg, table { max-width: 100%; }
 
 })();
 </script>
+
+<script id="yama-platform-v27">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V27 — Désaturation CRM : « ⋯ » regroupe les actions contact
+   ───────────────────────────────────────────────────────────────────────
+   Chaque dossier CRM affichait 4–6 boutons (Suivi, Devis, Fini, ✏️, 📅, 🗑)
+   → trop chargé. On les masque et on ajoute UN bouton « ⋯ » par dossier qui
+   ouvre un pop-up listant ces actions. Post-traitement non destructif : les
+   boutons d'origine (et leurs handlers) sont conservés, juste masqués ;
+   le menu déclenche leur clic. Réduit la densité et le churn visuel.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V27__) return;
+  window.__YAMA_PLATFORM_V27__ = true;
+
+  (function css(){
+    var st=document.createElement('style'); st.id='yama-v27-style';
+    st.textContent=
+      '.cr-actions .yv27-hidden{display:none !important;}'+
+      '.yv27-more{cursor:pointer;font-weight:800;}'+
+      '#yv27-ov{position:fixed;inset:0;z-index:99995;background:rgba(5,9,15,.6);display:none;align-items:flex-end;justify-content:center;}'+
+      '#yv27-ov.show{display:flex;}'+
+      '#yv27-sheet{background:#0d1420;border-top:2px solid rgba(201,168,76,.5);border-radius:18px 18px 0 0;width:100%;max-width:480px;'+
+      'padding:14px 14px calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -12px 44px rgba(0,0,0,.6);}'+
+      '@media(min-width:780px){#yv27-ov{align-items:center;}#yv27-sheet{border-radius:16px;border:1px solid rgba(201,168,76,.4);}}'+
+      '#yv27-sheet .h{font-size:13px;color:rgba(255,255,255,.55);text-align:center;margin:2px 0 12px;}'+
+      '.yv27-act{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:rgba(255,255,255,.04);'+
+      'border:1px solid rgba(255,255,255,.08);border-radius:11px;padding:13px 14px;margin-bottom:8px;color:#e8edf4;font-size:14px;font-weight:600;cursor:pointer;}'+
+      '.yv27-act:hover{border-color:rgba(201,168,76,.45);background:rgba(201,168,76,.08);}'+
+      '.yv27-x{width:100%;padding:13px;border-radius:11px;border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.55);font-size:13px;cursor:pointer;margin-top:4px;}';
+    (document.head||document.documentElement).appendChild(st);
+  })();
+
+  function labelOf(btn){
+    var t=(btn.getAttribute('title')||'').trim();
+    var txt=(btn.textContent||'').trim();
+    if(t) return t;
+    if(/🗑/.test(txt)) return 'Supprimer';
+    if(/✏️/.test(txt)) return 'Modifier';
+    if(/📅/.test(txt)) return 'Ajouter au calendrier';
+    return txt || 'Action';
+  }
+
+  function ensureOv(){
+    if(document.getElementById('yv27-ov')||!document.body) return;
+    var ov=document.createElement('div'); ov.id='yv27-ov';
+    ov.innerHTML='<div id="yv27-sheet"><div class="h">Actions du dossier</div><div id="yv27-list"></div><button class="yv27-x" onclick="window.ymV27Close()">Fermer</button></div>';
+    ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
+    document.body.appendChild(ov);
+  }
+  function close(){ var o=document.getElementById('yv27-ov'); if(o) o.classList.remove('show'); }
+  window.ymV27Close=close;
+  function openMenu(btns){
+    ensureOv();
+    var list=document.getElementById('yv27-list'); if(!list) return;
+    list.innerHTML='';
+    btns.forEach(function(b){
+      var a=document.createElement('button'); a.className='yv27-act';
+      a.textContent=labelOf(b);
+      a.onclick=function(){ close(); setTimeout(function(){ try{ b.click(); }catch(e){} }, 60); };
+      list.appendChild(a);
+    });
+    var ov=document.getElementById('yv27-ov'); if(ov) ov.classList.add('show');
+  }
+
+  function consolidate(){
+    try{
+      document.querySelectorAll('.cr-actions').forEach(function(box){
+        if(box.querySelector('.yv27-more')) return;
+        var btns=Array.prototype.slice.call(box.children).filter(function(el){ return el.tagName==='BUTTON' && !el.classList.contains('yv27-more'); });
+        if(btns.length < 2) return; // déjà léger
+        btns.forEach(function(b){ b.classList.add('yv27-hidden'); });
+        var more=document.createElement('button');
+        more.className='btn btn-outline btn-sm yv27-more';
+        more.type='button'; more.textContent='⋯'; more.title='Actions du dossier';
+        more.style.cssText='color:#cdd6e6;border-color:rgba(255,255,255,.18);min-width:40px;';
+        more.onclick=function(ev){ ev.stopPropagation(); openMenu(btns); };
+        box.appendChild(more);
+      });
+    }catch(e){ console.warn('[V27]',e); }
+  }
+
+  function wrap(name){
+    if(typeof window[name]==='function' && !window[name].__v27){
+      var orig=window[name];
+      window[name]=function(){ var r=orig.apply(this,arguments); try{ setTimeout(consolidate,50); }catch(e){} return r; };
+      try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window[name][k]=orig[k]; } }catch(e){}
+      window[name].__v27=true;
+    }
+  }
+  (function poll(){ var t=0; var iv=setInterval(function(){ t++; wrap('renderContactList'); if(t>60) clearInterval(iv); }, 450); })();
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(consolidate, 2000); }); } else { setTimeout(consolidate, 2000); }
+  // re-consolider quand on revient/charge des listes
+  document.addEventListener('click', function(e){ if(e.target && e.target.closest && e.target.closest('.nav-tab,.crm-timeline-tabs')) setTimeout(consolidate, 200); }, true);
+
+  setTimeout(function(){ console.info('[YAMA V27] CRM — actions regroupées sous « ⋯ » — actif.'); }, 4200);
+
+})();
+</script>
 </body>
 </html>
