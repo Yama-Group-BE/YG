@@ -9027,7 +9027,7 @@ function renderDevisTab() {
     } else if (st.status === 'invoiced') {
       actions = `
         <div class="devis-actions-primary">
-          <button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')">📂 Voir</button>
+          <button class="btn-action load" onclick="loadFromHistoryByNum('${h.docNum}')" title="Modifier les prix/montants même si déjà facturé">📂 Modifier</button>
           <button class="btn-action load" onclick="showYamaAvenantModal('${h.docNum}')" title="Le client demande des travaux en plus — créer un avenant lié à ce devis" style="background:rgba(232,160,32,.12);border-color:rgba(232,160,32,.45);color:var(--accent);">➕ Rajout</button>
           ${crmContact ? `<button class="btn-action load" onclick="event.stopPropagation();switchApp('crm');setTimeout(()=>{openContactDetail('${escapeHtml(crmContact.id||crmContact.contact_id||'')}')},300);" style="background:rgba(91,156,246,.1);border-color:rgba(91,156,246,.4);color:#5b9cf6;">👤 CRM</button>` : ''}
         </div>`;
@@ -26224,7 +26224,7 @@ function v43RenderMessages(mode){
       'Bonjour ' + p.civ + (p.nom ? ' ' + p.nom : '') + ',\n\n'
       + '🔔 Petit rappel concernant le démarrage de vos travaux :\n\n'
       + '📅 Début : ' + p.dfDebut + ' à ' + p.heure + '\n'
-      + (p.dateFin ? '🏁 Fin estimée : ' + p.dfFin + p.duree + '\n' : '')
+      /* Fin estimée : JAMAIS communiquée au client (usage interne uniquement) */
       + '📍 Adresse : ' + p.adresse + '\n\n'
       + 'Notre équipe sera bien présente à l\'heure indiquée.\n'
       + 'Merci de nous prévenir en cas d\'empêchement.\n\n'
@@ -26244,7 +26244,7 @@ function v43RenderMessages(mode){
       'Bonjour ' + p.civ + (p.nom ? ' ' + p.nom : '') + ',\n\n'
       + 'Nous avons le plaisir de vous confirmer le démarrage de vos travaux :\n\n'
       + '📅 Début : ' + p.dfDebut + ' à ' + p.heure + '\n'
-      + (p.dateFin ? '🏁 Fin estimée : ' + p.dfFin + p.duree + '\n' : '')
+      /* Fin estimée : JAMAIS communiquée au client (usage interne uniquement) */
       + '📍 Adresse : ' + p.adresse + '\n\n'
       + 'Notre équipe sera présente à l\'heure indiquée.\n'
       + 'N\'hésitez pas à nous contacter pour toute question.\n\n'
@@ -41387,5 +41387,69 @@ body .card, body .section, body .section-body{ box-sizing:border-box !important;
 /* — Médias fluides (anti-CLS) — */
 body img, body canvas, body video, body svg, body table{ max-width:100% !important; }
 </style>
+
+<script id="yama-platform-v33">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V33 — Civilité (Madame/Monsieur) : détection IA + toggle fiable
+   • Bulletproof : boutons Civilité en type=button + réécoute directe du clic
+     (en plus du onclick inline) → la modification manuelle fonctionne toujours.
+   • Détection IA renforcée à l'extraction : titres (M./Mme/Monsieur/Madame/
+     Mlle…) + grand dictionnaire de prénoms (FR/BE + maghrébins) → comprend et
+     confirme M. vs Mme, même sans titre explicite.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V33__) return;
+  window.__YAMA_PLATFORM_V33__ = true;
+
+  var M=['jerome','marc','pierre','jean','ali','ibrahim','mohamed','mohammed','ahmed','thomas','nicolas','julien','david','paul','yves','luc','andre','sebastien','olivier','christophe','michel','kevin','romain','antoine','alexis','guillaume','maxime','baptiste','hassan','teyab','karim','yassine','bilal','omar','said','rachid','hamza','sofiane','nabil','walid','samir','tarik','tarek','adil','fouad','mehdi','reda','ismael','ismail','younes','ayoub','khalid','mustapha','moustapha','jamal','farid','victor','laurent','fabrice','vincent','gregory','damien','jonathan','anthony','benjamin','simon','arthur','hugo','louis','gabriel','raphael','adam','samy','sami','anis','abdel','abdelkader','abdellah','mounir','hakim','nassim','ryad','zakaria','ilyas','amine','othmane','soufiane','brahim','lahcen','driss'];
+  var F=['marie','sarah','sophie','isabelle','julie','laura','camille','emma','lea','nathalie','anne','claire','celine','valerie','virginie','melissa','jessica','audrey','stephanie','nadine','nadia','fatima','khadija','aicha','samira','nawal','leila','laila','yasmine','yasmina','sana','imane','hanane','salma','meryem','myriam','zineb','dounia','sabrina','warda','latifa','malika','souad','naima','manon','chloe','ines','clara','jade','lina','maya','sofia','amina','rania','asma','houda','karima','fatiha','rachida','saida','zahra','halima','ouarda','yamina','farida','nabila','wafa','ikram','hind','loubna','bouchra','sanae','dalila','majda'];
+
+  function detect(text, nom){
+    var t=' '+String(text||'').toLowerCase()+' ';
+    if(/(^|\s)(mme\.?|madame|mlle\.?|mademoiselle)(\s|$)/.test(t)) return 'Madame';
+    if(/(^|\s)(m\.|mr\.?|monsieur)(\s|$)/.test(t)) return 'Monsieur';
+    if(/\b(ch[èe]re|madame la|née)\b/.test(t)) return 'Madame';
+    if(/\b(cher\b|monsieur le)\b/.test(t)) return 'Monsieur';
+    var p=String(nom||'').trim().split(/\s+/)[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    if(p){ if(F.indexOf(p)>=0) return 'Madame'; if(M.indexOf(p)>=0) return 'Monsieur'; }
+    return '';
+  }
+  window.ymV33DetectCivilite = detect;
+
+  function harden(){
+    ['civ-mr','civ-mme'].forEach(function(id){
+      var b=document.getElementById(id); if(!b || b.__v33) return;
+      b.__v33=true; b.type='button';
+      b.addEventListener('click', function(ev){
+        ev.preventDefault(); ev.stopPropagation();
+        try{ if(typeof window.setCivilite==='function') window.setCivilite(id==='civ-mme'?'Madame':'Monsieur'); }catch(e){}
+      }, false);
+    });
+  }
+  function wrapExtract(){
+    if(typeof window.extractFromMessage==='function' && !window.extractFromMessage.__v33){
+      var orig=window.extractFromMessage;
+      window.extractFromMessage=function(){
+        var r=orig.apply(this, arguments);
+        try{
+          setTimeout(function(){
+            var txt=(document.getElementById('paste-input')||{}).value||'';
+            var nomEl=document.getElementById('f-nom'); var nom=nomEl?nomEl.value:'';
+            var civ=detect(txt, nom);
+            if(civ && typeof window.setCivilite==='function') window.setCivilite(civ);
+          }, 90);
+        }catch(e){}
+        return r;
+      };
+      try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.extractFromMessage[k]=orig[k]; } }catch(e){}
+      window.extractFromMessage.__v33=true;
+    }
+  }
+  var t=0, iv=setInterval(function(){ t++; harden(); wrapExtract(); if(t>80) clearInterval(iv); }, 400);
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){harden();wrapExtract();},600); }); }
+  else { setTimeout(function(){harden();wrapExtract();},600); }
+  setTimeout(function(){ console.info('[YAMA V33] Civilité — toggle fiable + détection IA renforcée — actif.'); }, 3000);
+})();
+</script>
 </body>
 </html>
