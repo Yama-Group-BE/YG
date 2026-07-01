@@ -3685,6 +3685,9 @@ if (token && window.opener) {
       <button class="btn-secondary" onclick="window.ymV22Export&&window.ymV22Export()" style="font-size:11px;padding:8px 16px;background:rgba(82,199,127,0.08);border-color:rgba(82,199,127,0.3);color:#52c77f;">
         📊 Export comptable
       </button>
+      <button class="btn-secondary" onclick="window.ymV30Open&&window.ymV30Open()" style="font-size:11px;padding:8px 16px;background:rgba(120,140,255,0.10);border-color:rgba(120,140,255,0.35);color:#8ca0ff;">
+        🗄️ Archives & exercices
+      </button>
     </div>
     <div id="historyList"></div>
   </div>
@@ -41110,6 +41113,197 @@ body .u-header .u-btn{ white-space:nowrap !important; }
     if(e && e.key && /soustraitant|st_reviews|st_apporteur|st_paid|history/.test(e.key)) last=null;
   });
   setTimeout(function(){ console.info('[YAMA V29] En-tête autoritaire + anti-spasme Sous-traitants — actif.'); }, 4600);
+})();
+</script>
+
+<script id="yama-platform-v30">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V30 — Archives & Exercices (2.0)
+   ───────────────────────────────────────────────────────────────────────
+   • Créer une ARCHIVE complète (instantané de toutes les données yama_*)
+     + SAUVEGARDE .json téléchargée (inclut PDF) → zéro perte.
+   • Parcourir / restaurer / supprimer les archives (métadonnées + données
+     allégées sans PDF stockées localement pour éviter le quota).
+   • RESTAURER depuis un fichier .json (restauration complète, PDF inclus).
+   • « Nouvel exercice (page blanche) » : archive + sauvegarde AUTOMATIQUES,
+     double confirmation, puis remise à zéro des données opérationnelles
+     (les réglages, le catalogue et l'annuaire sous-traitants sont conservés).
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V30__) return;
+  window.__YAMA_PLATFORM_V30__ = true;
+
+  var K_ARCH='yama_archives_v30';
+  // Données OPÉRATIONNELLES effacées lors d'un nouvel exercice (page blanche) :
+  var ACTIVE=['yama_crm_v2','yama_history_v3','yama_devis_status_v1','yama_invoice_status_v12',
+    'yama_paiements_v1','yama_client_paid_v1','yama_st_paid_v1','yama_chantiers_v12',
+    'yama_st_reviews_v12','yama_st_apporteur_v16','yama_rapports_v14','yama_current_v3',
+    'yama_notif_lastpush_v13'];
+  // Conservées (config/référentiel) : yama_settings_*, yama_articles_v1, yama_soustraitants_v1,
+  //   yama_counter_*, identifiants Supabase/GCal, yama_archives_v30.
+
+  function allKeys(){ var r=[]; try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(/^yama_/.test(k) && k!==K_ARCH) r.push(k); } }catch(e){} return r; }
+  function rd(k,d){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(d)); }catch(e){ return d; } }
+  function arch(){ return rd(K_ARCH, []); }
+  function saveArch(a){ try{ localStorage.setItem(K_ARCH, JSON.stringify(a)); }catch(e){ /* quota */ try{ a.shift(); localStorage.setItem(K_ARCH, JSON.stringify(a)); }catch(x){} } }
+  function nowStr(){ return new Date().toISOString(); }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function counts(){
+    var c={contacts:0,devis:0,factures:0,chantiers:0};
+    try{ c.contacts=(rd('yama_crm_v2',[])||[]).length; }catch(e){}
+    try{ var h=rd('yama_history_v3',[])||[]; c.devis=h.filter(function(x){return x&&x.docType==='devis';}).length; c.factures=h.filter(function(x){return x&&x.docType==='facture';}).length; }catch(e){}
+    try{ c.chantiers=(rd('yama_chantiers_v12',[])||[]).length; }catch(e){}
+    return c;
+  }
+  // Instantané COMPLET (pour le fichier .json)
+  function snapFull(){ var o={}; allKeys().forEach(function(k){ o[k]=localStorage.getItem(k); }); return o; }
+  // Instantané ALLÉGÉ (sans PDF base64) pour stockage local
+  function snapLight(){
+    var o={}; allKeys().forEach(function(k){
+      var v=localStorage.getItem(k);
+      if(k==='yama_history_v3'){
+        try{ var arr=JSON.parse(v); if(Array.isArray(arr)){ arr=arr.map(function(e){ if(e){ var c=Object.assign({},e); delete c.pdfDataUrl; delete c.pdfData; delete c.signatureDataUrl; } return c||e; }); v=JSON.stringify(arr); } }catch(e){}
+      }
+      o[k]=v;
+    }); return o;
+  }
+  function download(name, obj){
+    try{
+      var blob=new Blob([JSON.stringify(obj)], {type:'application/json'});
+      var url=URL.createObjectURL(blob); var a=document.createElement('a');
+      a.href=url; a.download=name; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+    }catch(e){ console.warn('[V30] download',e); }
+  }
+
+  function createArchive(label, alsoDownload){
+    label = label || ('Exercice ' + new Date().toISOString().slice(0,10));
+    var c=counts();
+    var full={ yamaArchive:true, version:'v30', label:label, createdAt:nowStr(), counts:c, keys:snapFull() };
+    if(alsoDownload!==false) download('YAMA_sauvegarde_'+label.replace(/[^\w\-]+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.json', full);
+    // stockage local allégé (sans PDF) + cap à 12
+    var list=arch();
+    list.unshift({ id:'arch_'+Date.now(), label:label, createdAt:nowStr(), counts:c, keys:snapLight() });
+    while(list.length>12) list.pop();
+    saveArch(list);
+    return c;
+  }
+  window.ymV30Archive=function(){
+    var label=window.prompt('Nom de l\'archive :', 'Exercice ' + new Date().toISOString().slice(0,10));
+    if(label===null) return;
+    var c=createArchive(label.trim()||undefined, true);
+    try{ if(typeof toast==='function') toast('✓ Archive créée + sauvegarde téléchargée','success'); }catch(e){}
+    render();
+  };
+
+  function restoreKeys(keys, replace){
+    try{
+      Object.keys(keys).forEach(function(k){ if(/^yama_/.test(k)) localStorage.setItem(k, keys[k]); });
+      return true;
+    }catch(e){ console.warn('[V30] restore',e); return false; }
+  }
+  window.ymV30RestoreFile=function(input){
+    var f=input.files && input.files[0]; if(!f) return;
+    var r=new FileReader();
+    r.onload=function(){
+      try{
+        var obj=JSON.parse(r.result);
+        var keys=obj.keys||obj; // accepte format complet ou brut
+        if(!keys || typeof keys!=='object'){ alert('Fichier invalide.'); return; }
+        if(!window.confirm('Restaurer cette sauvegarde ? Les données actuelles seront remplacées par celles du fichier.')) return;
+        restoreKeys(keys, true);
+        try{ if(typeof toast==='function') toast('✓ Sauvegarde restaurée — rechargement…','success'); }catch(e){}
+        setTimeout(function(){ location.reload(); }, 800);
+      }catch(e){ alert('Impossible de lire le fichier : '+e.message); }
+    };
+    r.readAsText(f);
+  };
+  window.ymV30RestoreLocal=function(id){
+    var a=arch().find(function(x){return x.id===id;}); if(!a){ return; }
+    if(!window.confirm('Restaurer l\'archive « '+a.label+' » ? (Les données actuelles seront remplacées. Note : les PDF ne sont pas inclus dans l\'archive locale — utilisez le fichier .json pour une restauration complète.)')) return;
+    restoreKeys(a.keys, true);
+    try{ if(typeof toast==='function') toast('✓ Archive restaurée — rechargement…','success'); }catch(e){}
+    setTimeout(function(){ location.reload(); }, 800);
+  };
+  window.ymV30Delete=function(id){
+    if(!window.confirm('Supprimer cette archive de la liste ? (La sauvegarde .json téléchargée n\'est pas affectée.)')) return;
+    saveArch(arch().filter(function(x){return x.id!==id;})); render();
+  };
+
+  window.ymV30NewExercice=function(){
+    var c=counts();
+    if(!window.confirm('DÉMARRER UN NOUVEL EXERCICE (page blanche) ?\n\nUne archive + une sauvegarde .json vont d\'abord être créées automatiquement (contacts: '+c.contacts+', devis: '+c.devis+', factures: '+c.factures+', chantiers: '+c.chantiers+').\n\nEnsuite, les données opérationnelles seront remises à zéro. Les réglages, le catalogue d\'articles et l\'annuaire sous-traitants sont CONSERVÉS.')) return;
+    var word=window.prompt('Confirmation finale — tape exactement : NOUVELLE SAISON');
+    if((word||'').trim().toUpperCase()!=='NOUVELLE SAISON'){ alert('Annulé (confirmation non saisie).'); return; }
+    // 1) archive + sauvegarde
+    createArchive('Exercice clôturé ' + new Date().toISOString().slice(0,10), true);
+    // 2) remise à zéro des clés opérationnelles
+    try{ ACTIVE.forEach(function(k){ localStorage.removeItem(k); }); }catch(e){}
+    try{ if(typeof toast==='function') toast('✓ Nouvel exercice — page blanche. Rechargement…','success'); }catch(e){}
+    setTimeout(function(){ location.reload(); }, 1000);
+  };
+
+  /* ── UI ───────────────────────────────────────────────────────────────── */
+  function injectStyle(){
+    if(document.getElementById('yama-v30-style')) return;
+    var st=document.createElement('style'); st.id='yama-v30-style';
+    st.textContent=
+      '#yv30-ov{position:fixed;inset:0;z-index:99997;background:rgba(5,9,15,.72);display:none;align-items:center;justify-content:center;padding:16px;}'+
+      '#yv30-ov.show{display:flex;}'+
+      '#yv30-card{background:#0d1420;border:1px solid rgba(120,140,255,.4);border-radius:16px;padding:20px;max-width:560px;width:100%;max-height:88vh;overflow-y:auto;box-sizing:border-box;}'+
+      '#yv30-card h3{margin:0 0 4px;font-size:17px;color:#fff;}'+
+      '.yv30-sub{font-size:12.5px;color:rgba(255,255,255,.5);margin-bottom:16px;}'+
+      '.yv30-sec{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px;margin-bottom:12px;}'+
+      '.yv30-sec h4{margin:0 0 8px;font-size:12px;color:#8ca0ff;text-transform:uppercase;letter-spacing:.5px;}'+
+      '.yv30-sec p{margin:0 0 10px;font-size:12px;color:rgba(255,255,255,.6);line-height:1.5;}'+
+      '.yv30-btn{width:100%;padding:12px;border-radius:10px;border:1px solid;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px;box-sizing:border-box;}'+
+      '.yv30-save{background:rgba(120,140,255,.14);border-color:rgba(120,140,255,.45);color:#8ca0ff;}'+
+      '.yv30-restore{background:rgba(82,199,127,.12);border-color:rgba(82,199,127,.4);color:#52c77f;}'+
+      '.yv30-danger{background:rgba(231,76,60,.12);border-color:rgba(231,76,60,.45);color:#e74c3c;}'+
+      '.yv30-item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:9px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);margin-bottom:7px;}'+
+      '.yv30-item .tx{flex:1;min-width:0;}'+
+      '.yv30-item .tt{font-size:13px;color:#fff;font-weight:600;}'+
+      '.yv30-item .dt{font-size:11px;color:rgba(255,255,255,.5);}'+
+      '.yv30-item button{background:none;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.7);border-radius:7px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer;}'+
+      '.yv30-x{width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.55);cursor:pointer;margin-top:4px;}';
+    (document.head||document.documentElement).appendChild(st);
+  }
+  function ensureOv(){
+    if(document.getElementById('yv30-ov')||!document.body) return;
+    var ov=document.createElement('div'); ov.id='yv30-ov';
+    ov.innerHTML='<div id="yv30-card"></div>';
+    ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
+    document.body.appendChild(ov);
+  }
+  function close(){ var o=document.getElementById('yv30-ov'); if(o) o.classList.remove('show'); }
+  window.ymV30Close=close;
+  function render(){
+    var card=document.getElementById('yv30-card'); if(!card) return;
+    var c=counts(); var list=arch();
+    var rows = list.length ? list.map(function(a){
+      return '<div class="yv30-item"><div class="tx"><div class="tt">'+esc(a.label)+'</div>'+
+        '<div class="dt">'+new Date(a.createdAt).toLocaleString('fr-BE')+' · '+(a.counts?('C:'+a.counts.contacts+' D:'+a.counts.devis+' F:'+a.counts.factures+' Ch:'+a.counts.chantiers):'')+'</div></div>'+
+        '<button onclick="window.ymV30RestoreLocal(\''+a.id+'\')">Restaurer</button>'+
+        '<button onclick="window.ymV30Delete(\''+a.id+'\')">✕</button></div>';
+    }).join('') : '<div style="color:rgba(255,255,255,.4);font-size:12.5px;text-align:center;padding:12px;">Aucune archive enregistrée.</div>';
+    card.innerHTML=
+      '<h3>🗄️ Archives & Exercices (2.0)</h3>'+
+      '<div class="yv30-sub">État actuel — contacts : '+c.contacts+' · devis : '+c.devis+' · factures : '+c.factures+' · chantiers : '+c.chantiers+'</div>'+
+      '<div class="yv30-sec"><h4>Sauvegarde</h4><p>Crée un instantané complet (avec PDF) téléchargé en .json, et l\'ajoute à la liste ci-dessous.</p>'+
+        '<button class="yv30-btn yv30-save" onclick="window.ymV30Archive()">💾 Créer une archive + sauvegarde</button></div>'+
+      '<div class="yv30-sec"><h4>Restaurer</h4><p>Depuis un fichier de sauvegarde .json (restauration complète, PDF inclus).</p>'+
+        '<input type="file" id="yv30-file" accept="application/json,.json" style="display:none" onchange="window.ymV30RestoreFile(this)">'+
+        '<button class="yv30-btn yv30-restore" onclick="document.getElementById(\'yv30-file\').click()">📂 Restaurer depuis un fichier</button></div>'+
+      '<div class="yv30-sec"><h4>Nouvel exercice — page blanche</h4><p>Idéal en septembre : archive automatiquement l\'exercice en cours (+ sauvegarde), puis repart d\'une page blanche. Réglages, catalogue et annuaire sous-traitants conservés. Action irréversible localement.</p>'+
+        '<button class="yv30-btn yv30-danger" onclick="window.ymV30NewExercice()">🚀 Démarrer un nouvel exercice (page blanche)</button></div>'+
+      '<div class="yv30-sec"><h4>Archives enregistrées</h4>'+rows+'</div>'+
+      '<button class="yv30-x" onclick="window.ymV30Close()">Fermer</button>';
+  }
+  window.ymV30Open=function(){ injectStyle(); ensureOv(); render(); var o=document.getElementById('yv30-ov'); if(o) o.classList.add('show'); };
+
+  setTimeout(function(){ console.info('[YAMA V30] Archives & Exercices (2.0) — sauvegarde/restauration/page blanche — actif.'); }, 4800);
+
 })();
 </script>
 </body>
