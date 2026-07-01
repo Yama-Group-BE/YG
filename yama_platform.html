@@ -26318,18 +26318,21 @@ function v43ShowModal(contact){
   var badgeInfo = document.getElementById('v43-badge-info');
   if (badgeName) badgeName.textContent = nom;
   if (badgeInfo) badgeInfo.textContent = info || '—';
-  // Date début = demain par défaut
+  // Date début : TOUJOURS recharger la valeur du contact courant (jamais la
+  // valeur périmée d'une confirmation précédente). Priorité à la dernière date
+  // confirmée pour CE chantier → la confirmation qui suit les étapes prime.
   var dEl = document.getElementById('v43-date-debut');
-  if (dEl && !dEl.value) {
-    var tom = new Date();
-    tom.setDate(tom.getDate() + 1);
-    dEl.value = tom.toISOString().slice(0,10);
+  if (dEl) {
+    var pre = _v43Contact.chantierDateDebut || _v43Contact.date_rdv || _v43Contact.date || '';
+    if (pre) { dEl.value = String(pre).slice(0,10); }
+    else { var tom = new Date(); tom.setDate(tom.getDate() + 1); dEl.value = tom.toISOString().slice(0,10); }
   }
-  // Heure pré-remplie
+  // Date de fin estimée : rechargée (ou vidée) selon le contact
+  var fEl = document.getElementById('v43-date-fin');
+  if (fEl) { fEl.value = _v43Contact.chantierDateFin ? String(_v43Contact.chantierDateFin).slice(0,10) : ''; }
+  // Heure : rechargée depuis le contact (jamais une valeur périmée)
   var hEl = document.getElementById('v43-heure-debut');
-  if (hEl && !hEl.value) {
-    hEl.value = _v43Contact.chantierHeure || _v43Contact.heure || '8h00';
-  }
+  if (hEl) { hEl.value = _v43Contact.chantierHeure || _v43Contact.heure || '8h00'; }
   // Afficher étape 1
   var s1 = document.getElementById('v43-step-dates');
   var s2 = document.getElementById('v43-step-messages');
