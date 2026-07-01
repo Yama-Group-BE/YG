@@ -41306,5 +41306,49 @@ body .u-header .u-btn{ white-space:nowrap !important; }
 
 })();
 </script>
+
+<script id="yama-platform-v31">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V31 — Anti-spasme du Cockpit (garde par empreinte)
+   Audit : renderCockpit est rappelée en boucle (storage, temps-réel,
+   observers de classe, intervals) et reconstruit le tableau de bord →
+   clignotement. On enveloppe en dernier : si les données financières n'ont
+   pas changé et que le cockpit est déjà peuplé, on SAUTE le rebuild.
+   renderCockpit est purement piloté par les données (aucun filtre UI) → sûr.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V31__) return;
+  window.__YAMA_PLATFORM_V31__ = true;
+  function sig(){
+    try{
+      var K=['yama_history_v3','yama_paiements_v1','yama_client_paid_v1','yama_invoice_status_v12','yama_chantiers_v12','yama_devis_status_v1'];
+      return K.map(function(k){ var v=localStorage.getItem(k)||''; return k+':'+v.length; }).join('|');
+    }catch(e){ return String(Math.random()); }
+  }
+  var last=null, lastT=0;
+  var t=0, iv=setInterval(function(){
+    t++;
+    if(typeof window.renderCockpit==='function' && !window.renderCockpit.__v31){
+      var orig=window.renderCockpit;
+      window.renderCockpit=function(){
+        try{
+          var h=sig();
+          var el=document.getElementById('tab-cockpit');
+          var populated = el && el.children && el.children.length>0;
+          if(h===last && populated){ return; } // données inchangées + cockpit déjà rendu → skip (anti-spasme)
+          last=h;
+        }catch(e){}
+        return orig.apply(this, arguments);
+      };
+      try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.renderCockpit[k]=orig[k]; } }catch(e){}
+      window.renderCockpit.__v31=true;
+      clearInterval(iv);
+    }
+    if(t>80) clearInterval(iv);
+  }, 350);
+  window.addEventListener('storage', function(e){ if(e && e.key && /history|paiement|client_paid|invoice_status|chantier|devis_status/.test(e.key)) last=null; });
+  setTimeout(function(){ console.info('[YAMA V31] Anti-spasme cockpit — actif.'); }, 5000);
+})();
+</script>
 </body>
 </html>
