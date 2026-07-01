@@ -7046,10 +7046,16 @@ async function syncFullPull() {
       const cloudCP = await syncPullClientPaid();
       if (cloudCP !== null) {
         const localCP = getClientPaid();
-        const mergedCP = { ...localCP, ...cloudCP };
+        // FUSION « PAYÉ-GAGNANT » : une facture payée sur N'IMPORTE quel appareil
+        // reste payée partout. Un pull cloud périmé ne peut PLUS écraser un
+        // « payé » local → fini le « je dois remettre en payé ». (Cross-device sticky.)
+        const mergedCP = {};
+        const allKeys = new Set(Object.keys(localCP).concat(Object.keys(cloudCP)));
+        allKeys.forEach(k => { mergedCP[k] = (localCP[k] === true || cloudCP[k] === true); });
         localStorage.setItem(LS_CLIENT_PAID, JSON.stringify(mergedCP));
-        const missingCP = Object.entries(localCP).filter(([k]) => !(k in cloudCP));
-        if (missingCP.length > 0) await syncPushClientPaid(Object.fromEntries(missingCP));
+        // Pousser vers le cloud les factures payées localement mais pas encore côté cloud
+        const toPush = Object.entries(mergedCP).filter(([k, v]) => v === true && cloudCP[k] !== true);
+        if (toPush.length > 0) await syncPushClientPaid(Object.fromEntries(toPush));
       }
       results['yama_client_paid'] = true;
     } catch(e) { console.error('sync client_paid:', e?.message || e?.details || JSON.stringify(e)); results['yama_client_paid'] = false; }
@@ -41449,6 +41455,115 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
   if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){harden();wrapExtract();},600); }); }
   else { setTimeout(function(){harden();wrapExtract();},600); }
   setTimeout(function(){ console.info('[YAMA V33] Civilité — toggle fiable + détection IA renforcée — actif.'); }, 3000);
+})();
+</script>
+
+<script id="yama-platform-v34">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V34 — Migration des appréciations (ancien → nouveau système)
+   La plateforme a évolué : d'anciens clients (ex : Michel) et sous-traitants
+   portent l'ANCIEN système d'appréciation. Ce module fait le pont, sans perte :
+   • Clients : normalise clientMood en {content|mitige|fache} depuis les anciens
+     champs (appreciationClient, valeurs 'satisfait/insatisfait/neutre', étoiles).
+   • Sous-traitants : migre les anciennes notes chantier (yama_st_reviews_v12,
+     axes fiabilité/prix/qualité/rapidité/respect) vers le nouveau système
+     d'évaluation étoilé → la NOTE GLOBALE /5 reste disponible et persistante.
+   Idempotent (drapeaux par enregistrement), synchronisé (saveSTList pousse au cloud).
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V34__) return;
+  window.__YAMA_PLATFORM_V34__ = true;
+
+  function rd(k,d){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(d)); }catch(e){ return d; } }
+  function wr(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function nowISO(){ return new Date().toISOString(); }
+
+  function mapMood(v){
+    if(!v) return '';
+    var s=String(v).toLowerCase();
+    if(/content|satisf|😊|👍|\bbien\b|super|excellent|ravi/.test(s)) return 'content';
+    if(/fache|fâch|m[eé]cont|insatisf|dissatisf|😡|👎|mauvais|nul|probl/.test(s)) return 'fache';
+    if(/mitig|neutre|moyen|😐|correct|passable|bof/.test(s)) return 'mitige';
+    // étoiles éventuelles dans un texte d'appréciation
+    var stars=(s.match(/⭐|★/g)||[]).length;
+    if(stars>=4) return 'content'; if(stars===3) return 'mitige'; if(stars>0&&stars<=2) return 'fache';
+    return '';
+  }
+
+  /* ── 1. Clients : normaliser clientMood ────────────────────────────────── */
+  function migrateClients(){
+    try{
+      var contacts=rd('yama_crm_v2', []); if(!Array.isArray(contacts)) return false;
+      var chs=rd('yama_chantiers_v12', []); if(!Array.isArray(chs)) chs=[];
+      var changed=false;
+      contacts.forEach(function(c){
+        if(!c) return;
+        var cur=mapMood(c.clientMood);           // valeur déjà nouvelle ?
+        if(cur){ if(c.clientMood!==cur){ c.clientMood=cur; changed=true; } return; }
+        // sinon, dériver des anciens champs
+        var derived = mapMood(c.appreciationClient) || mapMood(c.appreciation) || mapMood(c.satisfaction) || mapMood(c.mood);
+        if(!derived){
+          // depuis le chantier lié (appréciation texte / étoiles)
+          var nom=(c.nom||'').toLowerCase().trim();
+          var ch=chs.find(function(x){ return x && (x.clientName||'').toLowerCase().trim()===nom; });
+          if(ch) derived = mapMood(ch.appreciation) || mapMood(ch.clientMood) || mapMood(ch.ratingText);
+        }
+        if(derived && c.clientMood!==derived){ c.clientMood=derived; changed=true; }
+      });
+      if(changed){ wr('yama_crm_v2', contacts); }
+      return changed;
+    }catch(e){ console.warn('[V34] clients',e); return false; }
+  }
+
+  /* ── 2. Sous-traitants : migrer anciennes notes chantier → étoiles /5 ──── */
+  function getSTL(){ try{ if(typeof window.getSTList==='function') return window.getSTList(); }catch(e){} return rd('yama_soustraitants_v1', []); }
+  function saveSTL(a){ try{ if(typeof window.saveSTList==='function'){ window.saveSTList(a); return; } }catch(e){} wr('yama_soustraitants_v1', a); }
+  function migrateST(){
+    try{
+      var reviews=rd('yama_st_reviews_v12', []); if(!Array.isArray(reviews)) reviews=[];
+      var list=getSTL(); if(!Array.isArray(list)||!list.length) return false;
+      var changed=false;
+      list.forEach(function(st){
+        if(!st || st.__migratedReviews) return;
+        var nom=(st.nom||'').toLowerCase().trim(); if(!nom) return;
+        var revs=reviews.filter(function(r){ return r && String(r.stName||'').toLowerCase().trim()===nom; });
+        if(!revs.length){ return; }
+        if(!Array.isArray(st.evaluations)) st.evaluations=[];
+        revs.forEach(function(r){
+          var axes=['reliability','price','quality','speed','respect'].map(function(k){ return parseFloat(r.ratings&&r.ratings[k])||0; }).filter(Boolean);
+          if(!axes.length) return;
+          var stars=Math.round(axes.reduce(function(a,b){return a+b;},0)/axes.length);
+          st.evaluations.push({ date:r.date||r.updatedAt||nowISO(), stars:stars, chantier:r.chantierRef||r.chantierId||'', notes:'(migré — ancienne appréciation chantier)' });
+        });
+        st.__migratedReviews=true; changed=true;
+      });
+      // note globale persistante /5 sur chaque ST
+      list.forEach(function(st){
+        if(!st) return;
+        if(Array.isArray(st.evaluations)&&st.evaluations.length){
+          var sum=st.evaluations.reduce(function(s,x){return s+(parseFloat(x.stars)||0);},0);
+          var g=Math.round(sum/st.evaluations.length*10)/10;
+          if(st.globalRating!==g){ st.globalRating=g; st.ratingCount=st.evaluations.length; changed=true; }
+        }
+      });
+      if(changed){ saveSTL(list); try{ if(typeof window.renderSTTab==='function') window.renderSTTab(); }catch(e){} }
+      return changed;
+    }catch(e){ console.warn('[V34] ST',e); return false; }
+  }
+
+  function runMigration(){
+    var a=migrateClients(); var b=migrateST();
+    if(a||b){ try{ if(typeof window.renderContacts==='function') window.renderContacts('all'); }catch(e){} }
+  }
+  window.ymV34Migrate = runMigration;
+
+  // exécuter une fois après le chargement (laisser la sync initiale peupler d'abord)
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(runMigration, 3200); }); }
+  else { setTimeout(runMigration, 3200); }
+  // re-tenter après une éventuelle synchro cloud
+  setTimeout(runMigration, 8000);
+
+  setTimeout(function(){ console.info('[YAMA V34] Migration appréciations (clients + sous-traitants /5) — actif.'); }, 3400);
 })();
 </script>
 </body>
