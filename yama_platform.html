@@ -41008,7 +41008,7 @@ img, canvas, video, svg, table { max-width: 100%; }
   function runAll(){
     try{
       document.querySelectorAll('.devis-item-actions').forEach(function(c){ consolidateOne(c, true); });
-      document.querySelectorAll('.cr-actions').forEach(function(c){ consolidateOne(c, false); });
+      document.querySelectorAll('.cr-actions').forEach(function(c){ consolidateOne(c, true); }); // garder Facturer/Terminer si présent
       document.querySelectorAll('.st-card').forEach(function(c){ consolidateOne(c, false); }); // carnet sous-traitants
     }catch(e){ console.warn('[V28]',e); }
   }
@@ -41050,7 +41050,9 @@ body .u-header::-webkit-scrollbar{ height:0 !important; display:none !important;
 body .u-header > *{ position:static !important; flex:0 0 auto !important; }
 body .u-header .u-logo{ flex:0 0 auto !important; }
 body .u-header .u-switcher{ flex:0 0 auto !important; }
-body .u-header .u-search-wrap{ position:relative !important; flex:0 1 200px !important; min-width:0 !important; max-width:200px !important; }
+/* Recherche globale retirée de l'en-tête : source récurrente de chevauchement
+   et redondante (chaque onglet a sa propre recherche). */
+body .u-header .u-search-wrap{ display:none !important; }
 body .u-header .u-right{ margin-left:auto !important; display:flex !important; flex-wrap:nowrap !important; align-items:center !important; gap:6px !important; overflow:visible !important; }
 body .u-header .u-btn{ white-space:nowrap !important; }
 @media (max-width: 980px){ body .u-header .u-search-wrap{ display:none !important; } }
