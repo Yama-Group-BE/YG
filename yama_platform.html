@@ -41350,5 +41350,42 @@ body .u-header .u-btn{ white-space:nowrap !important; }
   setTimeout(function(){ console.info('[YAMA V31] Anti-spasme cockpit — actif.'); }, 5000);
 })();
 </script>
+
+<style id="yama-platform-v32-designsystem">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V32 — Couche STRUCTURELLE autoritaire (fin des conflits CSS)
+   ~29 patchs empilés donnaient des règles contradictoires (overflow, z-index,
+   flex-wrap, min-height) sur les sélecteurs clés → chevauchements/redimensions.
+   Cette couche, dernière de la cascade + haute spécificité, fixe UNE structure
+   canonique. On ne touche QUE la structure (mise en page/overflow/z-index),
+   pas les couleurs ni la charte. Additif, aucune règle existante supprimée.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* — Barres d'onglets : une seule règle de défilement (fini overflow auto/scroll/hidden mêlés) — */
+body .tabs, body #app-platform .tabs, body #app-crm .tabs{
+  display:flex !important; flex-wrap:nowrap !important; align-items:center !important;
+  overflow-x:auto !important; overflow-y:hidden !important; -webkit-overflow-scrolling:touch;
+  scrollbar-width:none !important;
+}
+body .tabs::-webkit-scrollbar{ height:0 !important; display:none !important; }
+body .tabs > *{ flex:0 0 auto !important; }
+
+/* — Empilement (z-index) cohérent : overlay < modal-overlay < toast < menus/pop-ups — */
+body .overlay{ z-index:900 !important; }
+body .modal-overlay{ z-index:1000 !important; }
+body #toast{ z-index:99999 !important; box-sizing:border-box !important; }
+/* Supprime le min-height:100vh qui provoquait un débordement de modale */
+body .modal-overlay .modal{ min-height:0 !important; }
+/* Modales : box-sizing + hauteur bornée (on NE force PAS max-width pour ne pas
+   élargir les modales standard ; la largeur mobile est déjà gérée par @media). */
+body .modal{ box-sizing:border-box !important; max-height:90vh !important; overflow-y:auto !important; }
+
+/* — Conteneurs : box-sizing + jamais de débordement horizontal — */
+body .container, body .container-wide{ box-sizing:border-box !important; max-width:100% !important; }
+body .card, body .section, body .section-body{ box-sizing:border-box !important; }
+
+/* — Médias fluides (anti-CLS) — */
+body img, body canvas, body video, body svg, body table{ max-width:100% !important; }
+</style>
 </body>
 </html>
