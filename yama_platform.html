@@ -41842,5 +41842,131 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
   setTimeout(function(){ console.info('[YAMA V35] Hub Messages unique 💬 — 8 types interchangeables, modèles des Réglages — actif.'); }, 3000);
 })();
 </script>
+
+<script id="yama-platform-v36">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V36 — DASHBOARD UNIQUE « AUJOURD'HUI » (Plan 2.0 · Étape 2)
+   ───────────────────────────────────────────────────────────────────────
+   Fusion Priorités + Cockpit : le Tableau de bord (page d'accueil) reçoit un
+   bandeau financier (Facturé du mois · Encaissé · En attente · Marge) + les
+   factures impayées avec actions 1-tap (💶 statut, 🔔 relance). L'onglet
+   Cockpit, devenu redondant, est masqué et redirigé (aucune fonction perdue :
+   mêmes données via calcKPIs, vérité paiements V11/payé-gagnant).
+   Le conteneur de #tab-priorites est statique → le bandeau survit aux rendus.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V36__) return;
+  window.__YAMA_PLATFORM_V36__ = true;
+
+  function euro(n){ try{ return new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(n||0); }catch(e){ return Math.round(n||0)+' €'; } }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function kpis(){ try{ return (typeof calcKPIs==='function')?calcKPIs():null; }catch(e){ return null; } }
+
+  (function css(){
+    var st=document.createElement('style'); st.id='yama-v36-style';
+    st.textContent=
+      /* Cockpit fusionné dans le Tableau de bord → onglet masqué */
+      '.tab[data-tab="cockpit"]{display:none !important;}'+
+      '#yv36-finance{margin-bottom:16px;}'+
+      '.yv36-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;}'+
+      '@media(max-width:900px){.yv36-grid{grid-template-columns:repeat(2,1fr);}}'+
+      '@media(max-width:380px){.yv36-grid{grid-template-columns:1fr;}}'+
+      '.yv36-kpi{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:13px 14px;box-sizing:border-box;}'+
+      '.yv36-kpi .v{font-size:20px;font-weight:800;line-height:1.1;}'+
+      '.yv36-kpi .l{font-size:10px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.5px;margin-top:4px;}'+
+      '.yv36-imp{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;}'+
+      '.yv36-imp h4{margin:0 0 8px;font-size:11px;color:#ff6b6b;text-transform:uppercase;letter-spacing:.6px;}'+
+      '.yv36-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);}'+
+      '.yv36-row:last-child{border-bottom:none;}'+
+      '.yv36-row .tx{flex:1;min-width:0;font-size:12.5px;color:#e8edf4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'+
+      '.yv36-row .amt{font-size:12.5px;font-weight:800;color:#C9A84C;white-space:nowrap;}'+
+      '.yv36-row .late{font-size:10.5px;color:#ff6b6b;font-weight:700;white-space:nowrap;}'+
+      '.yv36-row button{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#cdd6e6;border-radius:7px;padding:4px 8px;font-size:11px;cursor:pointer;white-space:nowrap;}'+
+      '.yv36-ok{text-align:center;color:#52c77f;font-size:12.5px;padding:8px 0;}';
+    (document.head||document.documentElement).appendChild(st);
+  })();
+
+  function ensureHost(){
+    var cont=document.querySelector('#tab-priorites .container'); if(!cont) return null;
+    var host=document.getElementById('yv36-finance');
+    if(!host){ host=document.createElement('div'); host.id='yv36-finance'; cont.insertBefore(host, cont.firstChild); }
+    return host;
+  }
+
+  var _lastSig=null;
+  function renderFinance(){
+    var host=ensureHost(); if(!host) return;
+    var k=kpis(); if(!k) return;
+    try{ // ne re-rendre que si les chiffres changent (anti-churn)
+      var sig=[k.caFactureMois,k.caEncaisse,k.caEnAttente,k.nImpayees,(k.impayees||[]).length].join('|');
+      if(sig===_lastSig && host.children.length) return; _lastSig=sig;
+    }catch(e){}
+    var margeCol = (k.margeGlobale||0)>=0 ? '#52c77f' : '#ff6b6b';
+    var html=
+      '<div class="yv36-grid">'+
+        '<div class="yv36-kpi"><div class="v" style="color:#C9A84C;">'+euro(k.caFactureMois)+'</div><div class="l">Facturé ce mois</div></div>'+
+        '<div class="yv36-kpi"><div class="v" style="color:#52c77f;">'+euro(k.caEncaisse)+'</div><div class="l">Encaissé</div></div>'+
+        '<div class="yv36-kpi"><div class="v" style="color:#ff6b6b;">'+euro(k.caEnAttente)+'</div><div class="l">En attente · '+(k.nImpayees||0)+' impayée'+((k.nImpayees||0)>1?'s':'')+'</div></div>'+
+        '<div class="yv36-kpi"><div class="v" style="color:'+margeCol+';">'+euro(k.margeGlobale)+'</div><div class="l">Marge chantiers</div></div>'+
+      '</div>';
+    var imp=(k.impayees||[]).slice(0,4);
+    html+='<div class="yv36-imp"><h4>💶 Factures à encaisser</h4>';
+    if(!imp.length){ html+='<div class="yv36-ok">✅ Aucune facture en attente.</div>'; }
+    else imp.forEach(function(f){
+      html+='<div class="yv36-row">'+
+        '<div class="tx">'+esc(f.clientNom||'Client')+' · '+esc(f.docNum||'')+'</div>'+
+        ((f.jourRetard||0)>0?('<span class="late">+'+f.jourRetard+'j</span>'):'')+
+        '<span class="amt">'+euro(f.restant)+'</span>'+
+        '<button data-st="'+esc(f.docNum||'')+'">💶</button>'+
+        '<button data-rel="'+esc(f.docNum||'')+'">🔔</button>'+
+      '</div>';
+    });
+    html+='</div>';
+    host.innerHTML=html;
+    host.querySelectorAll('button[data-st]').forEach(function(b){ b.onclick=function(){ try{ window.openInvoiceStatusModal&&window.openInvoiceStatusModal(b.getAttribute('data-st')); }catch(e){} }; });
+    host.querySelectorAll('button[data-rel]').forEach(function(b){ b.onclick=function(){ try{ window.ymV20Relance&&window.ymV20Relance(b.getAttribute('data-rel')); }catch(e){} }; });
+  }
+  window.ymV36Refresh=renderFinance;
+
+  /* Rendu après chaque renderPriorityDashboard (déjà déclenché par les données) */
+  (function wrapPrio(){
+    var t=0, iv=setInterval(function(){
+      t++;
+      if(typeof window.renderPriorityDashboard==='function' && !window.renderPriorityDashboard.__v36){
+        var orig=window.renderPriorityDashboard;
+        window.renderPriorityDashboard=function(){ var r=orig.apply(this,arguments); try{ setTimeout(renderFinance,40); }catch(e){} return r; };
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.renderPriorityDashboard[k]=orig[k]; } }catch(e){}
+        window.renderPriorityDashboard.__v36=true;
+        clearInterval(iv);
+      }
+      if(t>80) clearInterval(iv);
+    }, 400);
+  })();
+
+  /* Redirection : l'onglet Cockpit fusionné → Tableau de bord */
+  (function wrapSwitch(){
+    var t=0, iv=setInterval(function(){
+      t++;
+      if(typeof window.switchTab==='function' && !window.switchTab.__v36){
+        var orig=window.switchTab;
+        window.switchTab=function(name){
+          if(name==='cockpit') name='priorites';
+          return orig.call(this, name);
+        };
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.switchTab[k]=orig[k]; } }catch(e){}
+        window.switchTab.__v36=true;
+        clearInterval(iv);
+      }
+      if(t>80) clearInterval(iv);
+    }, 450);
+  })();
+
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(renderFinance, 2200); }); }
+  else { setTimeout(renderFinance, 2200); }
+  setTimeout(renderFinance, 6000); // après la synchro initiale
+
+  setTimeout(function(){ console.info('[YAMA V36] Dashboard unique « Aujourd\'hui » — finances fusionnées, Cockpit redirigé — actif.'); }, 3200);
+})();
+</script>
 </body>
 </html>
