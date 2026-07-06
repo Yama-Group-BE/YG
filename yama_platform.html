@@ -40972,6 +40972,22 @@ img, canvas, video, svg, table { max-width: 100%; }
     ensureOv();
     var list=document.getElementById('yv28-list'); if(!list) return;
     list.innerHTML='';
+    // Hub Messages unique (V35) — toujours en premier quand un dossier/document est résolu
+    try{
+      var _row35=container.closest('[data-cid]');
+      var _cid35=_row35?_row35.getAttribute('data-cid'):'';
+      var _doc35=docNumOf(container);
+      if((_cid35 || _doc35) && (typeof window.ymV35Open==='function' || typeof window.ymV35OpenDoc==='function')){
+        var hub=document.createElement('button'); hub.className='yv28-act';
+        hub.innerHTML='<span class="ic">💬</span><span>Messages (tous types)</span>';
+        hub.style.borderColor='rgba(82,199,127,.45)';
+        hub.onclick=function(){ close(); setTimeout(function(){
+          if(_cid35 && typeof window.ymV35Open==='function') window.ymV35Open(_cid35);
+          else if(_doc35 && typeof window.ymV35OpenDoc==='function') window.ymV35OpenDoc(_doc35);
+        },60); };
+        list.appendChild(hub);
+      }
+    }catch(e){}
     // boutons masqués (live) + actions document
     Array.prototype.slice.call(container.querySelectorAll('button:not(.yv28-keep):not(.yv28-more)')).forEach(function(b){
       var a=document.createElement('button'); a.className='yv28-act';
@@ -41567,6 +41583,238 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
   setTimeout(runMigration, 8000);
 
   setTimeout(function(){ console.info('[YAMA V34] Migration appréciations (clients + sous-traitants /5) — actif.'); }, 3400);
+})();
+</script>
+
+<script id="yama-platform-v35">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V35 — HUB MESSAGES UNIQUE 💬 (Plan 2.0 · Étape 1)
+   ───────────────────────────────────────────────────────────────────────
+   UN seul pop-up par dossier/document remplace les ~9 surfaces de messages.
+   Types interchangeables par puces : Confirmation RDV · Confirmation chantier
+   · Rappel chantier · Relance devis · Demande d'acompte · Relance facture ·
+   Fin de chantier · Avis Google. Chaque type utilise le MODÈLE des Réglages
+   (Réglages ▸ Messages) quand il existe → formats respectés et modifiables.
+   Variables résolues depuis le dossier ({prenom},{date},{montant},{iban}…).
+   Fin estimée : JAMAIS dans un message client. Envoi : WhatsApp/Email/Copier.
+   Accès : entrée « 💬 Messages » en tête du menu « ⋯ » (CRM + Documents).
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V35__) return;
+  window.__YAMA_PLATFORM_V35__ = true;
+
+  /* ── Helpers données ─────────────────────────────────────────────────── */
+  function rd(k,d){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(d)); }catch(e){ return d; } }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function S(){ try{ return (typeof getSettings==='function')?getSettings():{}; }catch(e){ return {}; } }
+  function tpl(key){ var s=S(); return (s.messages&&s.messages[key])||''; }
+  function entName(){ var s=S(); return (s.entreprise&&s.entreprise.nom)||'YAMA Group'; }
+  function entTel(){ var s=S(); return (s.entreprise&&(s.entreprise.telephone||s.entreprise.tel))||'0489 33 77 00'; }
+  function iban(){ var s=S(); var b=(s.banque&&s.banque[0])||{}; return b.iban||'[IBAN à compléter]'; }
+  function acomptePct(){ var s=S(); return parseFloat(s.financier&&s.financier.acomptePct)||30; }
+  function euro(n){ try{ return new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(n||0); }catch(e){ return (n||0)+' €'; } }
+  function prenom(nom){ var n=String(nom||'').replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim(); return n.split(/\s+/)[0]||''; }
+  function waNorm(t){ t=String(t||'').replace(/[^0-9+]/g,'').replace(/^\+/,''); if(!t) return ''; if(t.charAt(0)==='0') t='32'+t.slice(1); return t; }
+  function fmtD(d){ if(!d) return ''; var p=String(d).slice(0,10).split('-'); if(p.length<3) return String(d);
+    var mo=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+    return parseInt(p[2],10)+' '+(mo[parseInt(p[1],10)-1]||'?')+' '+p[0]; }
+  function fill(t, vars){ return String(t||'').replace(/\{(\w+)\}/g, function(m,k){ return vars[k]!=null&&vars[k]!==''?vars[k]:m; }); }
+
+  /* ── Résolution du contexte (contact + docs liés) ─────────────────────── */
+  function contactById(cid){
+    try{
+      var list=(typeof getContacts==='function')?getContacts():rd('yama_crm_v2',[]);
+      var raw=list.find(function(c){ return c && String(c.id||c.contact_id)===String(cid); });
+      if(!raw) return null;
+      return (typeof normalizeContact==='function')?normalizeContact(raw):raw;
+    }catch(e){ return null; }
+  }
+  function hist(){ try{ return (typeof getHistory==='function')?getHistory():rd('yama_history_v3',[]); }catch(e){ return rd('yama_history_v3',[]); } }
+  function isPaid(dn){ var cp=rd('yama_client_paid_v1',{}); if(cp[dn]===true) return true; var v=rd('yama_invoice_status_v12',{}); return !!(v[dn]&&v[dn].status==='paid'); }
+  function docsForName(nom){
+    var n=String(nom||'').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim();
+    var out={devis:null, facture:null};
+    if(n.length<3) return out;
+    hist().forEach(function(h){
+      if(!h) return;
+      var hn=String(h.clientNom||'').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim();
+      if(!hn || !(hn.indexOf(n)>=0 || n.indexOf(hn)>=0)) return;
+      if(h.docType==='devis' && (!out.devis || String(h.savedAt||'')>String(out.devis.savedAt||''))) out.devis=h;
+      if(h.docType==='facture' && (!out.facture || String(h.savedAt||'')>String(out.facture.savedAt||''))) out.facture=h;
+    });
+    return out;
+  }
+  function ctxFromContact(cid){
+    var c=contactById(cid)||{}; var d=docsForName(c.nom);
+    return buildCtx(c, d.devis, d.facture);
+  }
+  function ctxFromDoc(docNum){
+    var e=null; try{ e=window.docEntry?window.docEntry(docNum):null; }catch(x){}
+    if(!e) e=hist().find(function(h){return h&&h.docNum===docNum;})||{};
+    // retrouver le contact CRM pour tel/RDV/dates chantier
+    var c=null;
+    try{
+      var n=String(e.clientNom||'').toLowerCase().replace(/^(m\.|mme\.?|mr\.?|monsieur|madame)\s*/i,'').trim();
+      var list=(typeof getContacts==='function')?getContacts():rd('yama_crm_v2',[]);
+      var raw=list.find(function(x){ var xn=String((x&&x.nom)||'').toLowerCase().trim(); return xn && n && (xn.indexOf(n)>=0||n.indexOf(xn)>=0); });
+      if(raw) c=(typeof normalizeContact==='function')?normalizeContact(raw):raw;
+    }catch(x){}
+    c=c||{ nom:e.clientNom||'', tel:e.clientTel||'', email:e.clientEmail||'', adresse:e.clientAdresse||e.chantierAdresse||'', commune:e.clientVille||e.chantierVille||'' };
+    var d=docsForName(c.nom);
+    return buildCtx(c, e.docType==='devis'?e:(d.devis), e.docType==='facture'?e:(d.facture));
+  }
+  function buildCtx(c, devis, facture){
+    var raw=null;
+    try{ var list=(typeof getContacts==='function')?getContacts():[]; raw=list.find(function(x){return x&&String(x.id||x.contact_id)===String(c.id||c.contact_id);})||{}; }catch(e){ raw={}; }
+    var adresse=[c.adresse, c.commune||c.ville].filter(Boolean).join(', ');
+    return {
+      c:c, devis:devis||null, facture:facture||null,
+      nom:c.nom||'', civ:c.civilite||'', tel:c.tel||(devis&&devis.clientTel)||(facture&&facture.clientTel)||'',
+      email:c.email||(devis&&devis.clientEmail)||(facture&&facture.clientEmail)||'',
+      adresse:adresse||'—',
+      rdvDate:c.date||'', rdvHeure:c.heure||'',
+      chDebut:raw.chantierDateDebut||'', chHeure:raw.chantierHeure||c.heure||'8h00'
+    };
+  }
+
+  /* ── Variables communes des modèles ───────────────────────────────────── */
+  function vars(ctx, extra){
+    var v={
+      prenom:prenom(ctx.nom)||ctx.civ||'',
+      client:(ctx.civ+' '+ctx.nom).trim(),
+      nom_entreprise:entName(), iban:iban(),
+      adresse_chantier:ctx.adresse, adresse:ctx.adresse, tel:ctx.tel,
+      numero_devis:ctx.devis?(ctx.devis.docNum||''):'',
+      numero_facture:ctx.facture?(ctx.facture.docNum||''):'',
+      communication:ctx.facture?(ctx.facture.docNum||''):''
+    };
+    for(var k in (extra||{})) v[k]=extra[k];
+    return v;
+  }
+
+  /* ── Les types de messages (interchangeables) ─────────────────────────── */
+  var TYPES=[
+    { id:'rdv', ic:'📅', label:'Confirmation RDV', avail:function(x){return !!x.rdvDate;},
+      build:function(x){ return fill(tpl('confirmationRDV')||'Bonjour {prenom},\n\nNous confirmons votre rendez-vous le {date} pour {adresse_chantier}.\n\nCordialement,\n{nom_entreprise}',
+        vars(x,{date:fmtD(x.rdvDate)+(x.rdvHeure?(' à partir de '+x.rdvHeure):'')})); } },
+    { id:'confchantier', ic:'✅', label:'Confirmation chantier', avail:function(){return true;},
+      build:function(x){ var d=x.chDebut||x.rdvDate;
+        return fill(tpl('demarrageChantier')||'Bonjour {prenom},\n\nNous commencons les travaux le {date} a {adresse_chantier}.\n\nCordialement,\n{nom_entreprise}',
+        vars(x,{date:(d?fmtD(d):'[date]')+(x.chHeure?(' à partir de '+x.chHeure):'')})); } },
+    { id:'rappelchantier', ic:'🔔', label:'Rappel chantier', avail:function(x){return !!(x.chDebut||x.rdvDate);},
+      build:function(x){ var d=x.chDebut||x.rdvDate;
+        return 'Bonjour '+(prenom(x.nom)||x.civ)+',\n\n🔔 Petit rappel concernant le démarrage de vos travaux :\n\n📅 Début : '+fmtD(d)+' à '+(x.chHeure||'8h00')+'\n📍 Adresse : '+x.adresse+'\n\nNotre équipe sera bien présente à l\'heure indiquée.\nMerci de nous prévenir en cas d\'empêchement.\n\n'+entName()+' · 📞 '+entTel(); } },
+    { id:'relancedevis', ic:'📞', label:'Relance devis', avail:function(x){return !!x.devis;},
+      build:function(x){ return fill(tpl('relanceDevis')||'Bonjour {prenom},\n\nJe me permets de revenir vers vous concernant le devis n°{numero_devis} envoye le {date}.\n\nAvez-vous eu l\'occasion d\'en prendre connaissance ?\n\nCordialement,\n{nom_entreprise}',
+        vars(x,{date:fmtD(x.devis&&(x.devis.dateEmission||x.devis.savedAt))})); } },
+    { id:'acompte', ic:'💰', label:'Demande d\'acompte', avail:function(x){return !!x.devis;},
+      build:function(x){ var ttc=parseFloat(x.devis&&x.devis.totalTTC)||0; var m=ttc*acomptePct()/100;
+        return fill(tpl('demandeAcompte')||'Bonjour {prenom},\n\nPour confirmer le demarrage des travaux, un acompte de {montant} est demande.\n\nIBAN : {iban}\n\nMerci,\n{nom_entreprise}',
+        vars(x,{montant:euro(m)})); } },
+    { id:'relancefacture', ic:'💶', label:'Relance facture', avail:function(x){return !!(x.facture && !isPaid(x.facture.docNum));},
+      build:function(x){ return fill(tpl('relanceFacture')||'Bonjour {prenom},\n\nNous n\'avons pas encore recu le reglement de la facture n°{numero_facture} de {montant}.\n\nIBAN : {iban}\n\nMerci de regulariser dans les meilleurs delais.\n\nCordialement,\n{nom_entreprise}',
+        vars(x,{montant:euro(parseFloat(x.facture&&x.facture.totalTTC)||0)})); } },
+    { id:'finchantier', ic:'🏁', label:'Fin de chantier', avail:function(){return true;},
+      build:function(x){ return fill(tpl('finChantier')||'Bonjour {prenom},\n\nLes travaux a {adresse_chantier} sont termines.\n\nNous vous adressons sous peu la facture finale.\n\nCordialement,\n{nom_entreprise}', vars(x)); } },
+    { id:'avis', ic:'⭐', label:'Avis Google', avail:function(){return true;},
+      build:function(x){ var url=''; try{ url=localStorage.getItem('yama_google_review_url_v23')||''; }catch(e){}
+        var base=fill(tpl('demandeAvisGoogle')||'Bonjour {prenom},\n\nNous esperons que vous etes satisfait(e) de nos travaux.\n\nSi vous avez un moment, un avis Google nous aiderait enormement.\n\nMerci et a bientot,\n{nom_entreprise}', vars(x));
+        return url?(base+'\n\n'+url):base; } }
+  ];
+
+  /* ── UI ──────────────────────────────────────────────────────────────── */
+  var _ctx=null, _type=null;
+  function injectStyle(){
+    if(document.getElementById('yama-v35-style')) return;
+    var st=document.createElement('style'); st.id='yama-v35-style';
+    st.textContent=
+      '#yv35-ov{position:fixed;inset:0;z-index:99997;background:rgba(5,9,15,.72);display:none;align-items:flex-end;justify-content:center;}'+
+      '#yv35-ov.show{display:flex;}'+
+      '#yv35-card{background:#0d1420;border-top:2px solid rgba(82,199,127,.55);border-radius:18px 18px 0 0;width:100%;max-width:560px;'+
+      'max-height:88vh;overflow-y:auto;padding:16px 14px calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -12px 44px rgba(0,0,0,.6);box-sizing:border-box;}'+
+      '@media(min-width:780px){#yv35-ov{align-items:center;}#yv35-card{border-radius:16px;border:1px solid rgba(82,199,127,.45);}}'+
+      '#yv35-card h3{margin:0 0 2px;font-size:16px;color:#fff;}'+
+      '.yv35-sub{font-size:12px;color:rgba(255,255,255,.5);margin-bottom:12px;}'+
+      '.yv35-chips{display:flex;gap:7px;overflow-x:auto;padding-bottom:8px;margin-bottom:10px;scrollbar-width:none;}'+
+      '.yv35-chips::-webkit-scrollbar{display:none;}'+
+      '.yv35-chip{flex:0 0 auto;padding:8px 13px;border-radius:20px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);'+
+      'color:rgba(255,255,255,.75);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}'+
+      '.yv35-chip.on{border-color:rgba(82,199,127,.6);background:rgba(82,199,127,.14);color:#52c77f;}'+
+      '#yv35-msg{width:100%;min-height:170px;background:#0b1119;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#e8edf4;'+
+      'font-size:12.5px;padding:11px;resize:vertical;line-height:1.55;font-family:inherit;box-sizing:border-box;}'+
+      '.yv35-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}'+
+      '.yv35-btn{flex:1;min-width:96px;padding:11px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;border:1px solid;}'+
+      '.yv35-wa{background:rgba(37,211,102,.14);border-color:rgba(37,211,102,.45);color:#25d366;}'+
+      '.yv35-em{background:rgba(90,160,255,.12);border-color:rgba(90,160,255,.45);color:#7db4ff;}'+
+      '.yv35-cp{background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.45);color:#C9A84C;}'+
+      '.yv35-x{width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.55);font-size:13px;cursor:pointer;margin-top:8px;}'+
+      /* Étape 2 (début) : la bannière rouge d'échéances fait doublon avec la cloche 🔔 → retirée */
+      '.crm-deadline-alert-banner, .crm-deadline-alert-banner.show{display:none !important;}';
+    (document.head||document.documentElement).appendChild(st);
+  }
+  function ensureOv(){
+    if(document.getElementById('yv35-ov')||!document.body) return;
+    var ov=document.createElement('div'); ov.id='yv35-ov';
+    ov.innerHTML='<div id="yv35-card"><h3>💬 Messages</h3><div class="yv35-sub" id="yv35-sub"></div>'+
+      '<div class="yv35-chips" id="yv35-chips"></div>'+
+      '<textarea id="yv35-msg"></textarea>'+
+      '<div class="yv35-row">'+
+        '<button class="yv35-btn yv35-wa" onclick="window.ymV35Send(\'wa\')">📲 WhatsApp</button>'+
+        '<button class="yv35-btn yv35-em" onclick="window.ymV35Send(\'email\')">✉️ Email</button>'+
+        '<button class="yv35-btn yv35-cp" onclick="window.ymV35Send(\'copy\')">📋 Copier</button>'+
+      '</div><button class="yv35-x" onclick="window.ymV35Close()">Fermer</button></div>';
+    ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
+    document.body.appendChild(ov);
+  }
+  function close(){ var o=document.getElementById('yv35-ov'); if(o) o.classList.remove('show'); }
+  window.ymV35Close=close;
+
+  function renderChips(defId){
+    var wrap=document.getElementById('yv35-chips'); if(!wrap||!_ctx) return;
+    wrap.innerHTML='';
+    var avail=TYPES.filter(function(t){ try{ return t.avail(_ctx); }catch(e){ return false; } });
+    if(!avail.length) avail=TYPES.slice(0,2);
+    var def=avail.find(function(t){return t.id===defId;})||avail[0];
+    avail.forEach(function(t){
+      var b=document.createElement('button'); b.type='button';
+      b.className='yv35-chip'+(t.id===def.id?' on':''); b.textContent=t.ic+' '+t.label;
+      b.onclick=function(){ selectType(t); wrap.querySelectorAll('.yv35-chip').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); };
+      wrap.appendChild(b);
+    });
+    selectType(def);
+  }
+  function selectType(t){
+    _type=t;
+    var ta=document.getElementById('yv35-msg');
+    if(ta){ try{ ta.value=t.build(_ctx); }catch(e){ ta.value=''; } }
+  }
+  function open(ctx, defId){
+    injectStyle(); ensureOv();
+    _ctx=ctx;
+    var sub=document.getElementById('yv35-sub');
+    if(sub) sub.textContent=((ctx.civ+' '+ctx.nom).trim()||'Client')+(ctx.tel?(' · '+ctx.tel):'');
+    renderChips(defId||'');
+    var ov=document.getElementById('yv35-ov'); if(ov) ov.classList.add('show');
+  }
+  window.ymV35Open=function(cid, defId){ var x=ctxFromContact(cid); if(x) open(x, defId); };
+  window.ymV35OpenDoc=function(docNum){
+    var x=ctxFromDoc(docNum); if(!x) return;
+    var e=null; try{ e=window.docEntry?window.docEntry(docNum):null; }catch(err){}
+    var def = e&&e.docType==='facture' ? (isPaid(docNum)?'avis':'relancefacture') : 'relancedevis';
+    open(x, def);
+  };
+  window.ymV35Send=function(ch){
+    var ta=document.getElementById('yv35-msg'); var msg=ta?ta.value:''; if(!_ctx) return;
+    if(ch==='wa'){ var n=waNorm(_ctx.tel); window.open((n?('https://wa.me/'+n):'https://wa.me/')+'?text='+encodeURIComponent(msg),'_blank'); }
+    else if(ch==='email'){ var subj=(_type?_type.label:'Message')+' — '+entName();
+      window.open('mailto:'+encodeURIComponent(_ctx.email||'')+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(msg),'_blank'); }
+    else { try{ navigator.clipboard.writeText(msg); }catch(e){} try{ if(typeof showToast==='function') showToast('Message copié','success'); }catch(e){} }
+  };
+
+  // injecter le style tôt (retrait bannière) même sans ouvrir le hub
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', injectStyle); } else { injectStyle(); }
+
+  setTimeout(function(){ console.info('[YAMA V35] Hub Messages unique 💬 — 8 types interchangeables, modèles des Réglages — actif.'); }, 3000);
 })();
 </script>
 </body>
