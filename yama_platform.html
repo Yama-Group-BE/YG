@@ -40974,8 +40974,14 @@ img, canvas, video, svg, table { max-width: 100%; }
     list.innerHTML='';
     // Hub Messages unique (V35) — toujours en premier quand un dossier/document est résolu
     try{
-      var _row35=container.closest('[data-cid]');
-      var _cid35=_row35?_row35.getAttribute('data-cid'):'';
+      var _row35=container.closest('.contact-row,[data-cid]');
+      var _cid35=_row35?(_row35.getAttribute('data-cid')||''):'';
+      if(!_cid35 && _row35){
+        // Le renderer CRM actif n'émet pas data-cid : retrouver le cid encodé
+        // dans onclick="openContactDetail('…')" (revue adversariale V35).
+        var _m35=(_row35.getAttribute('onclick')||'').match(/openContactDetail\('([^']+)'\)/);
+        if(_m35) _cid35=_m35[1];
+      }
       var _doc35=docNumOf(container);
       if((_cid35 || _doc35) && (typeof window.ymV35Open==='function' || typeof window.ymV35OpenDoc==='function')){
         var hub=document.createElement('button'); hub.className='yv28-act';
@@ -41682,14 +41688,32 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
     var v={
       prenom:prenom(ctx.nom)||ctx.civ||'',
       client:(ctx.civ+' '+ctx.nom).trim(),
+      nom:ctx.nom||'',                                     // alias palette Réglages
+      societe:entName(), entreprise:entName(),             // alias palette Réglages
+      signature:entName(),
       nom_entreprise:entName(), iban:iban(),
       adresse_chantier:ctx.adresse, adresse:ctx.adresse, tel:ctx.tel,
+      ville:(ctx.c&&(ctx.c.commune||ctx.c.ville))||'',
+      heure:ctx.chHeure||ctx.rdvHeure||'',
+      date:fmtD(ctx.chDebut||ctx.rdvDate)||'',             // repli si le type ne fournit pas {date}
+      montant:ctx.facture?euro(parseFloat(ctx.facture.totalTTC)||0):(ctx.devis?euro(parseFloat(ctx.devis.totalTTC)||0):''),
+      solde:ctx.facture?euro(parseFloat(ctx.facture.totalTTC)||0):'',
+      lien_devis:'',
       numero_devis:ctx.devis?(ctx.devis.docNum||''):'',
       numero_facture:ctx.facture?(ctx.facture.docNum||''):'',
       communication:ctx.facture?(ctx.facture.docNum||''):''
     };
     for(var k in (extra||{})) v[k]=extra[k];
     return v;
+  }
+  /* Nettoyage final : aucun jeton {xxx} non résolu ne doit partir chez le client */
+  function scrub(m){
+    return String(m||'')
+      .replace(/\{[a-z_]+\}/gi,'')
+      .replace(/[ \t]{2,}/g,' ')
+      .replace(/ +\n/g,'\n')
+      .replace(/\n{3,}/g,'\n\n')
+      .trim();
   }
 
   /* ── Les types de messages (interchangeables) ─────────────────────────── */
@@ -41786,7 +41810,7 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
   function selectType(t){
     _type=t;
     var ta=document.getElementById('yv35-msg');
-    if(ta){ try{ ta.value=t.build(_ctx); }catch(e){ ta.value=''; } }
+    if(ta){ try{ ta.value=scrub(t.build(_ctx)); }catch(e){ ta.value=''; } }
   }
   function open(ctx, defId){
     injectStyle(); ensureOv();
