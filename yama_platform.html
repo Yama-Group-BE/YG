@@ -41968,5 +41968,131 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
   setTimeout(function(){ console.info('[YAMA V36] Dashboard unique « Aujourd\'hui » — finances fusionnées, Cockpit redirigé — actif.'); }, 3200);
 })();
 </script>
+
+<script id="yama-platform-v37k">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V37 — PIPELINE KANBAN CLIENTS (Plan 2.0 · Étape 3, v1)
+   ───────────────────────────────────────────────────────────────────────
+   UNE vue pour toute la pipeline : 🆕 Nouveau · 📅 RDV · 📋 Devis à faire ·
+   ⏳ Attente réponse · 📞 À relancer · 🔨 Chantier · ✅ Terminé.
+   Classement = EXACTEMENT la logique existante (filterContactsForScope),
+   avec déduplication par priorité d'étape. Carte → ouvre le dossier ;
+   💬 → Hub Messages (V35). v1 PRUDENTE : les 9 sous-onglets restent en place
+   (bascule douce) ; accès via « 🗂️ Pipeline » dans la barre CRM.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V37K__) return;
+  window.__YAMA_PLATFORM_V37K__ = true;
+
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function contacts(){ try{ return (typeof getContacts==='function')?getContacts():JSON.parse(localStorage.getItem('yama_crm_v2')||'[]'); }catch(e){ return []; } }
+  function norm(c){ try{ return (typeof normalizeContact==='function')?normalizeContact(c):c; }catch(e){ return c; } }
+  function scopeList(scope){ try{ return (typeof filterContactsForScope==='function')?filterContactsForScope(contacts(), scope):[]; }catch(e){ return []; } }
+  function fmtD(d){ if(!d) return ''; try{ return new Date(d).toLocaleDateString('fr-BE',{day:'2-digit',month:'short'}); }catch(e){ return ''; } }
+
+  // priorité d'étape (un contact ne figure que dans SA colonne la plus avancée)
+  var COLS=[
+    { id:'finished',  ic:'✅', label:'Terminé',        col:'#52c77f' },
+    { id:'chantier',  ic:'🔨', label:'Chantier',       col:'#C9A84C' },
+    { id:'recontact', ic:'📞', label:'À relancer',     col:'#3ecf8e' },
+    { id:'waiting',   ic:'⏳', label:'Attente réponse', col:'#5b9cf6' },
+    { id:'devis',     ic:'📋', label:'Devis à faire',  col:'#e8a020' },
+    { id:'rdv',       ic:'📅', label:'RDV planifié',   col:'#8ca0ff' }
+  ];
+  function classify(){
+    var all=contacts(); var seen={}; var buckets={ nouveau:[] };
+    COLS.forEach(function(c){ buckets[c.id]=[]; });
+    COLS.forEach(function(cdef){
+      scopeList(cdef.id).forEach(function(raw){
+        var n=norm(raw); var id=String(n.id||n.contact_id||''); if(!id||seen[id]) return;
+        seen[id]=true; buckets[cdef.id].push(n);
+      });
+    });
+    all.forEach(function(raw){
+      var n=norm(raw); var id=String(n.id||n.contact_id||''); if(!id||seen[id]) return;
+      seen[id]=true; buckets.nouveau.push(n);
+    });
+    return buckets;
+  }
+
+  (function css(){
+    var st=document.createElement('style'); st.id='yama-v37k-style';
+    st.textContent=
+      '#yv37k-ov{position:fixed;inset:0;z-index:99995;background:#0a0f1a;display:none;flex-direction:column;}'+
+      '#yv37k-ov.show{display:flex;}'+
+      '#yv37k-head{display:flex;align-items:center;gap:12px;padding:14px 16px calc(10px);border-bottom:1px solid rgba(255,255,255,.08);}'+
+      '#yv37k-head h2{margin:0;font-size:17px;color:#fff;flex:1;}'+
+      '#yv37k-head button{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:#cdd6e6;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;}'+
+      '#yv37k-board{flex:1;display:flex;gap:12px;overflow-x:auto;overflow-y:hidden;padding:14px 16px calc(16px + env(safe-area-inset-bottom,0px));-webkit-overflow-scrolling:touch;}'+
+      '.yv37k-col{flex:0 0 265px;display:flex;flex-direction:column;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);border-radius:14px;max-height:100%;}'+
+      '.yv37k-colh{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid rgba(255,255,255,.06);font-size:12.5px;font-weight:800;color:#fff;}'+
+      '.yv37k-colh .n{margin-left:auto;background:rgba(255,255,255,.08);border-radius:10px;padding:1px 8px;font-size:11px;color:rgba(255,255,255,.7);}'+
+      '.yv37k-cards{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;}'+
+      '.yv37k-card{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.09);border-radius:11px;padding:10px 11px;cursor:pointer;}'+
+      '.yv37k-card:hover{border-color:rgba(201,168,76,.45);}'+
+      '.yv37k-card .nm{font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'+
+      '.yv37k-card .mt{font-size:11px;color:rgba(255,255,255,.5);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;}'+
+      '.yv37k-card .act{display:flex;gap:6px;margin-top:8px;}'+
+      '.yv37k-card .act button{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.13);color:#cdd6e6;border-radius:7px;padding:4px 9px;font-size:11px;cursor:pointer;}'+
+      '.yv37k-empty{text-align:center;color:rgba(255,255,255,.35);font-size:11.5px;padding:16px 6px;}'+
+      '#yv37k-launch{margin-left:6px;flex:0 0 auto;background:rgba(140,160,255,.12);border:1px solid rgba(140,160,255,.4);color:#8ca0ff;border-radius:9px;padding:8px 14px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;}';
+    (document.head||document.documentElement).appendChild(st);
+  })();
+
+  function ensureOv(){
+    if(document.getElementById('yv37k-ov')||!document.body) return;
+    var ov=document.createElement('div'); ov.id='yv37k-ov';
+    ov.innerHTML='<div id="yv37k-head"><h2>🗂️ Pipeline clients</h2><button onclick="window.ymV37kClose()">✕ Fermer</button></div><div id="yv37k-board"></div>';
+    document.body.appendChild(ov);
+  }
+  function close(){ var o=document.getElementById('yv37k-ov'); if(o) o.classList.remove('show'); }
+  window.ymV37kClose=close;
+
+  function card(n){
+    var cid=String(n.id||n.contact_id||'');
+    var meta=[n.commune||n.ville||'', n.date?('📅 '+fmtD(n.date)):'', n.st?('🔧 '+n.st):''].filter(Boolean);
+    return '<div class="yv37k-card" data-cid="'+esc(cid)+'">'+
+      '<div class="nm">'+esc(((n.civilite||'')+' '+(n.nom||'')).trim()||'Client')+'</div>'+
+      '<div class="mt">'+meta.map(esc).join(' · ')+'</div>'+
+      '<div class="act"><button data-open="'+esc(cid)+'">📂 Ouvrir</button><button data-msg="'+esc(cid)+'">💬 Message</button></div>'+
+      '</div>';
+  }
+  function render(){
+    ensureOv();
+    var board=document.getElementById('yv37k-board'); if(!board) return;
+    var b=classify();
+    var order=[ {id:'nouveau',ic:'🆕',label:'Nouveau',col:'#cdd6e6'} ]
+      .concat([COLS[5],COLS[4],COLS[3],COLS[2],COLS[1],COLS[0]]); // rdv,devis,waiting,recontact,chantier,finished
+    board.innerHTML=order.map(function(c){
+      var list=b[c.id]||[];
+      return '<div class="yv37k-col"><div class="yv37k-colh" style="color:'+c.col+';">'+c.ic+' '+c.label+'<span class="n">'+list.length+'</span></div>'+
+        '<div class="yv37k-cards">'+(list.length?list.map(card).join(''):'<div class="yv37k-empty">—</div>')+'</div></div>';
+    }).join('');
+    board.querySelectorAll('button[data-open]').forEach(function(btn){
+      btn.onclick=function(ev){ ev.stopPropagation(); close(); setTimeout(function(){ try{ window.openContactDetail&&window.openContactDetail(btn.getAttribute('data-open')); }catch(e){} },80); };
+    });
+    board.querySelectorAll('button[data-msg]').forEach(function(btn){
+      btn.onclick=function(ev){ ev.stopPropagation(); try{ window.ymV35Open&&window.ymV35Open(btn.getAttribute('data-msg')); }catch(e){} };
+    });
+    board.querySelectorAll('.yv37k-card').forEach(function(cd){
+      cd.onclick=function(){ close(); setTimeout(function(){ try{ window.openContactDetail&&window.openContactDetail(cd.getAttribute('data-cid')); }catch(e){} },80); };
+    });
+  }
+  window.ymV37kOpen=function(){ render(); var o=document.getElementById('yv37k-ov'); if(o) o.classList.add('show'); };
+
+  /* Lanceur « 🗂️ Pipeline » dans la barre d'onglets CRM */
+  function injectLauncher(){
+    if(document.getElementById('yv37k-launch')) return;
+    var bar=document.querySelector('.crm-timeline-tabs, #app-crm .nav-tabs'); if(!bar) return;
+    var b=document.createElement('button'); b.id='yv37k-launch'; b.type='button';
+    b.textContent='🗂️ Pipeline'; b.onclick=function(){ window.ymV37kOpen(); };
+    bar.insertBefore(b, bar.firstChild);
+  }
+  var t=0, iv=setInterval(function(){ t++; injectLauncher(); if(document.getElementById('yv37k-launch')||t>60) clearInterval(iv); }, 600);
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(injectLauncher, 1600); }); } else { setTimeout(injectLauncher, 1600); }
+
+  setTimeout(function(){ console.info('[YAMA V37] Pipeline kanban clients — 7 colonnes, logique de classement existante — actif.'); }, 3400);
+})();
+</script>
 </body>
 </html>
