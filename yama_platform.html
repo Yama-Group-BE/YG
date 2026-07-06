@@ -41711,6 +41711,7 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
     return String(m||'')
       .replace(/\{[a-z_]+\}/gi,'')
       .replace(/[ \t]{2,}/g,' ')
+      .replace(/[ \t]+([,.;:!?])/g,'$1')   // « Bonjour , » → « Bonjour, »
       .replace(/ +\n/g,'\n')
       .replace(/\n{3,}/g,'\n\n')
       .trim();
