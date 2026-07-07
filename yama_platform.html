@@ -40993,6 +40993,15 @@ img, canvas, video, svg, table { max-width: 100%; }
         },60); };
         list.appendChild(hub);
       }
+      // Attribution sous-traitant (V39)
+      if((_cid35 || _doc35) && typeof window.ymV39Assign==='function'){
+        var stb=document.createElement('button'); stb.className='yv28-act';
+        stb.innerHTML='<span class="ic">🔧</span><span>Attribuer au sous-traitant</span>';
+        stb.onclick=function(){ close(); setTimeout(function(){
+          window.ymV39Assign(_cid35||null, _doc35||null, _cid35?'Dossier CRM':('Document '+_doc35));
+        },60); };
+        list.appendChild(stb);
+      }
     }catch(e){}
     // boutons masqués (live) + actions document
     Array.prototype.slice.call(container.querySelectorAll('button:not(.yv28-keep):not(.yv28-more)')).forEach(function(b){
@@ -42092,6 +42101,312 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
   if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(injectLauncher, 1600); }); } else { setTimeout(injectLauncher, 1600); }
 
   setTimeout(function(){ console.info('[YAMA V37] Pipeline kanban clients — 7 colonnes, logique de classement existante — actif.'); }, 3400);
+})();
+</script>
+
+<script id="yama-platform-v38">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V38 — MOTEUR DE RÉTRO-COMPATIBILITÉ UNIVERSEL
+   ───────────────────────────────────────────────────────────────────────
+   Problème : les dossiers créés sous d'anciennes versions ne « connaissent »
+   pas les fonctionnalités ajoutées ensuite (champs manquants → features KO).
+   Solution : un moteur de MIGRATIONS VERSIONNÉES, exécuté au chargement.
+   Chaque migration met à niveau les ANCIENS enregistrements (contacts, devis/
+   factures, chantiers, sous-traitants) vers le schéma courant. RÈGLES DURES :
+   • additif uniquement — ne JAMAIS écraser une valeur non vide ;
+   • idempotent — version stockée (yama_data_version_v38), chaque migration
+     ne tourne qu'une fois ; en cas d'erreur, on s'arrête sans corrompre ;
+   • extensible — toute future fonctionnalité déclare sa migration via
+     window.yamaRegisterMigration(numéro, nom, fn) et TOUS les anciens
+     dossiers sont automatiquement mis à niveau.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V38__) return;
+  window.__YAMA_PLATFORM_V38__ = true;
+
+  var K_VER='yama_data_version_v38';
+  function rd(k,d){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(d)); }catch(e){ return d; } }
+  function wr(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function ver(){ return parseInt(localStorage.getItem(K_VER)||'0',10)||0; }
+  function setVer(v){ try{ localStorage.setItem(K_VER, String(v)); }catch(e){} }
+  function fillIf(obj, key, val){ if(obj && (obj[key]==null || obj[key]==='') && val!=null && val!==''){ obj[key]=val; return true; } return false; }
+
+  var MIGRATIONS=[];
+  function register(v, name, fn){ MIGRATIONS.push({v:v, name:name, fn:fn}); MIGRATIONS.sort(function(a,b){return a.v-b.v;}); }
+  window.yamaRegisterMigration=register;
+
+  /* ── M1 : contacts — identifiants, civilité, origine ───────────────────── */
+  register(1,'contacts-base', function(){
+    var list=rd('yama_crm_v2',[]); if(!Array.isArray(list)) return;
+    var ch=false;
+    list.forEach(function(c){
+      if(!c) return;
+      if(fillIf(c,'contact_id', String(c.id||''))) ch=true;
+      if(fillIf(c,'source','')) ch=true;
+      if((!c.civilite||c.civilite==='') && typeof window.ymV33DetectCivilite==='function'){
+        var civ=window.ymV33DetectCivilite(c.note||'', c.nom||'');
+        if(civ){ c.civilite=civ; ch=true; }
+      }
+    });
+    if(ch) wr('yama_crm_v2', list);
+  });
+
+  /* ── M2 : historique — horodatage + type garantis ──────────────────────── */
+  register(2,'historique-base', function(){
+    var h=rd('yama_history_v3',[]); if(!Array.isArray(h)) return;
+    var ch=false;
+    h.forEach(function(e){
+      if(!e) return;
+      if(fillIf(e,'savedAt', e.dateEmission?String(e.dateEmission):new Date(0).toISOString())) ch=true;
+      if(fillIf(e,'docType', /^F/i.test(String(e.docNum||''))?'facture':'devis')) ch=true;
+    });
+    if(ch) wr('yama_history_v3', h);
+  });
+
+  /* ── M3 : chantiers — coordonnées client + sous-traitant hérités du doc ── */
+  register(3,'chantiers-liens', function(){
+    var chs=rd('yama_chantiers_v12',[]); if(!Array.isArray(chs)) return;
+    var hist=rd('yama_history_v3',[]); var ch=false;
+    function doc(dn){ return hist.find(function(x){return x&&x.docNum===dn;})||null; }
+    chs.forEach(function(c, i){
+      if(!c) return;
+      if(fillIf(c,'id','ch_mig_'+i+'_'+String(c.createdAt||c.updatedAt||'').replace(/[^0-9]/g,'').slice(0,12))) ch=true;
+      var e=doc(c.factureNum)||doc(c.devisNum)||doc(c.sourceDocNum);
+      if(e){
+        if(fillIf(c,'clientEmail', e.clientEmail)) ch=true;
+        if(fillIf(c,'clientTel', e.clientTel)) ch=true;
+        if(fillIf(c,'stName', e.stNom)) ch=true;
+      }
+    });
+    if(ch) wr('yama_chantiers_v12', chs);
+  });
+
+  /* ── M4 : appréciations + sous-traitants (réutilise V34/V16) ───────────── */
+  register(4,'appreciations-st', function(){
+    try{ if(typeof window.ymV34Migrate==='function') window.ymV34Migrate(); }catch(e){}
+  });
+
+  /* ── Exécution versionnée ─────────────────────────────────────────────── */
+  var _running=false;
+  function run(){
+    if(_running) return; _running=true;
+    try{
+      var cur=ver();
+      MIGRATIONS.forEach(function(m){
+        if(m.v<=cur) return;
+        try{
+          m.fn();
+          setVer(m.v);
+          console.info('[YAMA V38] Migration '+m.v+' « '+m.name+' » appliquée.');
+        }catch(e){
+          console.warn('[YAMA V38] Migration '+m.v+' échouée — arrêt sans corruption :', e);
+          throw e;
+        }
+      });
+    }catch(e){}
+    _running=false;
+  }
+  window.yamaRunMigrations=run;
+
+  // au chargement (après la synchro initiale), puis re-passage pour les
+  // migrations enregistrées tardivement par de futurs modules
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(run, 3800); }); }
+  else { setTimeout(run, 3800); }
+  setTimeout(run, 9000);
+
+  setTimeout(function(){ console.info('[YAMA V38] Moteur de rétro-compatibilité (migrations versionnées) — actif.'); }, 3600);
+})();
+</script>
+
+<script id="yama-platform-v39">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V39 — ATTRIBUTION DOSSIER → SOUS-TRAITANT + note traçable
+   ───────────────────────────────────────────────────────────────────────
+   • « 🔧 Sous-traitant » dans le menu « ⋯ » de chaque dossier CRM et de
+     chaque document : pop-up de sélection → écrit contact.st (CRM),
+     entry.stNom (historique, lu par le Suivi Paiements ST) et
+     chantier.stName (fiche chantier) — synchronisé.
+   • Carte du carnet ST : compteur « 🔨 réalisés » (dossiers exécutés) en plus
+     des « apportés » (V16), avec liste détaillée.
+   • Note /5 TRAÇABLE : clic sur la note → liste de chaque évaluation avec son
+     ORIGINE (chantier lié, date, « migré de l'ancienne appréciation » ou
+     évaluation manuelle) — fini la note dont on ignore la provenance.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V39__) return;
+  window.__YAMA_PLATFORM_V39__ = true;
+
+  function rd(k,d){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(d)); }catch(e){ return d; } }
+  function wr(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function stList(){ try{ if(typeof window.getSTList==='function') return window.getSTList(); }catch(e){} return rd('yama_soustraitants_v1',[]); }
+  function toast39(m){ try{ if(typeof showToast==='function') showToast(m,'success'); }catch(e){} }
+
+  /* ── Écriture de l'attribution (3 cibles, additif + sync) ─────────────── */
+  function assignToContact(cid, nom){
+    try{
+      var list=(typeof getContacts==='function')?getContacts():rd('yama_crm_v2',[]);
+      var raw=list.find(function(c){return c&&String(c.id||c.contact_id)===String(cid);});
+      if(!raw) return false;
+      raw.st=nom;
+      if(typeof window.saveUpdatedContact==='function') window.saveUpdatedContact(raw);
+      else if(typeof setContacts==='function') setContacts(list);
+      else wr('yama_crm_v2', list);
+      // refléter sur le chantier lié (même client)
+      var chs=rd('yama_chantiers_v12',[]); var n=(raw.nom||'').toLowerCase().trim(); var ch=false;
+      chs.forEach(function(c){ if(c && (c.clientName||'').toLowerCase().trim()===n){ c.stName=nom; c.updatedAt=new Date().toISOString(); ch=true; } });
+      if(ch) wr('yama_chantiers_v12', chs);
+      return true;
+    }catch(e){ console.warn('[V39]',e); return false; }
+  }
+  function assignToDoc(docNum, nom){
+    try{
+      var h=rd('yama_history_v3',[]); var i=h.findIndex(function(x){return x&&x.docNum===docNum;});
+      if(i<0) return false;
+      h[i].stNom=nom;
+      wr('yama_history_v3', h);
+      try{ if(typeof window.syncPushHistory==='function') window.syncPushHistory(h[i]); }catch(e){}
+      // refléter sur le chantier lié au doc
+      var chs=rd('yama_chantiers_v12',[]); var ch=false;
+      chs.forEach(function(c){ if(c && (c.devisNum===docNum||c.factureNum===docNum||c.sourceDocNum===docNum)){ c.stName=nom; ch=true; } });
+      if(ch) wr('yama_chantiers_v12', chs);
+      return true;
+    }catch(e){ console.warn('[V39]',e); return false; }
+  }
+
+  /* ── Pop-up d'attribution ─────────────────────────────────────────────── */
+  function injectStyle(){
+    if(document.getElementById('yama-v39-style')) return;
+    var st=document.createElement('style'); st.id='yama-v39-style';
+    st.textContent=
+      '#yv39-ov{position:fixed;inset:0;z-index:99998;background:rgba(5,9,15,.7);display:none;align-items:center;justify-content:center;padding:16px;}'+
+      '#yv39-ov.show{display:flex;}'+
+      '#yv39-card{background:#0d1420;border:1px solid rgba(224,123,57,.45);border-radius:16px;padding:18px;max-width:420px;width:100%;max-height:80vh;overflow-y:auto;box-sizing:border-box;}'+
+      '#yv39-card h3{margin:0 0 4px;font-size:15px;color:#fff;}'+
+      '.yv39-sub{font-size:12px;color:rgba(255,255,255,.5);margin-bottom:12px;}'+
+      '.yv39-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);'+
+      'border-radius:10px;padding:12px 13px;margin-bottom:7px;color:#e8edf4;font-size:13.5px;font-weight:600;cursor:pointer;}'+
+      '.yv39-item:hover{border-color:rgba(224,123,57,.5);background:rgba(224,123,57,.08);}'+
+      '.yv39-item .code{font-size:10px;font-weight:800;color:#C9A84C;background:rgba(201,168,76,.14);border-radius:5px;padding:2px 6px;}'+
+      '.yv39-none{color:rgba(255,255,255,.5);font-weight:400;}'+
+      '.yv39-x{width:100%;padding:11px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:transparent;color:rgba(255,255,255,.55);cursor:pointer;margin-top:4px;}'+
+      '#yv39-evals .ev{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;margin-bottom:7px;}'+
+      '#yv39-evals .ev .st{color:#ffc400;font-size:14px;}'+
+      '#yv39-evals .ev .meta{font-size:11px;color:rgba(255,255,255,.55);margin-top:3px;}'+
+      '#yv39-evals .ev .org{font-size:10.5px;color:#8ca0ff;margin-top:2px;}';
+    (document.head||document.documentElement).appendChild(st);
+  }
+  function ensureOv(){
+    if(document.getElementById('yv39-ov')||!document.body) return;
+    var ov=document.createElement('div'); ov.id='yv39-ov';
+    ov.innerHTML='<div id="yv39-card"></div>';
+    ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
+    document.body.appendChild(ov);
+  }
+  function close(){ var o=document.getElementById('yv39-ov'); if(o) o.classList.remove('show'); }
+  window.ymV39Close=close;
+
+  window.ymV39Assign=function(cid, docNum, label){
+    injectStyle(); ensureOv();
+    var card=document.getElementById('yv39-card'); if(!card) return;
+    var list=stList();
+    var rows=list.map(function(s){
+      return '<button class="yv39-item" data-nom="'+esc(s.nom||'')+'">'+(s.code?('<span class="code">'+esc(s.code)+'</span>'):'')+'<span>'+esc(s.nom||'')+'</span>'+(s.spec?('<span style="font-size:11px;color:rgba(255,255,255,.45);font-weight:400;">· '+esc(s.spec)+'</span>'):'')+'</button>';
+    }).join('');
+    card.innerHTML='<h3>🔧 Attribuer au sous-traitant</h3><div class="yv39-sub">'+esc(label||'')+'</div>'+
+      rows+
+      '<button class="yv39-item yv39-none" data-nom="">— Aucun / retirer l\'attribution —</button>'+
+      '<button class="yv39-x" onclick="window.ymV39Close()">Annuler</button>';
+    card.querySelectorAll('.yv39-item').forEach(function(b){
+      b.onclick=function(){
+        var nom=b.getAttribute('data-nom')||'';
+        var ok = cid ? assignToContact(cid, nom) : assignToDoc(docNum, nom);
+        close();
+        if(ok){ toast39(nom?('✓ Attribué à '+nom):'✓ Attribution retirée');
+          setTimeout(function(){ try{ if(typeof renderSTTab==='function') renderSTTab(); }catch(e){} try{ if(typeof renderContacts==='function') renderContacts(); }catch(e){} }, 80);
+        }
+      };
+    });
+    var ov=document.getElementById('yv39-ov'); ov.classList.add('show');
+  };
+
+  /* ── Note traçable : liste des évaluations avec origine ───────────────── */
+  window.ymV39Evals=function(stId){
+    injectStyle(); ensureOv();
+    var st=stList().find(function(s){return s&&s.id===stId;}); if(!st) return;
+    var card=document.getElementById('yv39-card'); if(!card) return;
+    var evs=Array.isArray(st.evaluations)?st.evaluations:[];
+    var rows=evs.length?evs.map(function(ev){
+      var stars=''; for(var i=1;i<=5;i++) stars+=(i<=(parseFloat(ev.stars)||0)?'★':'☆');
+      var org = /migr/i.test(ev.notes||'') ? 'Origine : ancienne appréciation chantier (migrée automatiquement)'
+              : (ev.chantier ? ('Origine : chantier « '+ev.chantier+' »') : 'Origine : évaluation manuelle (bouton ⭐ Évaluer)');
+      return '<div class="ev"><span class="st">'+stars+'</span>'+
+        '<div class="meta">'+(ev.date?new Date(ev.date).toLocaleDateString('fr-BE'):'')+(ev.notes&&!/migr/i.test(ev.notes)?(' — '+esc(ev.notes)):'')+'</div>'+
+        '<div class="org">'+esc(org)+'</div></div>';
+    }).join('') : '<div style="color:rgba(255,255,255,.45);font-size:12.5px;text-align:center;padding:14px;">Aucune évaluation pour le moment.</div>';
+    var g=st.globalRating?('<span style="color:#ffc400;font-weight:800;">'+st.globalRating+'/5</span> · '+evs.length+' évaluation'+(evs.length>1?'s':'')):'';
+    card.innerHTML='<h3>⭐ Note de '+esc(st.nom||'')+'</h3><div class="yv39-sub">'+g+'</div><div id="yv39-evals">'+rows+'</div>'+
+      '<button class="yv39-x" onclick="window.ymV39Close()">Fermer</button>';
+    document.getElementById('yv39-ov').classList.add('show');
+  };
+
+  /* ── Carte ST : compteur « réalisés » + note cliquable ────────────────── */
+  function realises(nom){
+    var n=String(nom||'').toLowerCase().trim(); if(!n) return [];
+    var out=[]; var seen={};
+    rd('yama_chantiers_v12',[]).forEach(function(c){ if(c && String(c.stName||'').toLowerCase().trim()===n){ var k=c.id||c.chantierRef||c.clientName; if(!seen[k]){ seen[k]=1; out.push({t:'chantier', label:(c.clientName||'')+(c.chantierRef?(' · '+c.chantierRef):'')}); } } });
+    rd('yama_history_v3',[]).forEach(function(h){ if(h && String(h.stNom||'').toLowerCase().trim()===n){ var k=h.docNum; if(!seen[k]){ seen[k]=1; out.push({t:h.docType, label:(h.clientNom||'')+' · '+(h.docNum||'')}); } } });
+    return out;
+  }
+  window.ymV39Realises=function(stId){
+    injectStyle(); ensureOv();
+    var st=stList().find(function(s){return s&&s.id===stId;}); if(!st) return;
+    var list=realises(st.nom);
+    var card=document.getElementById('yv39-card');
+    card.innerHTML='<h3>🔨 Dossiers réalisés par '+esc(st.nom||'')+'</h3><div class="yv39-sub">'+list.length+' dossier'+(list.length>1?'s':'')+'</div>'+
+      (list.length?list.map(function(d){ return '<div class="yv39-item" style="cursor:default;">'+esc(d.label)+'</div>'; }).join(''):'<div style="color:rgba(255,255,255,.45);font-size:12.5px;text-align:center;padding:14px;">Aucun dossier attribué. Utilisez « ⋯ → 🔧 Sous-traitant » sur un dossier.</div>')+
+      '<button class="yv39-x" onclick="window.ymV39Close()">Fermer</button>';
+    document.getElementById('yv39-ov').classList.add('show');
+  };
+
+  function enhance(){
+    try{
+      var carnet=document.getElementById('stCarnet'); if(!carnet) return;
+      var list=stList();
+      carnet.querySelectorAll('.st-card').forEach(function(cardEl, idx){
+        var st=list[idx]; if(!st) return;
+        // compteur réalisés (une fois)
+        if(!cardEl.querySelector('.yv39-real')){
+          var n=realises(st.nom).length;
+          var b=document.createElement('button'); b.className='yv39-real'; b.type='button';
+          b.style.cssText='margin-left:6px;background:rgba(140,160,255,.1);border:1px solid rgba(140,160,255,.35);color:#8ca0ff;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;';
+          b.textContent='🔨 '+n+' réalisé'+(n>1?'s':'');
+          b.onclick=function(ev){ ev.stopPropagation(); window.ymV39Realises(st.id); };
+          cardEl.appendChild(b);
+        }
+        // note cliquable → provenance
+        var stars=cardEl.querySelector('.st-rating-row .st-stars');
+        if(stars && !stars.__v39){ stars.__v39=true; stars.style.cursor='pointer'; stars.title='Voir le détail et l\'origine de chaque évaluation';
+          stars.addEventListener('click', function(ev){ ev.stopPropagation(); window.ymV39Evals(st.id); }); }
+      });
+    }catch(e){ console.warn('[V39]',e); }
+  }
+  (function wrapST(){
+    var t=0, iv=setInterval(function(){
+      t++;
+      if(typeof window.renderSTTab==='function' && !window.renderSTTab.__v39){
+        var orig=window.renderSTTab;
+        window.renderSTTab=function(){ var r=orig.apply(this,arguments); try{ setTimeout(enhance,120); }catch(e){} return r; };
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.renderSTTab[k]=orig[k]; } }catch(e){}
+        window.renderSTTab.__v39=true;
+        clearInterval(iv);
+      }
+      if(t>80) clearInterval(iv);
+    }, 420);
+  })();
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(enhance, 2400); }); } else { setTimeout(enhance, 2400); }
+
+  setTimeout(function(){ console.info('[YAMA V39] Attribution dossier→sous-traitant + note traçable — actif.'); }, 3800);
 })();
 </script>
 </body>
