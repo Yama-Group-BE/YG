@@ -41874,8 +41874,10 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
   (function css(){
     var st=document.createElement('style'); st.id='yama-v36-style';
     st.textContent=
-      /* Cockpit fusionné dans le Tableau de bord → onglet masqué */
-      '.tab[data-tab="cockpit"]{display:none !important;}'+
+      /* (audit post-2.0) V43→V46 avaient DÉJÀ fusionné dans l'autre sens
+         (Priorités→Cockpit, onglet Priorités masqué de force). On rallie cette
+         voie stable : le Cockpit EST le dashboard — on ne le masque plus. */
+      '#v42-dedup-btn{display:none !important;}'+ /* doublon « Nettoyer les doublons » (le bouton Historique reste) */
       '#yv36-finance{margin-bottom:16px;}'+
       '.yv36-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;}'+
       '@media(max-width:900px){.yv36-grid{grid-template-columns:repeat(2,1fr);}}'+
@@ -41896,7 +41898,9 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
   })();
 
   function ensureHost(){
-    var cont=document.querySelector('#tab-priorites .container'); if(!cont) return null;
+    /* Le dashboard réel est le Cockpit (V46 masque #tab-priorites). renderCockpit
+       réécrit son innerHTML → l'hôte est recréé après chaque rendu (wrapper). */
+    var cont=document.getElementById('tab-cockpit'); if(!cont) return null;
     var host=document.getElementById('yv36-finance');
     if(!host){ host=document.createElement('div'); host.id='yv36-finance'; cont.insertBefore(host, cont.firstChild); }
     return host;
@@ -41937,37 +41941,21 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
   }
   window.ymV36Refresh=renderFinance;
 
-  /* Rendu après chaque renderPriorityDashboard (déjà déclenché par les données) */
-  (function wrapPrio(){
+  /* Rendu après CHAQUE renderCockpit (qui réécrit tout l'onglet) — le bandeau
+     est ré-inséré en tête. Pas de redirect switchTab : V43→V46 gèrent déjà
+     priorites→cockpit ; empiler l'inverse cassait la navigation (audit). */
+  (function wrapCockpit(){
     var t=0, iv=setInterval(function(){
       t++;
-      if(typeof window.renderPriorityDashboard==='function' && !window.renderPriorityDashboard.__v36){
-        var orig=window.renderPriorityDashboard;
-        window.renderPriorityDashboard=function(){ var r=orig.apply(this,arguments); try{ setTimeout(renderFinance,40); }catch(e){} return r; };
-        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.renderPriorityDashboard[k]=orig[k]; } }catch(e){}
-        window.renderPriorityDashboard.__v36=true;
+      if(typeof window.renderCockpit==='function' && !window.renderCockpit.__v36){
+        var orig=window.renderCockpit;
+        window.renderCockpit=function(){ var r=orig.apply(this,arguments); try{ _lastSig=null; setTimeout(renderFinance,60); }catch(e){} return r; };
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.renderCockpit[k]=orig[k]; } }catch(e){}
+        window.renderCockpit.__v36=true;
         clearInterval(iv);
       }
       if(t>80) clearInterval(iv);
     }, 400);
-  })();
-
-  /* Redirection : l'onglet Cockpit fusionné → Tableau de bord */
-  (function wrapSwitch(){
-    var t=0, iv=setInterval(function(){
-      t++;
-      if(typeof window.switchTab==='function' && !window.switchTab.__v36){
-        var orig=window.switchTab;
-        window.switchTab=function(name){
-          if(name==='cockpit') name='priorites';
-          return orig.call(this, name);
-        };
-        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.switchTab[k]=orig[k]; } }catch(e){}
-        window.switchTab.__v36=true;
-        clearInterval(iv);
-      }
-      if(t>80) clearInterval(iv);
-    }, 450);
   })();
 
   if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(renderFinance, 2200); }); }
