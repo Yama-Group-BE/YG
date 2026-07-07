@@ -42409,5 +42409,99 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
   setTimeout(function(){ console.info('[YAMA V39] Attribution dossier→sous-traitant + note traçable — actif.'); }, 3800);
 })();
 </script>
+
+<script id="yama-platform-v40">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V40 — UNE SEULE NOTE /5 PAR SOUS-TRAITANT (audit)
+   ───────────────────────────────────────────────────────────────────────
+   Cartographie : DEUX notes /5 indépendantes s'empilaient sur chaque carte —
+   (A) st.evaluations (étoiles, + migrées V34) et (B) yama_st_reviews_v12
+   (5 axes chantier, « appréciation(s) » + pastilles). Elles divergeaient
+   (arrondi) → « note dont on ignore l'origine ».
+   FIX : (1) les notes chantier (5 axes) alimentent EN CONTINU st.evaluations
+   (dédup par chantier, adoption des entrées migrées V34 → pas de double
+   comptage) ; (2) le bloc B redondant est masqué. Résultat : UNE note, un
+   compteur, une provenance cliquable (V39). globalRating recalculé.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V40__) return;
+  window.__YAMA_PLATFORM_V40__ = true;
+
+  function rd(k,d){ try{ return JSON.parse(localStorage.getItem(k)||JSON.stringify(d)); }catch(e){ return d; } }
+  function wr(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function getL(){ try{ if(typeof window.getSTList==='function') return window.getSTList(); }catch(e){} return rd('yama_soustraitants_v1',[]); }
+  function saveL(a){ try{ if(typeof window.saveSTList==='function'){ window.saveSTList(a); return; } }catch(e){} wr('yama_soustraitants_v1',a); }
+
+  /* Masquer le bloc note redondant (B) — la vérité est st.evaluations (A) */
+  (function css(){
+    var st=document.createElement('style'); st.id='yama-v40-style';
+    st.textContent='.yama-v12-st-rating{display:none !important;}';
+    (document.head||document.documentElement).appendChild(st);
+  })();
+
+  /* Notes chantier (5 axes) → st.evaluations, en continu et sans doublon */
+  function syncEvals(){
+    try{
+      var reviews=rd('yama_st_reviews_v12',[]); if(!Array.isArray(reviews)||!reviews.length) return;
+      var list=getL(); if(!Array.isArray(list)||!list.length) return;
+      var changed=false;
+      list.forEach(function(st){
+        if(!st||!st.nom) return;
+        var nom=String(st.nom).toLowerCase().trim();
+        var revs=reviews.filter(function(r){ return r && String(r.stName||'').toLowerCase().trim()===nom && r.chantierId; });
+        if(!revs.length) return;
+        if(!Array.isArray(st.evaluations)) st.evaluations=[];
+        revs.forEach(function(r){
+          var axes=['reliability','price','quality','speed','respect'].map(function(k){ return parseFloat(r.ratings&&r.ratings[k])||0; }).filter(Boolean);
+          if(!axes.length) return;
+          var stars=Math.round((axes.reduce(function(a,b){return a+b;},0)/axes.length)*10)/10;
+          var ev=st.evaluations.find(function(x){ return x && x.chId===r.chantierId; });
+          if(!ev){
+            // adopter une entrée migrée V34 correspondante (évite le double comptage)
+            ev=st.evaluations.find(function(x){ return x && !x.chId && /migr/i.test(x.notes||'') && (x.chantier===r.chantierRef || x.chantier===r.chantierId); });
+            if(ev){ ev.chId=r.chantierId; }
+          }
+          if(!ev){
+            st.evaluations.push({ date:r.date||r.updatedAt||new Date().toISOString(), stars:stars, chantier:r.chantierRef||'', chId:r.chantierId, notes:'Note chantier (5 axes)' });
+            changed=true;
+          } else if(Math.abs((parseFloat(ev.stars)||0)-stars)>0.05){
+            ev.stars=stars; changed=true;
+          }
+        });
+        // note globale persistante
+        if(st.evaluations.length){
+          var sum=st.evaluations.reduce(function(s,x){return s+(parseFloat(x.stars)||0);},0);
+          var g=Math.round(sum/st.evaluations.length*10)/10;
+          if(st.globalRating!==g){ st.globalRating=g; st.ratingCount=st.evaluations.length; changed=true; }
+        }
+      });
+      if(changed){ saveL(list); }
+      return changed;
+    }catch(e){ console.warn('[V40]',e); return false; }
+  }
+  window.ymV40SyncEvals=syncEvals;
+
+  /* Exécution : au boot + après chaque rendu du carnet (chaîne déjà wrappée) */
+  (function wrapST(){
+    var t=0, iv=setInterval(function(){
+      t++;
+      if(typeof window.renderSTTab==='function' && !window.renderSTTab.__v40){
+        var orig=window.renderSTTab;
+        window.renderSTTab=function(){ try{ syncEvals(); }catch(e){} return orig.apply(this,arguments); };
+        try{ for(var k in orig){ if(orig.hasOwnProperty(k)) window.renderSTTab[k]=orig[k]; } }catch(e){}
+        window.renderSTTab.__v40=true;
+        clearInterval(iv);
+      }
+      if(t>80) clearInterval(iv);
+    }, 440);
+  })();
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ setTimeout(syncEvals, 4200); }); } else { setTimeout(syncEvals, 4200); }
+
+  // migration enregistrée pour les anciens dossiers (moteur V38)
+  try{ if(typeof window.yamaRegisterMigration==='function') window.yamaRegisterMigration(5,'st-note-unifiee', syncEvals); }catch(e){}
+
+  setTimeout(function(){ console.info('[YAMA V40] Note sous-traitant unifiée (une seule note /5, traçable) — actif.'); }, 4000);
+})();
+</script>
 </body>
 </html>
