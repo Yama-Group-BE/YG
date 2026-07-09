@@ -42491,5 +42491,32 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
   setTimeout(function(){ console.info('[YAMA V40] Note sous-traitant unifiée (une seule note /5, traçable) — actif.'); }, 4000);
 })();
 </script>
+
+<script id="yama-platform-v41">
+/* ═══════════════════════════════════════════════════════════════════════
+   YAMA PLATFORM V41 — BADGE DE VERSION VISIBLE
+   La cause n°1 des « je ne vois pas les changements » : le cache sert une
+   vieille copie. Ce badge affiche la version/build dans Réglages (bas de la
+   barre latérale) → vérification en 2 secondes qu'on utilise le bon fichier.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(window.__YAMA_PLATFORM_V41__) return;
+  window.__YAMA_PLATFORM_V41__ = true;
+  window.YAMA_BUILD='v2.0-beta · build 41 · 2026-07-09';
+
+  function inject(){
+    try{
+      var nav=document.querySelector('.v37-s-nav');
+      if(!nav || document.getElementById('yv41-badge')) return;
+      var d=document.createElement('div'); d.id='yv41-badge';
+      d.style.cssText='margin-top:auto;padding:12px 20px;font-size:10.5px;color:rgba(255,255,255,.35);border-top:1px solid rgba(255,255,255,.06);';
+      d.textContent='YAMA Plateforme '+window.YAMA_BUILD;
+      nav.appendChild(d);
+    }catch(e){}
+  }
+  var t=0, iv=setInterval(function(){ t++; inject(); if(document.getElementById('yv41-badge')||t>40) clearInterval(iv); }, 900);
+  console.info('%c[YAMA] '+window.YAMA_BUILD,'color:#C9A84C;font-weight:bold;');
+})();
+</script>
 </body>
 </html>
