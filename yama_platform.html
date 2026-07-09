@@ -41759,8 +41759,10 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
   /* ── UI ──────────────────────────────────────────────────────────────── */
   var _ctx=null, _type=null;
   function injectStyle(){
-    if(document.getElementById('yama-v35-style')) return;
-    var st=document.createElement('style'); st.id='yama-v35-style';
+    /* id UNIQUE : 'yama-v35-style' existe déjà dans la plateforme d'origine
+       (ligne ~22206) → la collision empêchait toute injection (hub « nu »). */
+    if(document.getElementById('yama-v35hub-style')) return;
+    var st=document.createElement('style'); st.id='yama-v35hub-style';
     st.textContent=
       '#yv35-ov{position:fixed;inset:0;z-index:99997;background:rgba(5,9,15,.72);display:none;align-items:flex-end;justify-content:center;}'+
       '#yv35-ov.show{display:flex;}'+
@@ -41789,18 +41791,26 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
   function ensureOv(){
     if(document.getElementById('yv35-ov')||!document.body) return;
     var ov=document.createElement('div'); ov.id='yv35-ov';
-    ov.innerHTML='<div id="yv35-card"><h3>💬 Messages</h3><div class="yv35-sub" id="yv35-sub"></div>'+
-      '<div class="yv35-chips" id="yv35-chips"></div>'+
-      '<textarea id="yv35-msg"></textarea>'+
-      '<div class="yv35-row">'+
-        '<button class="yv35-btn yv35-wa" onclick="window.ymV35Send(\'wa\')">📲 WhatsApp</button>'+
-        '<button class="yv35-btn yv35-em" onclick="window.ymV35Send(\'email\')">✉️ Email</button>'+
-        '<button class="yv35-btn yv35-cp" onclick="window.ymV35Send(\'copy\')">📋 Copier</button>'+
-      '</div><button class="yv35-x" onclick="window.ymV35Close()">Fermer</button></div>';
+    /* Ossature en styles INLINE (incassable même sans feuille de style) ;
+       la feuille yama-v35hub-style raffine (puces, boutons, media queries). */
+    ov.style.cssText='position:fixed;inset:0;z-index:99997;background:rgba(5,9,15,.72);display:none;align-items:flex-end;justify-content:center;';
+    ov.innerHTML='<div id="yv35-card" style="background:#0d1420;border-top:2px solid rgba(82,199,127,.55);border-radius:18px 18px 0 0;width:100%;max-width:560px;max-height:88vh;overflow-y:auto;padding:16px 14px 24px;box-shadow:0 -12px 44px rgba(0,0,0,.6);box-sizing:border-box;color:#e8edf4;">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">'+
+        '<h3 style="margin:0;font-size:16px;color:#fff;">💬 Messages</h3>'+
+        '<button onclick="window.ymV35Close()" style="background:none;border:none;color:rgba(255,255,255,.5);font-size:22px;line-height:1;cursor:pointer;padding:2px 6px;">×</button>'+
+      '</div>'+
+      '<div class="yv35-sub" id="yv35-sub" style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:12px;"></div>'+
+      '<div class="yv35-chips" id="yv35-chips" style="display:flex;gap:7px;overflow-x:auto;padding-bottom:8px;margin-bottom:10px;"></div>'+
+      '<textarea id="yv35-msg" style="width:100%;min-height:170px;background:#0b1119;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#e8edf4;font-size:12.5px;padding:11px;resize:vertical;line-height:1.55;font-family:inherit;box-sizing:border-box;"></textarea>'+
+      '<div class="yv35-row" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">'+
+        '<button class="yv35-btn yv35-wa" onclick="window.ymV35Send(\'wa\')" style="flex:1;min-width:96px;padding:11px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;background:rgba(37,211,102,.14);border:1px solid rgba(37,211,102,.45);color:#25d366;">📲 WhatsApp</button>'+
+        '<button class="yv35-btn yv35-em" onclick="window.ymV35Send(\'email\')" style="flex:1;min-width:96px;padding:11px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;background:rgba(90,160,255,.12);border:1px solid rgba(90,160,255,.45);color:#7db4ff;">✉️ Email</button>'+
+        '<button class="yv35-btn yv35-cp" onclick="window.ymV35Send(\'copy\')" style="flex:1;min-width:96px;padding:11px;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.45);color:#C9A84C;">📋 Copier</button>'+
+      '</div></div>';
     ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
     document.body.appendChild(ov);
   }
-  function close(){ var o=document.getElementById('yv35-ov'); if(o) o.classList.remove('show'); }
+  function close(){ var o=document.getElementById('yv35-ov'); if(o){ o.classList.remove('show'); o.style.display='none'; } }
   window.ymV35Close=close;
 
   function renderChips(defId){
@@ -41809,10 +41819,17 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
     var avail=TYPES.filter(function(t){ try{ return t.avail(_ctx); }catch(e){ return false; } });
     if(!avail.length) avail=TYPES.slice(0,2);
     var def=avail.find(function(t){return t.id===defId;})||avail[0];
+    var BASE='flex:0 0 auto;padding:8px 13px;border-radius:20px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);color:rgba(255,255,255,.75);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;';
+    var ON='flex:0 0 auto;padding:8px 13px;border-radius:20px;border:1px solid rgba(82,199,127,.6);background:rgba(82,199,127,.14);color:#52c77f;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;';
     avail.forEach(function(t){
       var b=document.createElement('button'); b.type='button';
       b.className='yv35-chip'+(t.id===def.id?' on':''); b.textContent=t.ic+' '+t.label;
-      b.onclick=function(){ selectType(t); wrap.querySelectorAll('.yv35-chip').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); };
+      b.style.cssText=(t.id===def.id?ON:BASE);
+      b.onclick=function(){
+        selectType(t);
+        wrap.querySelectorAll('.yv35-chip').forEach(function(x){ x.classList.remove('on'); x.style.cssText=BASE; });
+        b.classList.add('on'); b.style.cssText=ON;
+      };
       wrap.appendChild(b);
     });
     selectType(def);
@@ -41828,7 +41845,7 @@ body img, body canvas, body video, body svg, body table{ max-width:100% !importa
     var sub=document.getElementById('yv35-sub');
     if(sub) sub.textContent=((ctx.civ+' '+ctx.nom).trim()||'Client')+(ctx.tel?(' · '+ctx.tel):'');
     renderChips(defId||'');
-    var ov=document.getElementById('yv35-ov'); if(ov) ov.classList.add('show');
+    var ov=document.getElementById('yv35-ov'); if(ov){ ov.classList.add('show'); ov.style.display='flex'; }
   }
   window.ymV35Open=function(cid, defId){ var x=ctxFromContact(cid); if(x) open(x, defId); };
   window.ymV35OpenDoc=function(docNum){
